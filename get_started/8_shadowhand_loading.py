@@ -165,14 +165,17 @@ for _ in range(100):
     log.debug(f"Step {step}")
     actions = [
         {
-            "dof_pos_target": {
-                joint_name: (
-                    torch.rand(1).item() * (robot_joint_limits[joint_name][1] - robot_joint_limits[joint_name][0])
-                    + robot_joint_limits[joint_name][0]
-                )
-                for joint_name in robot_joint_limits.keys()
-                # if scenario.robot.actuators[joint_name].fully_actuated
+            robot.name: {
+                "dof_pos_target": {
+                    joint_name: (
+                        torch.rand(1).item() * (robot_joint_limits[joint_name][1] - robot_joint_limits[joint_name][0])
+                        + robot_joint_limits[joint_name][0]
+                    )
+                    for joint_name in robot_joint_limits.keys()
+                    if scenario.robot.actuators[joint_name].fully_actuated
+                }
             }
+            for robot in scenario.robots
         }
         for _ in range(scenario.num_envs)
     ]

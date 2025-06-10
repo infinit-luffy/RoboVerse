@@ -665,6 +665,7 @@ class IsaacgymHandler(BaseSimHandler):
                         flat_vals.append(
                             action_data[robot.name]["dof_pos_target"][joint_name]
                         )  # TODO: support other actions
+
                     else:
                         flat_vals.append(0.0)  # place holder for under-actuated joints
                 action_array = torch.tensor(flat_vals, dtype=torch.float32, device=self.device).unsqueeze(0)

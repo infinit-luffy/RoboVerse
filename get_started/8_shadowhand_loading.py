@@ -79,7 +79,7 @@ scenario.objects = [
         name="cube",
         scale=(1, 1, 1),
         physics=PhysicStateType.RIGIDBODY,
-        urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf",
+        urdf_path="roboverse_data/assets/bidex/objects/urdf/cube_multicolor.urdf",
     ),
 ]
 

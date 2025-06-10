@@ -13,7 +13,7 @@ class ShadowHandCfg(RobotCfg):
     name: str = "shadow_hand"
     num_joints: int = 24
     fix_base_link: bool = True
-    mjcf_path: str = "roboverse_data/robots/shadow_hand/mjcf/shadow_hand_right.xml"
+    mjcf_path: str = "roboverse_data/robots/shadow_hand/mjcf/shadow_hand.xml"
     isaacgym_read_mjcf: bool = True
     enabled_gravity: bool = False
     enabled_self_collisions: bool = False

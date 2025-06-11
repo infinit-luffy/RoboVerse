@@ -5,21 +5,19 @@ try:
 except ImportError:
     pass
 
+import os
 from dataclasses import dataclass
 
-import os
+import rootutils
 import torch
 import tyro
-import rootutils
 from loguru import logger as log
 from rich.logging import RichHandler
 rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
-rootutils.setup_root(__file__, pythonpath=True)
-log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-
 from metasim.scenario.cameras import PinholeCameraCfg
+
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils.obs_utils import ObsSaver
 from metasim.utils.setup_util import get_handler
@@ -68,7 +66,7 @@ def main():
         decimation=args.decimation,
         headless=args.headless,
     )
-    scenario.cameras = [PinholeCameraCfg(width=1024, height=1024, pos=(3., -3., 3.), look_at=(0.0, -0.2, 0.0))]
+    scenario.cameras = [PinholeCameraCfg(width=1024, height=1024, pos=(3.0, -3.0, 3.0), look_at=(0.0, -0.2, 0.0))]
     log.info(f"Using simulator: {args.sim}")
     handler = get_handler(scenario)
 
@@ -187,8 +185,8 @@ def main():
             }
             for _ in range(scenario.num_envs)
         ]
-        for robot in scenario.robots:
-            handler.set_dof_targets(actions)
+        
+        handler.set_dof_targets(actions)
         handler.simulate()
 
         # Save observations for video

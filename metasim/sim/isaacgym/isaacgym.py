@@ -749,7 +749,7 @@ class IsaacgymHandler(BaseSimHandler):
             self.gym.fetch_results(self.sim, True)
         self.gym.refresh_dof_state_tensor(self.sim)
 
-    def simulate(self) -> None:
+    def _simulate(self) -> None:
         # Step the physics
         for _ in range(self.decimation):
             self._simulate_one_physics_step()

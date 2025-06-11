@@ -7,11 +7,14 @@ except ImportError:
 
 from dataclasses import dataclass
 
-import rootutils
+import os
 import torch
 import tyro
+import rootutils
 from loguru import logger as log
 from rich.logging import RichHandler
+rootutils.setup_root(__file__, pythonpath=True)
+log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
@@ -65,7 +68,7 @@ def main():
         decimation=args.decimation,
         headless=args.headless,
     )
-
+    scenario.cameras = [PinholeCameraCfg(width=1024, height=1024, pos=(3., -3., 3.), look_at=(0.0, -0.2, 0.0))]
     log.info(f"Using simulator: {args.sim}")
     handler = get_handler(scenario)
 

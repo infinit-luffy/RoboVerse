@@ -213,7 +213,7 @@ joint_names = [
     "robot1_THJ1",
     "robot1_THJ0",
 ]
-traj = np.load("/home/test/RoboVerse/test_traj.npy", allow_pickle=True)
+traj = np.load("roboverse_data/trajs/bidex/shadow_hand_over/test_traj.npy", allow_pickle=True)
 traj = np.clip(traj, -1.0, 1.0)  # Ensure the trajectory is within the joint limits
 for _ in range(len(traj)):
     log.debug(f"Step {step}")

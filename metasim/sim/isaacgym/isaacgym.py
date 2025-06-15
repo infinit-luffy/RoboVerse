@@ -112,7 +112,10 @@ class IsaacgymHandler(BaseSimHandler):
         self._contact_forces = gymtorch.wrap_tensor(self.gym.acquire_net_contact_force_tensor(self.sim))
         self.num_sensors = len(self._sensors)
         if self.num_sensors > 0:
-            self._vec_sensor_tensor = gymtorch.wrap_tensor(self.gym.acquire_force_sensor_tensor(self.sim)).view(self.num_envs, self.num_sensors, 6) # shape: (num_envs, num_sensors * 6)
+            sensor_tensor = self.gym.acquire_force_sensor_tensor(self.sim)
+            self.vec_sensor_tensor = gymtorch.wrap_tensor(sensor_tensor).view(
+                self.num_envs, self.num_sensors, 6
+            )  # shape: (num_envs, num_sensors * 6)
 
         # Refresh tensors
         if not self._manual_pd_on:

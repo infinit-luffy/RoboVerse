@@ -22,10 +22,13 @@ from metasim.scenario.objects import (
 # FIXME: fix this
 # from metasim.scenario.randomization import FrictionRandomCfg, MassRandomCfg
 from metasim.scenario.scenario import ScenarioCfg
+from metasim.cfg.sensors import ContactForceSensorCfg
+from metasim.constants import PhysicStateType
+from metasim.queries.base import BaseQueryType
 from metasim.sim import BaseSimHandler
 from metasim.types import Action, DictEnvState
 from metasim.utils.dict import class_to_dict
-from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
+from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, SensorState
 
 
 class IsaacgymHandler(BaseSimHandler):
@@ -36,6 +39,7 @@ class IsaacgymHandler(BaseSimHandler):
         self._robot_init_pos = [robot.default_position for robot in self.robots]
         self._robot_init_quat = [robot.default_orientation for robot in self.robots]
         self._cameras = scenario.cameras
+        self._sensors = scenario.sensors
         self.robot_asset_list: list[gymapi.Asset] = []
 
         self.gym = None
@@ -105,6 +109,10 @@ class IsaacgymHandler(BaseSimHandler):
         self._rigid_body_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim))
         self._robot_dof_state = self._dof_states.view(self._num_envs, -1, 2)[:, self._obj_num_dof :]
         self._contact_forces = gymtorch.wrap_tensor(self.gym.acquire_net_contact_force_tensor(self.sim))
+        self.num_sensors = len(self._sensors)
+        if self.num_sensors > 0:
+            sensor_tensor = self.gym.acquire_force_sensor_tensor(self.sim)
+            self.vec_sensor_tensor = gymtorch.wrap_tensor(sensor_tensor).view(self.num_envs, self.num_sensors, 6) # shape: (num_envs, num_sensors * 6)
 
         # Refresh tensors
         if not self._manual_pd_on:
@@ -114,6 +122,7 @@ class IsaacgymHandler(BaseSimHandler):
         self.gym.refresh_jacobian_tensors(self.sim)
         self.gym.refresh_mass_matrix_tensors(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
+        self.gym.refresh_force_sensor_tensor(self.sim)
 
         if self.optional_queries is None:
             self.optional_queries = {}
@@ -276,6 +285,7 @@ class IsaacgymHandler(BaseSimHandler):
     def _load_robot_assets(self) -> None:
         robot_asset_list = []
         robot_dof_props_list = []
+        robot_torque_limits = []
         asset_root = "."
         for robot in self.scenario.robots:
             robot_asset_file = robot.mjcf_path if robot.isaacgym_read_mjcf else robot.urdf_path
@@ -297,7 +307,7 @@ class IsaacgymHandler(BaseSimHandler):
             self._action_scale = torch.tensor(1.0, device=self.device)
             self._action_offset = torch.tensor(0.0, device=self.device)
 
-            self._torque_limits = torch.zeros(
+            torque_limits = torch.zeros(
                 self._num_envs, robot_num_dofs, dtype=torch.float, device=self.device, requires_grad=False
             )
 
@@ -354,8 +364,6 @@ class IsaacgymHandler(BaseSimHandler):
 
             self._default_dof_pos = torch.tensor(default_dof_pos, device=self.device).unsqueeze(0)
             self.actions = torch.zeros([self._num_envs, num_actions], device=self.device)
-            robot_p_gains.append(p_gains)
-            robot_d_gains.append(d_gains)
             robot_torque_limits.append(torque_limits)
 
             self._robot_link_dict_list.append(self.gym.get_asset_rigid_body_dict(robot_asset))
@@ -363,11 +371,27 @@ class IsaacgymHandler(BaseSimHandler):
             robot_asset_list.append(robot_asset)
             robot_dof_props_list.append(robot_dof_props)
 
-        self._p_gains = torch.cat(robot_p_gains, dim=-1)  # shape: (num_envs, total_num_robot_dofs)
-        self._d_gains = torch.cat(robot_d_gains, dim=-1)  # shape: (num_envs, total_num_robot_dofs)
         self._torque_limits = torch.cat(robot_torque_limits, dim=-1)  # shape: (num_envs, total_num_robot_dofs)
 
         return robot_asset_list, robot_dof_props_list
+
+    def _load_contact_sensor(self) -> None:
+        for sensor in self._sensors:
+            sensor: ContactForceSensorCfg
+            if sensor.source_link is not None:
+                raise NotImplementedError
+            robot_name = sensor.base_link if isinstance(sensor.base_link, str) else sensor.base_link[0]
+            handle = 0
+            if robot_name not in self._robot_names:
+                raise ValueError(f"Robot {robot_name} not found in the environment.")
+            robot_asset = self.robot_asset_list[self._robot_names.index(robot_name)]
+            if isinstance(sensor.base_link, tuple):
+                handle = self.gym.find_asset_rigid_body_index(
+                    robot_asset,
+                    sensor.base_link[1],
+                )
+            sensor_pose = gymapi.Transform()
+            self.gym.create_asset_force_sensor(robot_asset, handle, sensor_pose)
 
     def _make_envs(
         self,
@@ -389,6 +413,8 @@ class IsaacgymHandler(BaseSimHandler):
         obj_assets_list = [self._load_object_asset(obj) for obj in self.objects]
         robot_asset_list, robot_dof_props_list = self._load_robot_assets()
         self.robot_asset_list = robot_asset_list
+
+        self._load_contact_sensor()
 
         #### Joint Info ####
         for art_obj_name, art_obj_joint_dict in self._articulated_joint_dict_dict.items():
@@ -644,8 +670,16 @@ class IsaacgymHandler(BaseSimHandler):
             )
             camera_states[cam.name] = state
         self.gym.end_access_image_tensors(self.sim)
+
+        # sensor states
+        sensor_states = {}
+        for i, sensor in enumerate(self.sensors):
+            if isinstance(sensor, ContactForceSensorCfg):
+                sensor_states[sensor.name] = self.vec_sensor_tensor[:, i, :] # shape: (num_envs, 6)
+            else:
+                raise ValueError(f"Unknown sensor type: {type(sensor)}")
         extras = self.get_extra()  # extra observations
-        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
+        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, sensors=sensor_states, extras=extras)
 
     @property
     def episode_length_buf(self) -> list[int]:
@@ -758,6 +792,7 @@ class IsaacgymHandler(BaseSimHandler):
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_jacobian_tensors(self.sim)
         self.gym.refresh_mass_matrix_tensors(self.sim)
+        self.gym.refresh_force_sensor_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
         # Refresh cameras and viewer
         self._render()
@@ -897,6 +932,7 @@ class IsaacgymHandler(BaseSimHandler):
         self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_jacobian_tensors(self.sim)
         self.gym.refresh_mass_matrix_tensors(self.sim)
+        self.gym.refresh_force_sensor_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
         # reset all env_id action to default

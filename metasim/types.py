@@ -69,6 +69,8 @@ class ObjectState:
     """Joint positions. Shape is (num_envs, num_joints). This is only available for articulation objects."""
     joint_vel: torch.Tensor | None = None
     """Joint velocities. Shape is (num_envs, num_joints). This is only available for articulation objects."""
+    joint_force: torch.Tensor | None = None
+    """Joint forces. Shape is (num_envs, num_joints). This is only available for articulation objects."""
 
 
 @dataclass
@@ -85,6 +87,8 @@ class RobotState:
     """Joint positions. Shape is (num_envs, num_joints)."""
     joint_vel: torch.Tensor
     """Joint velocities. Shape is (num_envs, num_joints)."""
+    joint_force: torch.Tensor
+    """Joint forces. Shape is (num_envs, num_joints)."""
     joint_pos_target: torch.Tensor
     """Joint positions target. Shape is (num_envs, num_joints)."""
     joint_vel_target: torch.Tensor
@@ -149,6 +153,20 @@ class CameraState:
         """
         return convert_camera_frame_orientation_convention(self.quat_world, origin="world", target="opengl")
 
+@dataclass
+class ContactForceState:
+    """State of a single contact force sensor."""
+
+    force: torch.Tensor
+    torque: torch.Tensor | None = None
+    """
+    Contact force. Shape is (num_envs, 3).
+    Contact torque. Shape is (num_envs, 3).
+    """
+
+
+SensorState = ContactForceState
+
 
 @dataclass
 class TensorState:
@@ -160,6 +178,8 @@ class TensorState:
     """States of all robots."""
     cameras: dict[str, CameraState]
     """States of all cameras."""
+    sensors: dict[str, SensorState]
+    """States of all sensors."""
     extras: dict = field(default_factory=dict)
     """States of Extra information"""
 

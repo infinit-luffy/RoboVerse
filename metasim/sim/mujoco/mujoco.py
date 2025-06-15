@@ -436,6 +436,7 @@ class MujocoHandler(BaseSimHandler):
                     joint_vel=torch.tensor([
                         self.physics.data.joint(f"{model_name}/{jn}").qvel.item() for jn in joint_names
                     ]).unsqueeze(0),
+                    joint_force=None,  # TODO: add joint force
                 )
             else:
                 root_np, _ = self._pack_state([obj_body_id])
@@ -464,6 +465,7 @@ class MujocoHandler(BaseSimHandler):
                 joint_vel=torch.tensor([
                     self.physics.data.joint(f"{model_name}/{jn}").qvel.item() for jn in joint_names
                 ]).unsqueeze(0),
+                joint_force=None,  # TODO: add joint force
                 joint_pos_target=torch.from_numpy(self.physics.data.ctrl[actuator_reindex]).unsqueeze(0),
                 joint_vel_target=torch.from_numpy(self._current_vel_target).unsqueeze(0)
                 if self._current_vel_target is not None

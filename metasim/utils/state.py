@@ -8,12 +8,13 @@ import numpy as np
 import torch
 from loguru import logger as log
 
-from metasim.types import Action, CameraState, DictEnvState, ObjectState, RobotState, TensorState
+from metasim.types import Action, CameraState, SensorState, DictEnvState, ObjectState, RobotState, TensorState
 
 try:
     from metasim.sim.base import BaseSimHandler
 except:
     pass
+
 
 
 def join_tensor_states(tensor_states: list[TensorState]) -> TensorState:
@@ -27,13 +28,13 @@ def join_tensor_states(tensor_states: list[TensorState]) -> TensorState:
     all_object_keys = set()
     all_robot_keys = set()
     all_camera_keys = set()
-    # all_sensor_keys = set()
+    all_sensor_keys = set()
 
     for state in tensor_states:
         all_object_keys.update(state.objects.keys())
         all_robot_keys.update(state.robots.keys())
         all_camera_keys.update(state.cameras.keys())
-        # all_sensor_keys.update(state.sensors.keys())
+        all_sensor_keys.update(state.sensors.keys())
 
     # Join objects
     for key in all_object_keys:
@@ -50,6 +51,9 @@ def join_tensor_states(tensor_states: list[TensorState]) -> TensorState:
                 else None,
                 joint_vel=torch.cat([obj.joint_vel for obj in object_states], dim=0)
                 if object_states[0].joint_vel is not None
+                else None,
+                joint_force=torch.cat([obj.joint_force for obj in object_states], dim=0)
+                if object_states[0].joint_force is not None
                 else None,
             )
 
@@ -68,6 +72,9 @@ def join_tensor_states(tensor_states: list[TensorState]) -> TensorState:
                 else None,
                 joint_vel=torch.cat([robot.joint_vel for robot in robot_states], dim=0)
                 if robot_states[0].joint_vel is not None
+                else None,
+                joint_force=torch.cat([robot.joint_force for robot in robot_states], dim=0)
+                if robot_states[0].joint_force is not None
                 else None,
                 joint_pos_target=torch.cat([robot.joint_pos_target for robot in robot_states], dim=0)
                 if robot_states[0].joint_pos_target is not None
@@ -99,11 +106,11 @@ def join_tensor_states(tensor_states: list[TensorState]) -> TensorState:
             )
 
     # Join sensors (assuming similar structure to objects)
-    # for key in all_sensor_keys:
-    #     sensor_states = [state.sensors[key] for state in tensor_states if key in state.sensors]
-    #     if sensor_states:
-    #         # Note: SensorState structure is not defined, so this is a placeholder
-    #         rst.sensors[key] = sensor_states[0]  # This would need to be implemented based on SensorState structure
+    for key in all_sensor_keys:
+        sensor_states = [state.sensors[key] for state in tensor_states if key in state.sensors]
+        if sensor_states:
+            # Note: SensorState structure is not defined, so this is a placeholder
+            rst.sensors[key] = sensor_states[0]  # This would need to be implemented based on SensorState structure
 
     return rst
 
@@ -162,6 +169,9 @@ def state_tensor_to_nested(handler: BaseSimHandler, tensor_state: TensorState) -
             if obj_state.joint_vel is not None:
                 jns = handler._get_joint_names(obj_name)
                 object_states[obj_name]["dof_vel"] = _dof_tensor_to_dict(obj_state.joint_vel[env_id], jns)
+            if obj_state.joint_force is not None:
+                jns = handler.get_joint_names(obj_name)
+                object_states[obj_name]["dof_force"] = _dof_tensor_to_dict(obj_state.joint_force[env_id], jns)
 
         robot_states = {}
         for robot_name, robot_state in tensor_state.robots.items():
@@ -174,6 +184,11 @@ def state_tensor_to_nested(handler: BaseSimHandler, tensor_state: TensorState) -
             }
             robot_states[robot_name]["dof_pos"] = _dof_tensor_to_dict(robot_state.joint_pos[env_id], jns)
             robot_states[robot_name]["dof_vel"] = _dof_tensor_to_dict(robot_state.joint_vel[env_id], jns)
+            robot_states[robot_name]["dof_force"] = (
+                _dof_tensor_to_dict(robot_state.joint_force[env_id], jns)
+                if robot_state.joint_force is not None
+                else None
+            )
             robot_states[robot_name]["dof_pos_target"] = (
                 _dof_tensor_to_dict(robot_state.joint_pos_target[env_id], jns)
                 if robot_state.joint_pos_target is not None
@@ -202,6 +217,11 @@ def state_tensor_to_nested(handler: BaseSimHandler, tensor_state: TensorState) -
                 cam_dict["depth"] = camera_state.depth[env_id].cpu()
             camera_states[camera_name] = cam_dict
 
+        sensor_states = {}
+        for sensor_name, sensor_state in tensor_state.sensors.items():
+            # Note: SensorState structure is not defined, so this is a placeholder
+            sensor_states[sensor_name] = sensor_state  # This would need to be implemented based on SensorState structure
+
         extra_states = {}
         if isinstance(tensor_state.extras, dict):
             for extra_key, extra_val in tensor_state.extras.items():
@@ -227,7 +247,8 @@ def _alloc_state_tensors(n_env: int, n_body: int | None = None, n_jnt: int | Non
     n_jnt = n_jnt or 0
     jpos = torch.zeros((n_env, n_jnt), device=device) if n_jnt else None
     jvel = torch.zeros_like(jpos) if jpos is not None else None
-    return root, body, jpos, jvel
+    jforce = torch.zeros_like(jvel) if jvel is not None else None
+    return root, body, jpos, jvel, jforce
 
 
 def list_state_to_tensor(
@@ -239,6 +260,7 @@ def list_state_to_tensor(
     obj_names = sorted({n for es in env_states for n in es["objects"].keys()})
     robot_names = sorted({n for es in env_states for n in es["robots"].keys()})
     cam_names = sorted({n for es in env_states if "cameras" in es for n in es["cameras"].keys()})
+    sensor_names = sorted({n for es in env_states if "sensors" in es for n in es["sensors"].keys()})
     extra_names = sorted({n for es in env_states if "extras" in es for n in es["extras"].keys()})
 
     n_env = len(env_states)
@@ -247,6 +269,7 @@ def list_state_to_tensor(
     objects: dict[str, ObjectState] = {}
     robots: dict[str, RobotState] = {}
     cameras: dict[str, CameraState] = {}
+    sensors: dict[str, SensorState] = {}
     extras: dict[str, torch.Tensor] = {}
 
     # -------- objects --------------------------------------------------
@@ -254,7 +277,7 @@ def list_state_to_tensor(
         bnames = handler._get_body_names(name)
         jnames = handler._get_joint_names(name)
 
-        root, body, jpos, jvel = _alloc_state_tensors(n_env, len(bnames) or None, len(jnames) or None, dev)
+        root, body, jpos, jvel, jforce = _alloc_state_tensors(n_env, len(bnames) or None, len(jnames) or None, dev)
 
         for e, es in enumerate(env_states):
             if name not in es["objects"]:
@@ -285,15 +308,19 @@ def list_state_to_tensor(
                 for i, jn in enumerate(sorted(jnames)):
                     if jn in s["dof_vel"]:
                         jvel[e, i] = s["dof_vel"][jn]
+            if jforce is not None and "dof_force" in s:
+                for i, jn in enumerate(sorted(jnames)):
+                    if jn in s["dof_force"]:
+                        jforce[e, i] = s["dof_force"][jn]
 
-        objects[name] = ObjectState(root_state=root, body_state=body, joint_pos=jpos, joint_vel=jvel)
+        objects[name] = ObjectState(root_state=root, body_state=body, joint_pos=jpos, joint_vel=jvel, joint_force=jforce)
 
     # -------- robots ---------------------------------------------------
     for name in robot_names:
         jnames = handler._get_joint_names(name)
         bnames = handler._get_body_names(name)
 
-        root, body, jpos, jvel = _alloc_state_tensors(n_env, len(bnames) or None, len(jnames) or None, dev)
+        root, body, jpos, jvel, jforce = _alloc_state_tensors(n_env, len(bnames) or None, len(jnames) or None, dev)
         jpos_t, jvel_t, jeff_t = (
             torch.zeros_like(jpos) if jpos is not None else None,
             torch.zeros_like(jvel) if jvel is not None else None,
@@ -319,7 +346,9 @@ def list_state_to_tensor(
                     jpos[e, i] = s["dof_pos"][jn]
                 if "dof_vel" in s and s["dof_vel"] is not None and jn in s["dof_vel"]:
                     jvel[e, i] = s["dof_vel"][jn]
-                if "dof_pos_target" in s and s["dof_pos_target"] is not None and jn in s["dof_pos_target"]:
+                if "dof_force" in s and s["dof_force"] is not None and jn in s["dof_force"]:
+                    jforce[e, i] = s["dof_force"][jn]
+                if "dof_pos_target" in s and s["dof_pos_target"] is not Noneand jn in s["dof_pos_target"]:
                     jpos_t[e, i] = s["dof_pos_target"][jn]
                 if "dof_vel_target" in s and s["dof_vel_target"] is not None and jn in s["dof_vel_target"]:
                     jvel_t[e, i] = s["dof_vel_target"][jn]
@@ -344,6 +373,7 @@ def list_state_to_tensor(
             body_state=body,
             joint_pos=jpos,
             joint_vel=jvel,
+            joint_force=jforce,
             joint_pos_target=jpos_t,
             joint_vel_target=jvel_t,
             joint_effort_target=jeff_t,
@@ -358,6 +388,18 @@ def list_state_to_tensor(
             [es["cameras"][cam]["depth"] for es in env_states if "cameras" in es and cam in es["cameras"]], dim=0
         ).to(dev)
         cameras[cam] = CameraState(rgb=rgb, depth=depth)
+
+    # -------- sensors ----------------------------------------------
+    for sensor in sensor_names:
+        # Note: SensorState structure is not defined, so this is a placeholder
+        sensor_states = [es["sensors"][sensor] for es in env_states if "sensors" in es and sensor in es["sensors"]]
+        torque = torch.stack(
+            [es["sensors"][sensor]["torque"] for es in env_states if "sensors" in es and sensor in es["sensors"]], dim=0
+        ).to(dev)
+        force = torch.stack(
+            [es["sensors"][sensor]["force"] for es in env_states if "sensors" in es and sensor in es["sensors"]], dim=0
+        ).to(dev)
+        sensors[sensor] = SensorState(torque=torque, force=force)
 
     # -------- extras ----------------------------------------------
     for extra_key in extra_names:
@@ -382,17 +424,17 @@ def adapt_actions_to_dict(
         if len(actions.shape) == 2:
             actions = actions[0]
         actions = {
-            handler.robot.name: {
-                "dof_pos_target": _dof_tensor_to_dict(actions, handler.get_joint_names(handler.robot.name))
-            }
+            robot.name: {
+                "dof_pos_target": _dof_tensor_to_dict(actions, handler.get_joint_names(robot.name))
+            } for robot in handler.robots
         }
     elif isinstance(actions, np.ndarray):
         if len(actions.shape) == 2:
             actions = actions[0]
         actions = {
-            handler.robot.name: {
-                "dof_pos_target": _dof_array_to_dict(actions, handler.get_joint_names(handler.robot.name))
-            }
+            robot.name: {
+                "dof_pos_target": _dof_array_to_dict(actions, handler.get_joint_names(robot.name))
+            } for robot in handler.robots
         }
     elif isinstance(actions, list):
         actions = actions[0]

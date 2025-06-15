@@ -28,7 +28,7 @@ from metasim.queries.base import BaseQueryType
 from metasim.sim import BaseSimHandler
 from metasim.types import Action, DictEnvState
 from metasim.utils.dict import class_to_dict
-from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, SensorState
+from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
 
 
 class IsaacgymHandler(BaseSimHandler):
@@ -112,7 +112,19 @@ class IsaacgymHandler(BaseSimHandler):
         self.num_sensors = len(self._sensors)
         if self.num_sensors > 0:
             sensor_tensor = self.gym.acquire_force_sensor_tensor(self.sim)
-            self.vec_sensor_tensor = gymtorch.wrap_tensor(sensor_tensor).view(self.num_envs, self.num_sensors, 6) # shape: (num_envs, num_sensors * 6)
+            self.vec_sensor_tensor = gymtorch.wrap_tensor(sensor_tensor).view(
+                self.num_envs, self.num_sensors, 6
+            )  # shape: (num_envs, num_sensors * 6)
+
+        # Refresh tensors
+        if not self._manual_pd_on:
+            self.gym.refresh_dof_state_tensor(self.sim)
+        self.gym.refresh_rigid_body_state_tensor(self.sim)
+        self.gym.refresh_actor_root_state_tensor(self.sim)
+        self.gym.refresh_jacobian_tensors(self.sim)
+        self.gym.refresh_mass_matrix_tensors(self.sim)
+        self.gym.refresh_net_contact_force_tensor(self.sim)
+        self.gym.refresh_force_sensor_tensor(self.sim)
 
         # Refresh tensors
         if not self._manual_pd_on:
@@ -675,7 +687,7 @@ class IsaacgymHandler(BaseSimHandler):
         sensor_states = {}
         for i, sensor in enumerate(self.sensors):
             if isinstance(sensor, ContactForceSensorCfg):
-                sensor_states[sensor.name] = self.vec_sensor_tensor[:, i, :] # shape: (num_envs, 6)
+                sensor_states[sensor.name] = self.vec_sensor_tensor[:, i, :]  # shape: (num_envs, 6)
             else:
                 raise ValueError(f"Unknown sensor type: {type(sensor)}")
         extras = self.get_extra()  # extra observations

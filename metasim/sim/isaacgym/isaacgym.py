@@ -112,8 +112,7 @@ class IsaacgymHandler(BaseSimHandler):
         self._contact_forces = gymtorch.wrap_tensor(self.gym.acquire_net_contact_force_tensor(self.sim))
         self.num_sensors = len(self._sensors)
         if self.num_sensors > 0:
-            sensor_tensor = self.gym.acquire_force_sensor_tensor(self.sim)
-            self.vec_sensor_tensor = gymtorch.wrap_tensor(sensor_tensor).view(
+            self._vec_sensor_tensor = gymtorch.wrap_tensor(self.gym.acquire_force_sensor_tensor(self.sim)).view(
                 self.num_envs, self.num_sensors, 6
             )  # shape: (num_envs, num_sensors * 6)
 
@@ -570,6 +569,7 @@ class IsaacgymHandler(BaseSimHandler):
                 robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 2)
                 self.gym.enable_actor_dof_force_sensors(env, robot_handle)
                 assert robot.scale[0] == 1.0 and robot.scale[1] == 1.0 and robot.scale[2] == 1.0
+                self.gym.set_actor_scale(env, robot_handle, robot.scale[0])
                 env_robot_handles.append(robot_handle)
                 self.gym.set_actor_dof_properties(env, robot_handle, robot_dof_props)
 

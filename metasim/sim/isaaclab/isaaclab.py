@@ -351,7 +351,7 @@ class IsaaclabHandler(BaseSimHandler):
                     body_state=body_state,
                     joint_pos=obj_inst.data.joint_pos[:, joint_reindex],
                     joint_vel=obj_inst.data.joint_vel[:, joint_reindex],
-                    joint_force=None, # TODO
+                    joint_force=None,  # TODO
                 )
             else:
                 obj_inst = self.env.scene.rigid_objects[obj.name]
@@ -378,7 +378,7 @@ class IsaaclabHandler(BaseSimHandler):
                 body_state=body_state,
                 joint_pos=obj_inst.data.joint_pos[:, joint_reindex],
                 joint_vel=obj_inst.data.joint_vel[:, joint_reindex],
-                joint_force=None, # TODO
+                joint_force=None,  # TODO
                 joint_pos_target=obj_inst.data.joint_pos_target[:, joint_reindex],
                 joint_vel_target=obj_inst.data.joint_vel_target[:, joint_reindex],
                 joint_effort_target=obj_inst.data.joint_effort_target[:, joint_reindex],

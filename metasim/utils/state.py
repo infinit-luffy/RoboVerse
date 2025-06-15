@@ -313,7 +313,9 @@ def list_state_to_tensor(
                     if jn in s["dof_force"]:
                         jforce[e, i] = s["dof_force"][jn]
 
-        objects[name] = ObjectState(root_state=root, body_state=body, joint_pos=jpos, joint_vel=jvel, joint_force=jforce)
+        objects[name] = ObjectState(
+            root_state=root, body_state=body, joint_pos=jpos, joint_vel=jvel, joint_force=jforce
+        )
 
     # -------- robots ---------------------------------------------------
     for name in robot_names:

@@ -683,7 +683,9 @@ class IsaacgymHandler(BaseSimHandler):
         sensor_states = {}
         for i, sensor in enumerate(self.sensors):
             if isinstance(sensor, ContactForceSensorCfg):
-                sensor_states[sensor.name] = SensorState(force=self._vec_sensor_tensor[:, i, :3], torque= self._vec_sensor_tensor[:, i, 3:])
+                sensor_states[sensor.name] = SensorState(
+                    force=self._vec_sensor_tensor[:, i, :3], torque=self._vec_sensor_tensor[:, i, 3:]
+                )
             else:
                 raise ValueError(f"Unknown sensor type: {type(sensor)}")
         extras = self.get_extra()  # extra observations

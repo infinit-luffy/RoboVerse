@@ -56,6 +56,14 @@ def neck_height(envstate, robot_name: str):
     ) / 2
 
 
+def head_height_tensor(envstate, robot_name: str):
+    """Returns the height of the neck."""
+    robot_body_name = envstate.robots[robot_name].body_names
+    body_id = robot_body_name.index("head")
+    body_pos = envstate.robots[robot_name].body_state[:, body_id, 2]
+    return body_pos
+
+
 def neck_height_tensor(envstate, robot_name: str):
     """Returns the height of the neck."""
     robot_body_name = envstate.robots[robot_name].body_names
@@ -200,6 +208,32 @@ def get_euler_xyz_tensor(quat):
     # stack r, p, w in dim1
     euler_xyz = torch.stack((r, p, w), dim=1)
     euler_xyz[euler_xyz > torch.pi] -= 2 * torch.pi
+    return euler_xyz
+
+
+def default_dof_pos_tensor(envstates, robot_name: str):
+    """Return the default pos of the robot."""
+    return envstates.robots[robot_name].extra["default_pos"]
+
+
+def ref_dof_pos_tensor(envstates, robot_name: str):
+    """Return the default ref dof pos."""
+    return envstates.robots[robot_name].extra["ref_dof_pos"]
+
+
+def get_euler_xyz_tensor(quat):
+    """Convert quaternion to Euler angles (roll, pitch, yaw) in radians for a batch of quaternions.
+
+    Args:
+        quat (torch.Tensor): Quaternion tensor of shape (N, 4) where N is the batch size.
+
+    Returns:
+        torch.Tensor: Euler angles tensor of shape (N, 3) where each row contains (roll, pitch, yaw).
+    """
+    r, p, w = get_euler_xyz(quat)
+    # stack r, p, w in dim1
+    euler_xyz = torch.stack((r, p, w), dim=1)
+    euler_xyz[euler_xyz > np.pi] -= 2 * np.pi
     return euler_xyz
 
 

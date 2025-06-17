@@ -3,10 +3,9 @@ from __future__ import annotations
 import random
 from copy import deepcopy
 
-import gymnasium as gym
 import numpy as np
 import torch
-from gymnasium import spaces  # noqa: F401
+from gymnasium import spaces
 from loguru import logger as log
 
 from metasim.cfg.scenario import ScenarioCfg

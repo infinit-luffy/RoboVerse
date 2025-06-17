@@ -4,7 +4,6 @@ import statistics
 import time
 from collections import deque
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -179,7 +178,7 @@ class PPO:
         self.tot_time += locs["collection_time"] + locs["learn_time"]
         iteration_time = locs["collection_time"] + locs["learn_time"]
 
-        ep_string = f""
+        ep_string = ""
         if locs["ep_infos"]:
             for key in locs["ep_infos"][0]:
                 infotensor = torch.tensor([], device=self.device)

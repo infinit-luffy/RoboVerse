@@ -9,7 +9,8 @@ from metasim.utils.math import quat_inv, quat_mul
 def compute_hand_reward(
     reset_buf,
     reset_goal_buf,
-    _episode_length_buf,
+    episode_length_buf,
+    success_buf,
     max_episode_length: float,
     object_pos,
     object_rot,
@@ -29,7 +30,9 @@ def compute_hand_reward(
 
         reset_goal_buf (tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
 
-        _episode_length_buf (tensor): The porgress buffer of all environments at this time, shape (num_envs,)
+        episode_length_buf (tensor): The porgress buffer of all environments at this time, shape (num_envs,)
+
+        success_buf (tensor): The success buffer of all environments at this time, shape (num_envs,)
 
         max_episode_length (float): The max episode length in this environment
 
@@ -72,6 +75,9 @@ def compute_hand_reward(
 
     # Find out which envs hit the goal and update successes count
     goal_resets = torch.where(torch.abs(goal_dist) <= 0, torch.ones_like(reset_goal_buf), reset_goal_buf)
+    success_buf = torch.where(
+        success_buf == 0, torch.where(goal_dist < 0.03, torch.ones_like(success_buf), success_buf), success_buf
+    )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
     reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
@@ -82,7 +88,8 @@ def compute_hand_reward(
     # Check env termination conditions, including maximum success number
     resets = torch.where(object_pos[:, 2] <= 0.2, torch.ones_like(reset_buf), reset_buf)
 
-    # Only reset because of terminate or fall
-    resets = torch.where(_episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
+    # Reset because of terminate or fall or success
+    resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
+    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
-    return reward, resets, goal_resets
+    return reward, resets, goal_resets, success_buf

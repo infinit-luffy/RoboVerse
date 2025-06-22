@@ -21,11 +21,11 @@ class ActorCritic(nn.Module):
         actor_layers = []
         actor_layers.append(nn.Linear(*obs_shape, actor_hidden_dim[0]))
         actor_layers.append(activation)
-        for l in range(len(actor_hidden_dim)):
-            if l == len(actor_hidden_dim) - 1:
-                actor_layers.append(nn.Linear(actor_hidden_dim[l], *actions_shape))
+        for dim in range(len(actor_hidden_dim)):
+            if dim == len(actor_hidden_dim) - 1:
+                actor_layers.append(nn.Linear(actor_hidden_dim[dim], *actions_shape))
             else:
-                actor_layers.append(nn.Linear(actor_hidden_dim[l], actor_hidden_dim[l + 1]))
+                actor_layers.append(nn.Linear(actor_hidden_dim[dim], actor_hidden_dim[dim + 1]))
                 actor_layers.append(activation)
         self.actor = nn.Sequential(*actor_layers)
 
@@ -33,11 +33,11 @@ class ActorCritic(nn.Module):
         critic_layers = []
         critic_layers.append(nn.Linear(*obs_shape, critic_hidden_dim[0]))
         critic_layers.append(activation)
-        for l in range(len(critic_hidden_dim)):
-            if l == len(critic_hidden_dim) - 1:
-                critic_layers.append(nn.Linear(critic_hidden_dim[l], 1))
+        for dim in range(len(critic_hidden_dim)):
+            if dim == len(critic_hidden_dim) - 1:
+                critic_layers.append(nn.Linear(critic_hidden_dim[dim], 1))
             else:
-                critic_layers.append(nn.Linear(critic_hidden_dim[l], critic_hidden_dim[l + 1]))
+                critic_layers.append(nn.Linear(critic_hidden_dim[dim], critic_hidden_dim[dim + 1]))
                 critic_layers.append(activation)
         self.critic = nn.Sequential(*critic_layers)
 

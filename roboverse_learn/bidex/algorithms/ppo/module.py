@@ -6,7 +6,7 @@ from torch.distributions import MultivariateNormal
 
 class ActorCritic(nn.Module):
     def __init__(self, obs_shape, actions_shape, initial_std, model_cfg):
-        super(ActorCritic, self).__init__()
+        super().__init__()
 
         if model_cfg is None:
             actor_hidden_dim = [256, 256, 256]

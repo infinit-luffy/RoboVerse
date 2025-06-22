@@ -167,8 +167,8 @@ class PPO:
                 self.storage.clear()
                 stop = time.time()
                 learn_time = stop - start
-                # if self.print_log:
-                #     self.log(locals())
+                if self.print_log:
+                    self.log(locals())
                 if it % log_interval == 0:
                     self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
                 ep_infos.clear()
@@ -186,7 +186,7 @@ class PPO:
                 for ep_info in locs["ep_infos"]:
                     infotensor = torch.cat((infotensor, ep_info[key].to(self.device)))
                 value = torch.mean(infotensor)
-                self.writer.add_scalar("Episode/" + key, value, locs["it"])
+                # self.writer.add_scalar("Episode/" + key, value, locs["it"])
                 ep_string += f"""{f"Mean episode {key}:":>{pad}} {value:.4f}\n"""
         mean_std = self.actor_critic.log_std.exp().mean()
 

@@ -49,7 +49,7 @@ class Args:
     name: str = "Base"
     experiment: str = "Base"
     cfg_train: str = "Base"
-    seed: int = 0
+    seed: int = 42
     max_iterations: int = -1
     mini_batch_size: int = -1
     torch_deterministic: bool = False
@@ -123,8 +123,11 @@ def train(args):
 
     learn_cfg = args.train_cfg["learn"]
     is_testing = learn_cfg["test"]
-    if args.model_dir != "":
+    if args.test:
         is_testing = True
+        args.train_cfg["learn"]["test"] = True
+
+    if args.model_dir != "":
         chkpt_path = args.model_dir
 
     if args.max_iterations != -1:

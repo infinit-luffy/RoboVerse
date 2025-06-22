@@ -17,6 +17,9 @@ class ShadowHandCfg(RobotCfg):
     isaacgym_read_mjcf: bool = True
     enabled_gravity: bool = False
     enabled_self_collisions: bool = False
+    tendon_limit_stiffness: float = 30.0
+    tendon_damping: float = 0.1
+
     actuators: dict[str, BaseActuatorCfg] = {
         "robot0_WRJ1": BaseActuatorCfg(),
         "robot0_WRJ0": BaseActuatorCfg(),

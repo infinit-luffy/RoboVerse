@@ -58,7 +58,12 @@ def compute_hand_reward(
             for some specific objects (e.g. pen)
     """
     # Distance from the hand to the object
-    goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
+    goal_dist_xy = torch.norm(target_pos[:, :2] - object_pos[:, :2], p=2, dim=-1)
+    goal_dist_z = torch.abs(target_pos[:, 2] - object_pos[:, 2])
+    # goal_dist = 0.9 * goal_dist_xy + 0.1 * goal_dist_z
+    goal_dist = torch.where(goal_dist_xy <= 0.15, goal_dist_xy + 0.05 * goal_dist_z, goal_dist_xy)
+    goal_dist = torch.where(goal_dist_xy <= 0.1, goal_dist + 0.05 * goal_dist_z, goal_dist)
+    # print(object_pos[0])
     if ignore_z_rot:
         success_tolerance = 2.0 * success_tolerance
 
@@ -71,12 +76,12 @@ def compute_hand_reward(
     action_penalty = torch.sum(actions**2, dim=-1)
 
     # Total reward is: position distance + orientation alignment + action regularization + success bonus + fall penalty
-    reward = torch.exp(-0.2 * (dist_rew * dist_reward_scale + rot_dist))
+    reward = torch.exp(-0.2 * (dist_rew * dist_reward_scale))
 
     # Find out which envs hit the goal and update successes count
-    goal_resets = torch.where(torch.abs(goal_dist) <= 0, torch.ones_like(reset_goal_buf), reset_goal_buf)
+    goal_resets = torch.where(torch.abs(goal_dist) <= 0.03, torch.ones_like(reset_goal_buf), reset_goal_buf)
     success_buf = torch.where(
-        success_buf == 0, torch.where(goal_dist < 0.03, torch.ones_like(success_buf), success_buf), success_buf
+        success_buf == 0, torch.where(goal_dist <= 0.03, torch.ones_like(success_buf), success_buf), success_buf
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation

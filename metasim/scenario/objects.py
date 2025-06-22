@@ -92,6 +92,9 @@ class BaseObjCfg:
     fix_base_link: bool = False
     """Whether to fix the base link of the object, default is False"""
 
+    defauly_density: float | None = None
+    """Density of the object (in kg/m^3)."""
+
     enabled_gravity: bool = True
     """Whether to enable gravity. Default to True. If False, the robot will not be affected by gravity."""
 

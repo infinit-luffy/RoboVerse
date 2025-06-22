@@ -12,6 +12,7 @@ from loguru import logger as log
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.constants import SimType
 from metasim.types import Action, EnvState
+from metasim.utils.math import unscale_transform
 from metasim.utils.setup_util import get_robot, get_sim_env_class, get_task
 
 
@@ -51,6 +52,7 @@ class BiDexEnvWrapper:
             for joint_name in robot.joint_limits
             if robot.actuators[joint_name].fully_actuated
         )
+        self.num_joints = sum(1 for robot in scenario.robots for joint_name in robot.joint_limits)
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(self.num_acutated_joints,), dtype=np.float32)
 
         # observation space
@@ -73,15 +75,15 @@ class BiDexEnvWrapper:
         if seed is not None:
             self.seed(seed)
 
-    def scale_action(self, actions: torch.Tensor) -> list[Action]:
+    def scale_action_dict(self, actions: torch.Tensor) -> list[Action]:
         """Scale actions to the range of the action space.
         Args:
             actions (torch.Tensor): Actions in the range of [-1, 1], shape (num_envs, num_actions).
         """
-        index = 0
         step_actions = []
         for env in range(self.num_envs):
             action = {}
+            index = 0
             for robot in self.robots:
                 action[robot.name] = {"dof_pos_target": {}}
                 for joint_name in robot.joint_limits.keys():
@@ -96,12 +98,39 @@ class BiDexEnvWrapper:
             step_actions.append(action)
         return step_actions
 
+    def scale_action_tensor(self, actions: torch.Tensor) -> torch.Tensor:
+        """Scale actions to the range of the action space.
+
+        Args:
+            actions (torch.Tensor): Actions in the range of [-1, 1], shape (num_envs, num_actions).
+        """
+        step_actions = torch.zeros((self.num_envs, self.num_joints), device=self.sim_device)
+        scaled_actions_1 = unscale_transform(
+            actions[:, : len(self.task.actuated_dof_indices)],
+            self.task.shadow_hand_dof_lower_limits[self.task.actuated_dof_indices],
+            self.task.shadow_hand_dof_upper_limits[self.task.actuated_dof_indices],
+        )
+        scaled_actions_2 = unscale_transform(
+            actions[:, len(self.task.actuated_dof_indices) :],
+            self.task.shadow_hand_dof_lower_limits[self.task.actuated_dof_indices],
+            self.task.shadow_hand_dof_upper_limits[self.task.actuated_dof_indices],
+        )
+
+        step_actions[:, self.task.actuated_dof_indices] = scaled_actions_1
+        step_actions[:, self.task.actuated_dof_indices + self.num_joints // 2] = scaled_actions_2
+        return step_actions
+
     def reset(self):
         """Reset the environment."""
         obs, _ = self.env.reset(states=self.init_states)
 
         observations = self.task.observation_fn(
             obs, torch.zeros((self.num_envs, self.num_acutated_joints), device=self.sim_device)
+        )
+        observations = torch.clamp(
+            observations,
+            torch.tensor(self.observation_space.low, device=self.sim_device),
+            torch.tensor(self.observation_space.high, device=self.sim_device),
         )
 
         # Reset episode tracking variables
@@ -114,21 +143,34 @@ class BiDexEnvWrapper:
         log.info("reset now")
         return observations
 
-    def pre_physics_step(self, actions: torch.Tensor):
+    def pre_physics_step(self, actions: torch.Tensor, tensor=False):
         """Step the environment with given actions.
 
         Args:
             actions (torch.Tensor): Actions in the range of [-1, 1], shape (num_envs, num_actions).
         """
+        # env_ids = self.episode_reset.nonzero(as_tuple=False).squeeze(-1)
+        # goal_env_ids = self.episode_goal_reset.nonzero(as_tuple=False).squeeze(-1)
 
-        step_action = self.scale_action(actions)
+        # if len(goal_env_ids) > 0 and len(env_ids) == 0:
+        #     self.reset_goal_pose(goal_env_ids)
+        # elif len(goal_env_ids) > 0:
+        #     self.reset_goal_pose(goal_env_ids)
+
+        # if len(env_ids) > 0:
+        #     envstates = self.reset_env(env_ids)
+        #     actions[env_ids] = torch.zeros_like(actions[env_ids])  # Reset actions for the reset environments
+        if not tensor:
+            step_action = self.scale_action_dict(actions)
+        else:
+            step_action = self.scale_action_tensor(actions)
         return step_action
 
     def post_physics_step(self, envstates: list[EnvState], actions: torch.Tensor):
         """Post physics step processing."""
         self.episode_lengths += 1
         self.env._episode_length_buf += 1
-        obs = self.task.observation_fn(envstates=envstates, actions=actions)
+        # obs = self.task.observation_fn(envstates=envstates, actions=actions)
         (self.episode_rewards, self.episode_reset, self.episode_goal_reset, self.episode_success) = self.task.reward_fn(
             envstates=envstates,
             actions=actions,
@@ -154,14 +196,12 @@ class BiDexEnvWrapper:
                 - infos (list[dict]): List of additional information for each environment. Each dictionary contains the "TimeLimit.truncated" key,
                                       indicating if the episode was truncated due to timeout.
         """
-        step_action = self.pre_physics_step(actions)
+        actions = torch.clamp(actions, -1.0, 1.0)  # Ensure actions are within [-1, 1]
+        step_action = self.pre_physics_step(actions, tensor=True)
         envstates, _, _, _, _ = self.env.step(step_action)
         self.post_physics_step(envstates, actions)
 
         rewards = deepcopy(self.episode_rewards)
-        terminated = self.episode_lengths >= self.max_episode_steps
-        not_truncated = terminated.bool() | self.episode_success.bool()
-        truncated = self.episode_reset & (~not_truncated)
         dones = deepcopy(self.episode_reset)
 
         env_ids = self.episode_reset.nonzero(as_tuple=False).squeeze(-1)
@@ -174,6 +214,7 @@ class BiDexEnvWrapper:
 
         if len(env_ids) > 0:
             envstates = self.reset_env(env_ids)
+            actions[env_ids] = torch.zeros_like(actions[env_ids])  # Reset actions for the reset environments
 
         observations = self.task.observation_fn(envstates=envstates, actions=actions, device=self.sim_device)
         observations = torch.clamp(
@@ -182,17 +223,19 @@ class BiDexEnvWrapper:
             torch.tensor(self.observation_space.high, device=self.sim_device),
         )
 
-        info = []
-        for i in range(self.num_envs):
-            env_info = {}
-            env_info["TimeLimit.truncated"] = truncated[i]
-            env_info["success"] = int(self.episode_success[i])
-            if dones[i]:
-                env_info["terminal_observation"] = observations[i]
-                env_info["episode_r"] = rewards[i]
-                env_info["episode_l"] = self.episode_lengths[i]
+        # info = []
+        # for i in range(self.num_envs):
+        #     env_info = {}
+        #     env_info["TimeLimit.truncated"] = truncated[i]
+        #     env_info["success"] = int(self.episode_success[i])
+        #     if dones[i]:
+        #         env_info["terminal_observation"] = observations[i]
+        #         env_info["episode_r"] = rewards[i]
+        #         env_info["episode_l"] = self.episode_lengths[i]
 
-            info.append(env_info)
+        #     info.append(env_info)
+        info = {}
+        info["successes"] = self.episode_success
 
         return observations, rewards, dones, info
 

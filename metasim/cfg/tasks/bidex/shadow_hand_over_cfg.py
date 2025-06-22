@@ -44,9 +44,11 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             scale=(1, 1, 1),
             physics=PhysicStateType.RIGIDBODY,
             urdf_path=objects_urdf_path[0],
+            defauly_density=500.0,
         ),
     ]
     robots = ["shadow_hand_right", "shadow_hand_left"]
+    decimation = 1
     sim_params = SimParamCfg(
         dt=1.0 / 60.0,
         contact_offset=0.002,
@@ -56,10 +58,12 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         use_gpu_pipeline=True,
         use_gpu=True,
         substeps=2,
+        friction_correlation_distance=0.025,
+        friction_offset_threshold=0.04,
     )
 
     init_goal_pos = torch.tensor(
-        [0.01, -0.635, 0.54], dtype=torch.float32, device=device
+        [0.0, -0.64, 0.54], dtype=torch.float32, device=device
     )  # Initial goal position, shape (3,)
     init_goal_rot = torch.tensor(
         [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=device
@@ -77,6 +81,37 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
     l_fingertips_idx = None
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
+    joint_reindex = torch.tensor(
+        [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
+        dtype=torch.int32,
+        device=device,
+    )
+    actuated_dof_indices = torch.tensor(
+        [
+            0,
+            1,
+            2,
+            3,
+            4,
+            6,
+            7,
+            8,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            17,
+            19,
+            20,
+            21,
+            22,
+            23,
+        ],
+        dtype=torch.int32,
+        device=device,
+    )
     shadow_hand_dof_lower_limits: torch.Tensor = torch.tensor(
         [
             -0.489,
@@ -140,15 +175,15 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
-    dist_reward_scale = 50
+    dist_reward_scale = 50.0
     success_tolerance = 0.1
-    reach_goal_bonus = 250
+    reach_goal_bonus = 250.0
     fall_penalty = 0.0
     init_states = [
         {
             "objects": {
                 "cube": {
-                    "pos": torch.tensor([0.01, -0.385, 0.54]),
+                    "pos": torch.tensor([0.0, -0.39, 0.54]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
             },
@@ -223,6 +258,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         Args:
             envstates (list[EnvState]): List of environment states to process.
             actions (torch.Tensor): Actions taken by the agents in the environment, shape (num_envs, num_actions).
+            device (torch.device | None): The device to use for the observations. If None, use the task's device.
 
         Returns:
             Compute the observations of all environment. The observation is composed of three parts:
@@ -262,8 +298,8 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         obs = torch.zeros((num_envs, 398), dtype=torch.float32, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
-            self.shadow_hand_dof_lower_limits,
-            self.shadow_hand_dof_upper_limits,
+            self.shadow_hand_dof_lower_limits[self.joint_reindex],
+            self.shadow_hand_dof_upper_limits[self.joint_reindex],
         )
         obs[:, 24:48] = envstates.robots["shadow_hand_right"].joint_vel * self.vel_obs_scale
         obs[:, 48:72] = envstates.robots["shadow_hand_right"].joint_force * self.force_torque_obs_scale
@@ -284,8 +320,8 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         obs[:, 167:187] = actions[:, :20]  # actions for right hand
         obs[:, 187:211] = math.scale_transform(
             envstates.robots["shadow_hand_left"].joint_pos,
-            self.shadow_hand_dof_lower_limits,
-            self.shadow_hand_dof_upper_limits,
+            self.shadow_hand_dof_lower_limits[self.joint_reindex],
+            self.shadow_hand_dof_upper_limits[self.joint_reindex],
         )
         obs[:, 211:235] = envstates.robots["shadow_hand_left"].joint_vel * self.vel_obs_scale
         obs[:, 235:259] = envstates.robots["shadow_hand_left"].joint_force * self.force_torque_obs_scale
@@ -296,6 +332,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         obs[:, 259:324] = (
             envstates.robots["shadow_hand_left"].body_state[:, self.l_fingertips_idx, :].view(num_envs, -1)
         )
+        obs[:, 259:324] = obs[:, 72:137]
         t = 324
         for name in self.l_fingertips:
             # shape: (num_envs, 3) + (num_envs, 3) => (num_envs, 6)
@@ -303,13 +340,14 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             torque = envstates.sensors[name].torque
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
-        obs[:, 354:374] = actions[:, :20]  # actions for left hand
+        obs[:, 354:374] = actions[:, 20:]  # actions for left hand
         obs[:, 374:387] = envstates.objects["cube"].root_state
-        obs[:384:387] *= self.vel_obs_scale  # object angvel
+        obs[:, 384:387] *= self.vel_obs_scale  # object angvel
         obs[:, 387:394] = torch.cat([self.goal_pos, self.goal_rot], dim=1)  # goal position and rotation (num_envs, 7)
         obs[:, 394:] = math.quat_mul(
             envstates.objects["cube"].root_state[:, 3:7], math.quat_inv(self.goal_rot)
         )  # goal rotation - object rotation
+        # print(obs[0, 259:324])
         return obs
 
     def reward_fn(

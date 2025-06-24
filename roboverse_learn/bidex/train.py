@@ -22,6 +22,7 @@ except ImportError:
     log.warning("IsaacGym is not installed. Some functionalities may not work as expected.")
 
 import time
+
 import tyro
 import wandb
 import yaml

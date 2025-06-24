@@ -25,6 +25,7 @@ class PPO:
         is_testing=False,
         print_log=True,
         apply_reset=False,
+        wandb_run=None,
     ):
         if not isinstance(vec_env.observation_space, Space):
             raise TypeError("vec_env.observation_space must be a gym Space")
@@ -78,6 +79,7 @@ class PPO:
         self.log_dir = log_dir
         self.print_log = print_log
         # self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+        self.wandb_run = wandb_run
         self.tot_timesteps = 0
         self.tot_time = 0
         self.is_testing = is_testing
@@ -239,6 +241,25 @@ class PPO:
             f"""{"ETA:":>{pad}} {self.tot_time / (locs["it"] + 1) * (locs["num_learning_iterations"] - locs["it"]):.1f}s\n"""
         )
         print(log_string)
+        if self.wandb_run is not None:
+            log_data = {
+                "Value/value_loss": locs["mean_value_loss"],
+                "Loss/surrogate": locs["mean_surrogate_loss"],
+                "Policy/noise_std": mean_std.item(),
+                "Train/mean_reward_per_step": locs["mean_reward"],
+                "Train/mean_episode_length_per_episode": locs["mean_trajectory_length"],
+                "Train/fps": fps,
+                "timesteps_total": self.tot_timesteps,
+                "iteration_time": iteration_time,
+                "iteration": locs["it"],
+            }
+            if len(locs["rewbuffer"]) > 0:
+                log_data.update({
+                    "Train/mean_reward": statistics.mean(locs["rewbuffer"]),
+                    "Train/mean_episode_length": statistics.mean(locs["lenbuffer"]),
+                })
+
+            self.wandb_run.log(log_data)
 
     def update(self):
         mean_value_loss = 0

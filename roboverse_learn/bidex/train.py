@@ -21,7 +21,9 @@ try:
 except ImportError:
     log.warning("IsaacGym is not installed. Some functionalities may not work as expected.")
 
+import time
 import tyro
+import wandb
 import yaml
 from rl_env_wrapper import BiDexEnvWrapper
 
@@ -56,6 +58,9 @@ class Args:
     model_dir: str = ""
     randomize: bool = False
     episode_length: int = 0
+    use_wandb: bool = True
+    """Use wandb for logging."""
+    wandb_project: str = "roboverse_bidex_rl"
 
     train_cfg = None
 
@@ -137,6 +142,15 @@ def train(args):
     if not os.path.exists(logdir):
         os.makedirs(logdir, exist_ok=True)
 
+    wandb_run = None
+    if args.use_wandb and not is_testing:
+        wandb_run = wandb.init(
+            project=args.wandb_project,
+            config=args.train_cfg,
+            name=f"{args.task}_{args.algo}_{args.name}_{time.strftime('%Y_%m_%d_%H_%M_%S')}",
+            dir=logdir,
+        )
+
     """Set up the algo system for training or inferencing."""
     model = eval(args.algo.upper())(
         vec_env=env,
@@ -147,6 +161,7 @@ def train(args):
         is_testing=is_testing,
         print_log=learn_cfg["print_log"],
         apply_reset=False,
+        wandb_run=wandb_run,
     )
 
     if is_testing and args.model_dir != "":

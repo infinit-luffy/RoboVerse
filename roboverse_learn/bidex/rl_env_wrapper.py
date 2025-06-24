@@ -202,6 +202,8 @@ class BiDexEnvWrapper:
 
         rewards = deepcopy(self.episode_rewards)
         dones = deepcopy(self.episode_reset)
+        info = {}
+        info["successes"] = deepcopy(self.episode_success)
 
         env_ids = self.episode_reset.nonzero(as_tuple=False).squeeze(-1)
         goal_env_ids = self.episode_goal_reset.nonzero(as_tuple=False).squeeze(-1)
@@ -233,8 +235,6 @@ class BiDexEnvWrapper:
         #         env_info["episode_l"] = self.episode_lengths[i]
 
         #     info.append(env_info)
-        info = {}
-        info["successes"] = self.episode_success
 
         return observations, rewards, dones, info
 

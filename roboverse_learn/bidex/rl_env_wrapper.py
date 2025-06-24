@@ -231,18 +231,7 @@ class BiDexEnvWrapper:
             torch.tensor(self.observation_space.high, device=self.sim_device),
         )
 
-        # info = []
-        # for i in range(self.num_envs):
-        #     env_info = {}
-        #     env_info["TimeLimit.truncated"] = truncated[i]
-        #     env_info["success"] = int(self.episode_success[i])
-        #     if dones[i]:
-        #         env_info["terminal_observation"] = observations[i]
-        #         env_info["episode_r"] = rewards[i]
-        #         env_info["episode_l"] = self.episode_lengths[i]
-
-        #     info.append(env_info)
-        print(f"Training success rate: {success_rate:.4f}")
+        info["success_rate"] = torch.tensor([success_rate], dtype=torch.float32, device=self.sim_device)
 
         return observations, rewards, dones, info
 
@@ -262,10 +251,10 @@ class BiDexEnvWrapper:
     def reset_goal_pose(self, env_ids: torch.Tensor):
         """Reset the goal pose for specific environments."""
         self.episode_goal_reset[env_ids] = 0
-        # if self.task.goal_reset_fn is not None:
-        #     self.task.goal_reset_fn(env_ids=env_ids, envstates=self.env.envstates)
-        # else:
-        #     log.warning("No goal reset function defined in the task. Skipping goal reset.")
+        if self.task.goal_reset_fn is not None:
+            self.task.goal_reset_fn(env_ids=env_ids)
+        else:
+            log.warning("No goal reset function defined in the task. Skipping goal reset.")
 
     def close(self):
         """Clean up environment resources."""

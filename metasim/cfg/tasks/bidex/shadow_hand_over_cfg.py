@@ -413,13 +413,13 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             env_ids (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs_to_reset,).
         """
         rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), 4), device=self.device)
-        x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
-        y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
+        x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
+        y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
 
         new_rot = randomize_rotation(rand_floats[:, 0], rand_floats[:, 1], x_unit_tensor, y_unit_tensor)
 
-        self.goal_pos = self.init_goal_pos.clone()
-        self.goal_rot = new_rot
+        self.goal_pos[env_ids] = self.init_goal_pos.clone()
+        self.goal_rot[env_ids] = new_rot
 
         return
 

@@ -26,7 +26,6 @@ import time
 import tyro
 import wandb
 import yaml
-from algorithms.ppo.ppo import PPO
 from rl_env_wrapper import BiDexEnvWrapper
 
 from metasim.cfg.scenario import ScenarioCfg

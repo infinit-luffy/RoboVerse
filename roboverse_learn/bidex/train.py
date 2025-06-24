@@ -32,7 +32,9 @@ from metasim.cfg.scenario import ScenarioCfg
 from metasim.utils import configclass
 from metasim.utils.setup_util import get_task
 
-ALGOS = ["ppo"]
+ALGO_MAP = {
+    "PPO": PPO,
+}
 
 
 @configclass
@@ -105,12 +107,11 @@ def load_cfg(args, train_cfg_path, logdir):
 
 def train(args):
     print("Algorithm: ", args.algo)
-    assert args.algo in ALGOS, "Unrecognized algorithm!\nAlgorithm should be one of: [ppo]"
+    assert args.algo.upper() in ALGO_MAP.keys(), "Unrecognized algorithm!\nAlgorithm should be one of: [ppo]"
     algo = args.algo
     task = get_task(args.task)
     task.num_envs = args.num_envs
     task.device = args.device
-    print(task.robots)
     scenario = ScenarioCfg(
         task=task,
         robots=task.robots,
@@ -153,7 +154,7 @@ def train(args):
         )
 
     """Set up the algo system for training or inferencing."""
-    model = eval(args.algo.upper())(
+    model = ALGO_MAP[args.algo.upper()](
         vec_env=env,
         cfg_train=args.train_cfg,
         device=args.device,

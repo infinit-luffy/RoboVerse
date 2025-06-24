@@ -1580,3 +1580,9 @@ def sample_int_from_float(x):
     if int(x) == x:
         return int(x)
     return int(x) if np.random.rand() < (x - int(x)) else int(x) + 1
+
+
+@torch.jit.script
+def torch_rand_float(lower: float, upper: float, shape: tuple[int, int], device: str):
+    """Sample random float tensor uniformly in the range [lower, upper]."""
+    return (upper - lower) * torch.rand(*shape, device=device) + lower

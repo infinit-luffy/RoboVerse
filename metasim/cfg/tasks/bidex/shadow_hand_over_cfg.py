@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from typing import Literal
 
 import torch
@@ -15,7 +16,7 @@ from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
 from metasim.constants import BenchmarkType, PhysicStateType, TaskType
 from metasim.types import EnvState
 from metasim.utils import configclass, math
-from metasim.utils.bidex_reward_util import compute_hand_reward
+from metasim.utils.bidex_util import compute_hand_reward, randomize_rotation
 
 logging.addLevelName(5, "TRACE")
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
@@ -37,6 +38,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
     num_envs = None
     obs_shape = 398  # 398-dimensional observation space
     objects_type = ["cube"]
+    current_object_type = "cube"
     objects_urdf_path = ["roboverse_data/assets/bidex/objects/cube_multicolor.urdf"]
     objects = [
         RigidObjCfg(
@@ -172,6 +174,8 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         dtype=torch.float32,
         device=device,
     )
+    shadow_hand_dof_lower_limits_cpu = shadow_hand_dof_lower_limits.cpu()
+    shadow_hand_dof_upper_limits_cpu = shadow_hand_dof_upper_limits.cpu()
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
@@ -179,6 +183,9 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
     success_tolerance = 0.1
     reach_goal_bonus = 250.0
     fall_penalty = 0.0
+    reset_position_noise = 0.01
+    reset_dof_pos_noise = 0.2
+
     init_states = [
         {
             "objects": {
@@ -341,11 +348,11 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
         obs[:, 354:374] = actions[:, 20:]  # actions for left hand
-        obs[:, 374:387] = envstates.objects["cube"].root_state
+        obs[:, 374:387] = envstates.objects[self.current_object_type].root_state
         obs[:, 384:387] *= self.vel_obs_scale  # object angvel
         obs[:, 387:394] = torch.cat([self.goal_pos, self.goal_rot], dim=1)  # goal position and rotation (num_envs, 7)
         obs[:, 394:] = math.quat_mul(
-            envstates.objects["cube"].root_state[:, 3:7], math.quat_inv(self.goal_rot)
+            envstates.objects[self.current_object_type].root_state[:, 3:7], math.quat_inv(self.goal_rot)
         )  # goal rotation - object rotation
         # print(obs[0, 259:324])
         return obs
@@ -386,8 +393,8 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             episode_length_buf=episode_length_buf,
             success_buf=success_buf,
             max_episode_length=self.episode_length,
-            object_pos=envstates.objects["cube"].root_state[:, :3],
-            object_rot=envstates.objects["cube"].root_state[:, 3:7],
+            object_pos=envstates.objects[self.current_object_type].root_state[:, :3],
+            object_rot=envstates.objects[self.current_object_type].root_state[:, 3:7],
             target_pos=self.goal_pos,
             target_rot=self.goal_rot,
             dist_reward_scale=self.dist_reward_scale,
@@ -405,5 +412,60 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         Args:
             env_ids (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs_to_reset,).
         """
-        self.goal_pos[env_ids] = self.init_goal_pos.clone()
-        self.goal_rot[env_ids] = self.init_goal_rot.clone()  # Todo: add randomization to goal pos and rot
+        rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), 4), device=self.device)
+        x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
+        y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
+
+        new_rot = randomize_rotation(rand_floats[:, 0], rand_floats[:, 1], x_unit_tensor, y_unit_tensor)
+
+        self.goal_pos = self.init_goal_pos.clone()
+        self.goal_rot = new_rot
+
+        return
+
+    def reset_init_pose_fn(self, init_states: list[EnvState], env_ids: torch.Tensor) -> list[EnvState]:
+        """Reset the initial pose of the environment.
+
+        Args:
+            init_states (list[EnvState]): States of the environment
+            env_ids (torch.Tensor): The indices of the environments to reset.
+
+        Returns:
+            reset_state: The updated states of the environment after resetting.
+        """
+        reset_state = deepcopy(init_states)
+        num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
+        x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
+        y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
+
+        # generate random values
+        rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device="cpu")
+
+        new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
+
+        robot_dof_default_pos = torch.tensor(
+            list(self.init_states[0]["robots"][self.robots[0].name]["dof_pos"].values()),
+            dtype=torch.float32,
+            device="cpu",
+        )
+        delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
+        delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
+
+        for i, env_id in enumerate(env_ids):
+            state = reset_state[env_id]
+            # reset object
+            for obj_name in state["objects"]:
+                state["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
+                state["objects"][obj_name]["rot"] = new_object_rot[i]
+
+            # reset shadow hand
+            for robot_name in state["robots"]:
+                rand_delta = delta_min + (delta_max - delta_min) * rand_floats[i, 5 : 5 + num_shadow_hand_dofs]
+                dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
+                state["robots"][robot_name]["dof_pos"] = {
+                    name: dof_pos[j].item() for j, name in enumerate(state["robots"][robot_name]["dof_pos"].keys())
+                }
+
+            reset_state[i] = state
+
+        return reset_state

@@ -71,6 +71,9 @@ class BiDexEnvWrapper:
         self.episode_reset = torch.zeros(self.num_envs, dtype=torch.int32, device=self.sim_device)
         self.episode_goal_reset = torch.zeros(self.num_envs, dtype=torch.int32, device=self.sim_device)
 
+        self.total_reset = 0
+        self.total_success = 0
+
         if seed is not None:
             self.seed(seed)
 
@@ -205,6 +208,10 @@ class BiDexEnvWrapper:
         info = {}
         info["successes"] = deepcopy(self.episode_success)
 
+        self.total_reset += self.episode_reset.sum().item()
+        self.total_success += self.episode_success.sum().item()
+        success_rate = self.total_success / self.total_reset if self.total_reset > 0 else 0.0
+
         env_ids = self.episode_reset.nonzero(as_tuple=False).squeeze(-1)
         goal_env_ids = self.episode_goal_reset.nonzero(as_tuple=False).squeeze(-1)
 
@@ -235,6 +242,7 @@ class BiDexEnvWrapper:
         #         env_info["episode_l"] = self.episode_lengths[i]
 
         #     info.append(env_info)
+        print(f"Training success rate: {success_rate:.4f}")
 
         return observations, rewards, dones, info
 
@@ -245,8 +253,9 @@ class BiDexEnvWrapper:
         self.episode_success[env_ids] = 0
         self.episode_reset[env_ids] = 0
         self.reset_goal_pose(env_ids)
+        reset_states = self.task.reset_init_pose_fn(self.init_states, env_ids=env_ids)
         env_states, _ = self.env.reset(
-            states=self.init_states, env_ids=env_ids.tolist()
+            states=reset_states, env_ids=env_ids.tolist()
         )  # Todo: add randomization to init_states
         return env_states
 

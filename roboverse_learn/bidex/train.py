@@ -58,7 +58,7 @@ class Args:
     model_dir: str = ""
     randomize: bool = False
     episode_length: int = 0
-    use_wandb: bool = True
+    use_wandb: bool = False
     """Use wandb for logging."""
     wandb_project: str = "roboverse_bidex_rl"
 

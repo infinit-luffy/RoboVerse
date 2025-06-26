@@ -547,7 +547,7 @@ def compute_hand_reward(
     reward_dist_xy = torch.norm(diff_xy, p=2, dim=-1)
     reward_dist_z = torch.clamp(torch.abs(target_pos[:, 2] - object_pos[:, 2]), max=0.03)
     reward_dist = torch.where(reward_dist_xy <= 0.15, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
-    reward_dist = torch.where(reward_dist_xy <= 0.1, reward_dist + 0.1 * reward_dist_z, reward_dist)
+    reward_dist = torch.where(reward_dist_xy <= 0.1, reward_dist + 0.05 * reward_dist_z, reward_dist)
     goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
     if ignore_z_rot:
         success_tolerance = 2.0 * success_tolerance

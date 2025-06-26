@@ -2,101 +2,19 @@
 
 import torch
 
-from metasim.utils.math import quat_inv, quat_mul
+from metasim.utils.math import quat_from_angle_axis, quat_mul
 
 
 @torch.jit.script
-def compute_hand_reward(
-    reset_buf,
-    reset_goal_buf,
-    episode_length_buf,
-    success_buf,
-    max_episode_length: float,
-    object_pos,
-    object_rot,
-    target_pos,
-    target_rot,
-    dist_reward_scale: float,
-    actions,
-    success_tolerance: float,
-    reach_goal_bonus: float,
-    fall_penalty: float,
-    ignore_z_rot: bool,
-):
-    """Compute the reward of all environment.
+def randomize_rotation(rand0, rand1, x_unit_tensor, y_unit_tensor):
+    """Randomize the rotation of the object.
 
     Args:
-        reset_buf (tensor): The reset buffer of all environments at this time, shape (num_envs,)
-
-        reset_goal_buf (tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
-
-        episode_length_buf (tensor): The porgress buffer of all environments at this time, shape (num_envs,)
-
-        success_buf (tensor): The success buffer of all environments at this time, shape (num_envs,)
-
-        max_episode_length (float): The max episode length in this environment
-
-        object_pos (tensor): The position of the object
-
-        object_rot (tensor): The rotation of the object
-
-        target_pos (tensor): The position of the target
-
-        target_rot (tensor): The rotate of the target
-
-        dist_reward_scale (float): The scale of the distance reward
-
-        actions (tensor): The action buffer of all environments at this time
-
-        success_tolerance (float): The tolerance of the success determined
-
-        reach_goal_bonus (float): The reward given when the object reaches the goal
-
-        fall_penalty (float): The reward given when the object is fell
-
-        ignore_z_rot (bool): Is it necessary to ignore the rot of the z-axis, which is usually used
-            for some specific objects (e.g. pen)
+        rand0 (tensor): Random value for rotation around x-axis
+        rand1 (tensor): Random value for rotation around y-axis
+        x_unit_tensor (tensor): Unit vector along x-axis
+        y_unit_tensor (tensor): Unit vector along y-axis
     """
-    # Distance from the hand to the object
-    goal_dist_xy = torch.norm(target_pos[:, :2] - object_pos[:, :2], p=2, dim=-1)
-    goal_dist_z = torch.abs(target_pos[:, 2] - object_pos[:, 2])
-    # goal_dist = 0.9 * goal_dist_xy + 0.1 * goal_dist_z
-    goal_dist = torch.where(goal_dist_xy <= 0.15, goal_dist_xy + 0.05 * goal_dist_z, goal_dist_xy)
-    goal_dist = torch.where(goal_dist_xy <= 0.1, goal_dist + 0.05 * goal_dist_z, goal_dist)
-    # print(object_pos[0])
-    if ignore_z_rot:
-        success_tolerance = 2.0 * success_tolerance
-
-    # Orientation alignment for the cube in hand and goal cube
-    quat_diff = quat_mul(object_rot, quat_inv(target_rot))
-    rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 1:4], p=2, dim=-1), max=1.0))
-
-    dist_rew = goal_dist
-
-    action_penalty = torch.sum(actions**2, dim=-1)
-
-    # Total reward is: position distance + orientation alignment + action regularization + success bonus + fall penalty
-    reward = torch.exp(-0.2 * (dist_rew * dist_reward_scale))
-
-    # Find out which envs hit the goal and update successes count
-    goal_resets = torch.where(torch.abs(goal_dist) <= 0.03, torch.ones_like(reset_goal_buf), reset_goal_buf)
-    success_buf = torch.where(
-        success_buf == 0,
-        torch.where(torch.abs(goal_dist) <= 0.03, torch.ones_like(success_buf), success_buf),
-        success_buf,
+    return quat_mul(
+        quat_from_angle_axis(rand0 * torch.pi, x_unit_tensor), quat_from_angle_axis(rand1 * torch.pi, y_unit_tensor)
     )
-
-    # Success bonus: orientation is within `success_tolerance` of goal orientation
-    reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
-
-    # Fall penalty: distance to the goal is larger than a threashold
-    reward = torch.where(object_pos[:, 2] <= 0.2, reward + fall_penalty, reward)
-
-    # Check env termination conditions, including maximum success number
-    resets = torch.where(object_pos[:, 2] <= 0.2, torch.ones_like(reset_buf), reset_buf)
-
-    # Reset because of terminate or fall or success
-    resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
-
-    return reward, resets, goal_resets, success_buf

@@ -65,6 +65,7 @@ class Args:
     use_wandb: bool = False
     """Use wandb for logging."""
     wandb_project: str = "roboverse_bidex_rl"
+    objects: str = None
 
     train_cfg = None
 
@@ -111,6 +112,10 @@ def train(args):
     assert args.algo.upper() in ALGO_MAP.keys(), "Unrecognized algorithm!\nAlgorithm should be one of: [ppo]"
     algo = args.algo
     task = get_task(args.task)
+    if args.objects is not None:
+        task.current_object_type = args.objects
+    task.objects.append(task.objects_cfg[task.current_object_type])
+    task.set_init_states()
     task.num_envs = args.num_envs
     task.device = args.device
     scenario = ScenarioCfg(
@@ -150,7 +155,7 @@ def train(args):
         wandb_run = wandb.init(
             project=args.wandb_project,
             config=args.train_cfg,
-            name=f"{args.task}_{args.algo}_{args.name}_{time.strftime('%Y_%m_%d_%H_%M_%S')}",
+            name=f"{args.task}_{args.algo}_{args.name}_{task.current_object_type}_{time.strftime('%Y_%m_%d_%H_%M_%S')}",
             dir=logdir,
         )
 

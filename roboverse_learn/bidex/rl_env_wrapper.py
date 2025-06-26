@@ -71,9 +71,7 @@ class BiDexEnvWrapper:
         self.episode_reset = torch.zeros(self.num_envs, dtype=torch.int32, device=self.sim_device)
         self.episode_goal_reset = torch.zeros(self.num_envs, dtype=torch.int32, device=self.sim_device)
 
-        self.total_reset = 0
-        self.total_success = 0
-
+        self.last_success_rate = 0.0
         if seed is not None:
             self.seed(seed)
 
@@ -151,17 +149,6 @@ class BiDexEnvWrapper:
         Args:
             actions (torch.Tensor): Actions in the range of [-1, 1], shape (num_envs, num_actions).
         """
-        # env_ids = self.episode_reset.nonzero(as_tuple=False).squeeze(-1)
-        # goal_env_ids = self.episode_goal_reset.nonzero(as_tuple=False).squeeze(-1)
-
-        # if len(goal_env_ids) > 0 and len(env_ids) == 0:
-        #     self.reset_goal_pose(goal_env_ids)
-        # elif len(goal_env_ids) > 0:
-        #     self.reset_goal_pose(goal_env_ids)
-
-        # if len(env_ids) > 0:
-        #     envstates = self.reset_env(env_ids)
-        #     actions[env_ids] = torch.zeros_like(actions[env_ids])  # Reset actions for the reset environments
         if not tensor:
             step_action = self.scale_action_dict(actions)
         else:
@@ -172,7 +159,6 @@ class BiDexEnvWrapper:
         """Post physics step processing."""
         self.episode_lengths += 1
         self.env._episode_length_buf += 1
-        # obs = self.task.observation_fn(envstates=envstates, actions=actions)
         (self.episode_rewards, self.episode_reset, self.episode_goal_reset, self.episode_success) = self.task.reward_fn(
             envstates=envstates,
             actions=actions,
@@ -208,9 +194,12 @@ class BiDexEnvWrapper:
         info = {}
         info["successes"] = deepcopy(self.episode_success)
 
-        self.total_reset += self.episode_reset.sum().item()
-        self.total_success += self.episode_success.sum().item()
-        success_rate = self.total_success / self.total_reset if self.total_reset > 0 else 0.0
+        success_rate = (
+            self.episode_success.sum().item() / self.episode_reset.sum().item()
+            if self.episode_reset.sum().item()
+            else self.last_success_rate
+        )
+        self.last_success_rate = success_rate
 
         env_ids = self.episode_reset.nonzero(as_tuple=False).squeeze(-1)
         goal_env_ids = self.episode_goal_reset.nonzero(as_tuple=False).squeeze(-1)

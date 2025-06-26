@@ -145,7 +145,7 @@ def train(args):
     if args.max_iterations != -1:
         args.train_cfg["learn"]["max_iterations"] = args.max_iterations
 
-    logdir = args.logdir + f"_seed{args.seed}"
+    logdir = args.logdir + f"_seed{args.seed}" + f"_{task.current_object_type}"
 
     if not os.path.exists(logdir):
         os.makedirs(logdir, exist_ok=True)

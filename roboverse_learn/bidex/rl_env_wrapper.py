@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from collections import deque
 from copy import deepcopy
 
 import numpy as np
@@ -70,6 +71,11 @@ class BiDexEnvWrapper:
         self.episode_success = torch.zeros(self.num_envs, dtype=torch.int32, device=self.sim_device)
         self.episode_reset = torch.zeros(self.num_envs, dtype=torch.int32, device=self.sim_device)
         self.episode_goal_reset = torch.zeros(self.num_envs, dtype=torch.int32, device=self.sim_device)
+        self.total_reset = 0
+        self.total_success = 0
+        self.mean_success_rate = 0.0
+        self.reset_counts = deque(maxlen=100)
+        self.success_counts = deque(maxlen=100)
 
         self.last_success_rate = 0.0
         if seed is not None:
@@ -166,6 +172,7 @@ class BiDexEnvWrapper:
             reset_goal_buf=self.episode_goal_reset,
             episode_length_buf=self.episode_lengths,
             success_buf=self.episode_success,
+            success_rate=self.mean_success_rate,
         )
 
     def step(
@@ -194,12 +201,23 @@ class BiDexEnvWrapper:
         info = {}
         info["successes"] = deepcopy(self.episode_success)
 
-        success_rate = (
-            self.episode_success.sum().item() / self.episode_reset.sum().item()
-            if self.episode_reset.sum().item()
-            else self.last_success_rate
-        )
+        step_resets = self.episode_reset.sum().item()
+        step_successes = self.episode_success.sum().item()
+
+        success_rate = step_successes / step_resets if step_resets else self.last_success_rate
         self.last_success_rate = success_rate
+        if len(self.reset_counts) == 100:
+            self.total_reset -= self.reset_counts[0]
+            self.total_success -= self.success_counts[0]
+
+        self.reset_counts.append(step_resets)
+        self.success_counts.append(step_successes)
+
+        self.total_reset += step_resets
+        self.total_success += step_successes
+
+        if self.total_reset > 0:
+            self.mean_success_rate = self.total_success / self.total_reset
 
         env_ids = self.episode_reset.nonzero(as_tuple=False).squeeze(-1)
         goal_env_ids = self.episode_goal_reset.nonzero(as_tuple=False).squeeze(-1)
@@ -221,6 +239,7 @@ class BiDexEnvWrapper:
         )
 
         info["success_rate"] = torch.tensor([success_rate], dtype=torch.float32, device=self.sim_device)
+        info["total_succ_rate"] = torch.tensor([self.mean_success_rate], dtype=torch.float32, device=self.sim_device)
 
         return observations, rewards, dones, info
 

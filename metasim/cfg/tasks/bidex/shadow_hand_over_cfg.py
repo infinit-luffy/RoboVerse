@@ -197,6 +197,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
     fall_penalty = 0.0
     reset_position_noise = 0.01
     reset_dof_pos_noise = 0.2
+    w_throw_bonus = True
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
@@ -204,7 +205,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             {
                 "objects": {
                     self.current_object_type: {
-                        "pos": torch.tensor([-0.005, -0.39, 0.54]),
+                        "pos": torch.tensor([0.0, -0.39, 0.54]),
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
                 },
@@ -380,6 +381,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         reset_goal_buf,
         episode_length_buf,
         success_buf,
+        success_rate,
     ) -> torch.Tensor:
         """Compute the reward of all environment. The core function is compute_hand_reward.
 
@@ -390,6 +392,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             reset_buf (torch.Tensor): The reset buffer of all environments at this time, shape (num_envs,)
             reset_goal_buf (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
             success_buf (torch.Tensor): The success buffer of all environments at this time, shape (num_envs,)
+            success_rate (float): The success rate of the environment, used to determine the success condition
 
         Returns:
             reward (torch.Tensor): The reward of all environments at this time, shape (num_envs,)
@@ -397,6 +400,8 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             reset_goal_buf (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
             success_buf (torch.Tensor): The success buffer of all environments at this time, shape (num_envs,)
         """
+        if success_rate >= 0.15 and self.w_throw_bonus:
+            self.w_throw_bonus = False
         (
             reward,
             reset_buf,
@@ -419,6 +424,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             reach_goal_bonus=self.reach_goal_bonus,
             throw_bonus=self.throw_bonus,
             fall_penalty=self.fall_penalty,
+            w_throw_bonus=self.w_throw_bonus,
             ignore_z_rot=False,  # Todo : set to True if the object is a pen or similar object that does not require z-rotation alignment
         )
         return reward, reset_buf, reset_goal_buf, success_buf
@@ -506,6 +512,7 @@ def compute_hand_reward(
     reach_goal_bonus: float,
     throw_bonus: float,
     fall_penalty: float,
+    w_throw_bonus: bool,
     ignore_z_rot: bool,
 ):
     """Compute the reward of all environment.
@@ -543,6 +550,8 @@ def compute_hand_reward(
 
         fall_penalty (float): The reward given when the object is fell
 
+        w_throw_bonus (bool): Whether to use the throw bonus, which is used to determine whether the object is thrown
+
         ignore_z_rot (bool): Is it necessary to ignore the rot of the z-axis, which is usually used
             for some specific objects (e.g. pen)
     """
@@ -552,8 +561,7 @@ def compute_hand_reward(
     # goal_dist_xy = torch.norm(target_pos[:, :2] - object_pos[:, :2], p=2, dim=-1)
     reward_dist_xy = torch.norm(diff_xy, p=2, dim=-1)
     reward_dist_z = torch.clamp(torch.abs(target_pos[:, 2] - object_pos[:, 2]), max=0.03)
-    reward_dist = torch.where(reward_dist_xy <= 0.15, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
-    reward_dist = torch.where(reward_dist_xy <= 0.1, reward_dist + 0.05 * reward_dist_z, reward_dist)
+    reward_dist = torch.where(reward_dist_xy <= 0.08, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
     goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
     if ignore_z_rot:
         success_tolerance = 2.0 * success_tolerance
@@ -586,8 +594,9 @@ def compute_hand_reward(
     )
 
     # Reward for throwing the object
-    thrown = (diff_xy[:, 1] >= -0.1) & (diff_xy[:, 1] <= -0.06) & (object_pos[:, 2] >= 0.4)
-    reward = torch.where(thrown, reward + throw_bonus, reward)
+    if w_throw_bonus:
+        thrown = (diff_xy[:, 1] >= -0.1) & (diff_xy[:, 1] <= -0.06) & (object_pos[:, 2] >= 0.4)
+        reward = torch.where(thrown, reward + throw_bonus, reward)
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
     reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)

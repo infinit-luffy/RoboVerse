@@ -50,7 +50,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             name="egg",
             scale=(1, 1, 1),
             physics=PhysicStateType.RIGIDBODY,
-            mjcf_path="roboverse_data/assets/bidex/open_ai_assets/hand/egg.xml",
+            mjcf_path="roboverse_data/assets/bidex/open_ai_assets/mjcf/hand/egg.xml",
             isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
         ),
     }

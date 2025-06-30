@@ -13,10 +13,13 @@ class ShadowHandCfg(RobotCfg):
     name: str = "shadow_hand"
     num_joints: int = 24
     fix_base_link: bool = True
+    actuated_root: bool = False
     mjcf_path: str = "roboverse_data/robots/shadow_hand/mjcf/shadow_hand.xml"
     isaacgym_read_mjcf: bool = True
     enabled_gravity: bool = False
     enabled_self_collisions: bool = False
+    angular_damping: float = None
+    linear_damping: float = None
     tendon_limit_stiffness: float = 30.0
     tendon_damping: float = 0.1
 

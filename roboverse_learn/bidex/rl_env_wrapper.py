@@ -46,14 +46,9 @@ class BiDexEnvWrapper:
             robot_joint_limits.update(robot.joint_limits)
 
         # action space is normalized to [-1, 1]
-        self.num_acutated_joints = sum(
-            1
-            for robot in scenario.robots
-            for joint_name in robot.joint_limits
-            if robot.actuators[joint_name].fully_actuated
-        )
+        self.action_shape = self.task.action_shape
         self.num_joints = sum(1 for robot in scenario.robots for joint_name in robot.joint_limits)
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(self.num_acutated_joints,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(self.action_shape,), dtype=np.float32)
 
         # observation space
         # Create an observation space (398 dimensions) for a single environment, instead of the entire batch (num_envs,398).
@@ -92,6 +87,19 @@ class BiDexEnvWrapper:
             index = 0
             for robot in self.robots:
                 action[robot.name] = {"dof_pos_target": {}}
+                if robot.actuated_root:
+                    action[robot.name] = {
+                        "dof_pos_target": {},
+                        "root_force": actions[env][index : index + 3]
+                        * self.task.dt
+                        * self.task.transition_scale
+                        * 100000,
+                        "root_torque": actions[env][index + 3 : index + 6]
+                        * self.task.dt
+                        * self.task.orientation_scale
+                        * 1000,
+                    }
+                    index += 6
                 for joint_name in robot.joint_limits.keys():
                     if robot.actuators[joint_name].fully_actuated:
                         action[robot.name]["dof_pos_target"][joint_name] = (
@@ -110,28 +118,16 @@ class BiDexEnvWrapper:
         Args:
             actions (torch.Tensor): Actions in the range of [-1, 1], shape (num_envs, num_actions).
         """
-        step_actions = torch.zeros((self.num_envs, self.num_joints), device=self.sim_device)
-        scaled_actions_1 = unscale_transform(
-            actions[:, : len(self.task.actuated_dof_indices)],
-            self.task.shadow_hand_dof_lower_limits[self.task.actuated_dof_indices],
-            self.task.shadow_hand_dof_upper_limits[self.task.actuated_dof_indices],
+        return self.task.scale_action_fn(
+            actions=actions,
         )
-        scaled_actions_2 = unscale_transform(
-            actions[:, len(self.task.actuated_dof_indices) :],
-            self.task.shadow_hand_dof_lower_limits[self.task.actuated_dof_indices],
-            self.task.shadow_hand_dof_upper_limits[self.task.actuated_dof_indices],
-        )
-
-        step_actions[:, self.task.actuated_dof_indices] = scaled_actions_1
-        step_actions[:, self.task.actuated_dof_indices + self.num_joints // 2] = scaled_actions_2
-        return step_actions
 
     def reset(self):
         """Reset the environment."""
         obs, _ = self.env.reset(states=self.init_states)
 
         observations = self.task.observation_fn(
-            obs, torch.zeros((self.num_envs, self.num_acutated_joints), device=self.sim_device)
+            obs, torch.zeros((self.num_envs, self.action_shape), device=self.sim_device)
         )
         observations = torch.clamp(
             observations,

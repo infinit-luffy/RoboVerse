@@ -301,7 +301,10 @@ class IsaacgymHandler(BaseSimHandler):
         robot_dof_props_list = []
         robot_torque_limits = []
         _robots_default_dof_pos = []
+        self.actuated_root = False  # whether a robot has an actuated root joint
         for robot in self.robots:
+            if hasattr(robot, "actuated_root") and robot.actuated_root:
+                self.actuated_root = True
             asset_root = "."
             robot_asset_file = robot.mjcf_path if robot.isaacgym_read_mjcf else robot.urdf_path
             asset_options = gymapi.AssetOptions()
@@ -312,6 +315,12 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options.collapse_fixed_joints = robot.collapse_fixed_joints
             asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
             asset_options.vhacd_enabled = True
+            # Angular velocity damping for rigid bodies
+            if hasattr(robot, "angular_damping") and robot.angular_damping is not None:
+                asset_options.angular_damping = robot.angular_damping
+            # Linear velocity damping for rigid bodies
+            if hasattr(robot, "linear_damping") and robot.linear_damping is not None:
+                asset_options.linear_damping = robot.linear_damping
             # Defaults are set to free movement and will be updated based on the configuration in actuator_cfg below.
             asset_options.replace_cylinder_with_capsule = self.scenario.sim_params.replace_cylinder_with_capsule
             robot_asset = self.gym.load_asset(self.sim, asset_root, robot_asset_file, asset_options)
@@ -348,7 +357,7 @@ class IsaacgymHandler(BaseSimHandler):
                     for i in range(num_tendons):
                         tendon_props[i].damping = robot.tendon_damping
 
-                self.gym.set_asset_tendon_properties(robot_asset, tendon_props)
+            self.gym.set_asset_tendon_properties(robot_asset, tendon_props)
 
             assert robot.control_type is not None, "Control type is required for robot"
             self._manual_pd_on = any(mode == "effort" for mode in robot.control_type.values()) or self._manual_pd_on
@@ -733,8 +742,15 @@ class IsaacgymHandler(BaseSimHandler):
     ############################################################
     def _get_action_array_all(self, actions: list[Action]):
         action_tensor_list = []
+        root_force_tensor_list = []
+        root_torque_tensor_list = []
         for robot in self.robots:
             action_array_list = []
+            root_force_array_list = []
+            root_torque_array_list = []
+            actuated_root = False
+            if hasattr(robot, "actuated_root") and robot.actuated_root:
+                actuated_root = True
             for action_data in actions:
                 flat_vals = []
                 for joint_i, joint_name in enumerate(self._joint_info[robot.name]["names"]):
@@ -747,21 +763,60 @@ class IsaacgymHandler(BaseSimHandler):
                         flat_vals.append(0.0)  # place holder for under-actuated joints
                 action_array = torch.tensor(flat_vals, dtype=torch.float32, device=self.device).unsqueeze(0)
                 action_array_list.append(action_array)
+                if actuated_root:
+                    root_force = torch.tensor(
+                        action_data[robot.name]["root_force"], dtype=torch.float32, device=self.device
+                    ).unsqueeze(0)
+                    root_torque = torch.tensor(
+                        action_data[robot.name]["root_torque"], dtype=torch.float32, device=self.device
+                    ).unsqueeze(0)
+                    root_force_array_list.append(root_force)
+                    root_torque_array_list.append(root_torque)
             action_tensor = torch.cat(action_array_list, dim=0)  # shape: (num_envs, robot_num_dof)
             action_tensor_list.append(action_tensor)
+            if actuated_root:
+                root_force_tensor = torch.cat(root_force_array_list, dim=0).unsqueeze(1)  # shape: (num_envs, 1, 3)
+                root_torque_tensor = torch.cat(root_torque_array_list, dim=0).unsqueeze(1)  # shape: (num_envs, 1, 3)
+            else:
+                root_force_tensor = torch.zeros([self.num_envs, 3], dtype=torch.float32, device=self.device)
+                root_torque_tensor = torch.zeros([self.num_envs, 3], dtype=torch.float32, device=self.device)
+            root_force_tensor_list.append(root_force_tensor)
+            root_torque_tensor_list.append(root_torque_tensor)
+
         # concatenate all robot action tensors
         action_tensor_all = torch.cat(action_tensor_list, dim=-1)  # shape: (num_envs, total_robot_num_dof)
-        return action_tensor_all
+        root_force_tensor_all = torch.cat(root_force_tensor_list, dim=1)  # shape: (num_envs, robot_root_force_num, 3)
+        root_torque_tensor_all = torch.cat(
+            root_torque_tensor_list, dim=1
+        )  # shape: (num_envs, robot_root_torque_num, 3)
+        return action_tensor_all, root_force_tensor_all, root_torque_tensor_all
 
     def set_dof_targets(self, obj_name: list[str], actions: list[Action] | torch.Tensor):
         self._actions_cache = actions
         action_input = torch.zeros_like(self._dof_states[:, 0])  # shape: (num_envs * total_dof_num)
+        applied_force = torch.zeros_like(
+            self._rigid_body_states.view(self.num_envs, -1, 13)[:, :, :3]
+        )  # shape: (num_envs, total_body_num, 3)
+        applied_torque = torch.zeros_like(
+            self._rigid_body_states.view(self.num_envs, -1, 13)[:, :, :3]
+        )  # shape: (num_envs, total_body_num, 3)
         if isinstance(actions, torch.Tensor):
             # reverse sorted joint indices
             action_array_all = torch.zeros([self.num_envs, self._robot_num_dof], device=self.device)
-            action_array_all = actions
+            action_array_all = actions[:, : self._robot_num_dof]
+            if self.actuated_root:
+                root_action_dim = actions.shape[1] - self._robot_num_dof
+                root_force_array_all = actions[
+                    :, self._robot_num_dof : self._robot_num_dof + root_action_dim // 2
+                ].view(self.num_envs, -1, 3)  # shape: (num_envs, robot_root_force_num, 3)
+                root_torque_array_all = actions[
+                    :, self._robot_num_dof + root_action_dim // 2 : self._robot_num_dof + root_action_dim
+                ].view(self.num_envs, -1, 3)  # shape: (num_envs, robot_root_torque_num, 3)
+
         else:
-            action_array_all = self._get_action_array_all(actions)  # shape: (num_envs, total_robot_num_dof)
+            action_array_all, root_force_array_all, root_torque_array_all = self._get_action_array_all(
+                actions
+            )  # shape: (num_envs, total_robot_num_dof)
 
         assert (
             action_input.shape[0] % self._num_envs == 0
@@ -785,7 +840,24 @@ class IsaacgymHandler(BaseSimHandler):
                 for i in range(self.num_envs)
                 for offset in range(chunk_size - robot_dim, chunk_size)
             ]
+
+        if self.actuated_root and not hasattr(self, "_robot_root_body_index"):
+            # create a list of robot root body indices for each env
+            self._robot_root_body_index = []
+            for robot in self.robots:
+                root_body_index = min(self._body_info[robot.name]["global_indices"].values())
+                self._robot_root_body_index.append(root_body_index)
+
         action_input[self._robot_dim_index] = action_array_all.float().to(self.device).reshape(-1)
+        if self.actuated_root:
+            applied_force[:, self._robot_root_body_index] = root_force_array_all.float().to(self.device)
+            applied_torque[:, self._robot_root_body_index] = root_torque_array_all.float().to(self.device)
+            self.gym.apply_rigid_body_force_tensors(
+                self.sim,
+                gymtorch.unwrap_tensor(applied_force),
+                gymtorch.unwrap_tensor(applied_torque),
+                gymapi.ENV_SPACE,
+            )
 
         # if any effort joint exist, set pd controller's target position for later effort calculation
         if self._manual_pd_on:

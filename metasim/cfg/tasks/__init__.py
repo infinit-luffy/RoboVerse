@@ -12,6 +12,7 @@ from .base_task_cfg import BaseTaskCfg
 def __get_quick_ref():
     tic = time.time()
 
+    from .bidex.shadow_hand_catch_underarm_cfg import ShadowHandCatchUnderarmCfg
     from .bidex.shadow_hand_over_cfg import ShadowHandOverCfg
     from .calvin.calvin import MoveSliderLeftACfg
     from .debug.reach_cfg import ReachOriginCfg

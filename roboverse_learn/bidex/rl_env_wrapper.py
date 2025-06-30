@@ -12,7 +12,6 @@ from loguru import logger as log
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.constants import SimType
 from metasim.types import Action, EnvState
-from metasim.utils.math import unscale_transform
 from metasim.utils.setup_util import get_sim_env_class
 
 

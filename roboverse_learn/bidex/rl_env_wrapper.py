@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import random
 from collections import deque
 from copy import deepcopy
@@ -29,14 +30,7 @@ class BiDexEnvWrapper:
         env_class = get_sim_env_class(SimType(scenario.sim))
         self.env = env_class(scenario)
 
-        self.init_states = scenario.task.init_states
-        if len(self.init_states) < self.num_envs:
-            self.init_states = (
-                self.init_states * (self.num_envs // len(self.init_states))
-                + self.init_states[: self.num_envs % len(self.init_states)]
-            )
-        else:
-            self.init_states = self.init_states[: self.num_envs]
+        self.init_states = [copy.deepcopy(scenario.task.init_states[0]) for _ in range(self.num_envs)]
 
         # FIXME action limit differs with joint limit in locomotion configuration(desire pos = scale*action + default pos)
         # Set up action space based on robot joint limits
@@ -246,9 +240,7 @@ class BiDexEnvWrapper:
         self.episode_reset[env_ids] = 0
         self.reset_goal_pose(env_ids)
         reset_states = self.task.reset_init_pose_fn(self.init_states, env_ids=env_ids)
-        env_states, _ = self.env.reset(
-            states=reset_states, env_ids=env_ids.tolist()
-        )  # Todo: add randomization to init_states
+        env_states, _ = self.env.reset(states=reset_states, env_ids=env_ids.tolist())
         return env_states
 
     def reset_goal_pose(self, env_ids: torch.Tensor):

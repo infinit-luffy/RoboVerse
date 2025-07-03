@@ -222,7 +222,6 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
     fall_penalty = 0.0
     reset_position_noise = 0.01
     reset_dof_pos_noise = 0.2
-    w_throw_bonus = True
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
@@ -465,14 +464,7 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
             reset_goal_buf (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
             success_buf (torch.Tensor): The success buffer of all environments at this time, shape (num_envs,)
         """
-        if success_rate >= 0.15 and self.w_throw_bonus:
-            self.w_throw_bonus = False
-        (
-            reward,
-            reset_buf,
-            reset_goal_buf,
-            success_buf,
-        ) = compute_hand_reward(
+        (reward, reset_buf, reset_goal_buf, success_buf) = compute_hand_reward(
             reset_buf=reset_buf,
             reset_goal_buf=reset_goal_buf,
             episode_length_buf=episode_length_buf,
@@ -489,7 +481,6 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
             reach_goal_bonus=self.reach_goal_bonus,
             throw_bonus=self.throw_bonus,
             fall_penalty=self.fall_penalty,
-            w_throw_bonus=self.w_throw_bonus,
             ignore_z_rot=False,  # Todo : set to True if the object is a pen or similar object that does not require z-rotation alignment
         )
         return reward, reset_buf, reset_goal_buf, success_buf
@@ -540,21 +531,19 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
         delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
 
         for i, env_id in enumerate(env_ids):
-            state = reset_state[env_id]
             # reset object
-            for obj_name in state["objects"]:
-                state["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
-                state["objects"][obj_name]["rot"] = new_object_rot[i]
+            for obj_name in reset_state[env_id]["objects"].keys():
+                reset_state[env_id]["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
+                reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
 
             # reset shadow hand
-            for robot_name in state["robots"]:
+            for robot_name in reset_state[env_id]["robots"].keys():
                 rand_delta = delta_min + (delta_max - delta_min) * rand_floats[i, 5 : 5 + num_shadow_hand_dofs]
                 dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
-                state["robots"][robot_name]["dof_pos"] = {
-                    name: dof_pos[j].item() for j, name in enumerate(state["robots"][robot_name]["dof_pos"].keys())
+                reset_state[env_id]["robots"][robot_name]["dof_pos"] = {
+                    name: dof_pos[j].item()
+                    for j, name in enumerate(reset_state[env_id]["robots"][robot_name]["dof_pos"].keys())
                 }
-
-            reset_state[i] = state
 
         return reset_state
 
@@ -577,7 +566,6 @@ def compute_hand_reward(
     reach_goal_bonus: float,
     throw_bonus: float,
     fall_penalty: float,
-    w_throw_bonus: bool,
     ignore_z_rot: bool,
 ):
     """Compute the reward of all environment.
@@ -615,8 +603,6 @@ def compute_hand_reward(
 
         fall_penalty (float): The reward given when the object is fell
 
-        w_throw_bonus (bool): Whether to use the throw bonus, which is used to determine whether the object is thrown
-
         ignore_z_rot (bool): Is it necessary to ignore the rot of the z-axis, which is usually used
             for some specific objects (e.g. pen)
     """
@@ -624,7 +610,7 @@ def compute_hand_reward(
     diff_xy = target_pos[:, :2] - object_pos[:, :2]
     reward_dist_xy = torch.norm(diff_xy, p=2, dim=-1)
     reward_dist_z = torch.clamp(torch.abs(target_pos[:, 2] - object_pos[:, 2]), max=0.03)
-    reward_dist = torch.where(reward_dist_xy <= 0.08, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
+    reward_dist = torch.where(reward_dist_xy <= 0.23, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
     goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
     if ignore_z_rot:
         success_tolerance = 2.0 * success_tolerance
@@ -657,18 +643,17 @@ def compute_hand_reward(
     )
 
     # Reward for throwing the object
-    if w_throw_bonus:
-        thrown = (diff_xy[:, 1] >= -0.1) & (diff_xy[:, 1] <= -0.06) & (object_pos[:, 2] >= 0.4)
-        reward = torch.where(thrown, reward + throw_bonus, reward)
+    thrown = (diff_xy[:, 1] >= -0.25) & (diff_xy[:, 1] <= -0.1) & (object_pos[:, 2] >= 0.4)
+    reward = torch.where(thrown, reward + throw_bonus, reward)
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
     reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
 
     # Fall penalty: distance to the goal is larger than a threashold
-    reward = torch.where(object_pos[:, 2] <= 0.2, reward - fall_penalty, reward)
+    reward = torch.where(object_pos[:, 2] <= 0.1, reward - fall_penalty, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(object_pos[:, 2] <= 0.2, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(object_pos[:, 2] <= 0.1, torch.ones_like(reset_buf), reset_buf)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

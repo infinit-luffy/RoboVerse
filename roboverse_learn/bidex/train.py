@@ -113,9 +113,9 @@ def train(args):
     if args.objects is not None:
         task.current_object_type = args.objects
     task.objects.append(task.objects_cfg[task.current_object_type])
-    task.set_init_states()
     task.num_envs = args.num_envs
     task.device = args.device
+    task.set_init_states()
     scenario = ScenarioCfg(
         task=task,
         robots=task.robots,

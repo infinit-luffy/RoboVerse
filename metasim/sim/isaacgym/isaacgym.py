@@ -315,6 +315,7 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options.collapse_fixed_joints = robot.collapse_fixed_joints
             asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
             asset_options.vhacd_enabled = True
+            asset_options.use_physx_armature = True
             # Angular velocity damping for rigid bodies
             if hasattr(robot, "angular_damping") and robot.angular_damping is not None:
                 asset_options.angular_damping = robot.angular_damping
@@ -390,7 +391,8 @@ class IsaacgymHandler(BaseSimHandler):
 
                 # built-in position mode
                 elif i_control_mode == "position":
-                    robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_POS
+                    if not hasattr(robot, "dof_drive_mode") or robot.dof_drive_mode == "position":
+                        robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_POS
                     if i_actuator_cfg.stiffness is not None:
                         robot_dof_props["stiffness"][i] = i_actuator_cfg.stiffness
                     if i_actuator_cfg.damping is not None:
@@ -808,10 +810,10 @@ class IsaacgymHandler(BaseSimHandler):
                 root_action_dim = actions.shape[1] - self._robot_num_dof
                 root_force_array_all = actions[
                     :, self._robot_num_dof : self._robot_num_dof + root_action_dim // 2
-                ].view(self.num_envs, -1, 3)  # shape: (num_envs, robot_root_force_num, 3)
+                ].reshape(self.num_envs, -1, 3)  # shape: (num_envs, robot_root_force_num, 3)
                 root_torque_array_all = actions[
                     :, self._robot_num_dof + root_action_dim // 2 : self._robot_num_dof + root_action_dim
-                ].view(self.num_envs, -1, 3)  # shape: (num_envs, robot_root_torque_num, 3)
+                ].reshape(self.num_envs, -1, 3)  # shape: (num_envs, robot_root_torque_num, 3)
 
         else:
             action_array_all, root_force_array_all, root_torque_array_all = self._get_action_array_all(
@@ -850,8 +852,8 @@ class IsaacgymHandler(BaseSimHandler):
 
         action_input[self._robot_dim_index] = action_array_all.float().to(self.device).reshape(-1)
         if self.actuated_root:
-            applied_force[:, self._robot_root_body_index] = root_force_array_all.float().to(self.device)
-            applied_torque[:, self._robot_root_body_index] = root_torque_array_all.float().to(self.device)
+            applied_force[:, self._robot_root_body_index, :] = root_force_array_all.float().to(self.device)
+            applied_torque[:, self._robot_root_body_index, :] = root_torque_array_all.float().to(self.device)
             self.gym.apply_rigid_body_force_tensors(
                 self.sim,
                 gymtorch.unwrap_tensor(applied_force),

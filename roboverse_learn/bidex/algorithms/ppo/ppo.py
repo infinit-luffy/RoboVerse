@@ -4,6 +4,7 @@ import statistics
 import time
 from collections import deque
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -112,6 +113,15 @@ class PPO:
                     # Step the vec_environment
                     next_obs, rews, dones, infos = self.vec_env.step(actions)
                     current_obs.copy_(next_obs)
+                    ep_string = f""
+                    if infos:
+                        for key in infos:
+                            infotensor = torch.tensor([], device=self.device)
+                            infotensor = torch.cat((infotensor, infos[key].to(self.device)))
+                            value = torch.mean(infotensor)
+                            # self.writer.add_scalar("Episode/" + key, value, locs["it"])
+                            ep_string += f"""{f"Mean episode {key}:":>{35}} {value:.4f}\n"""
+                    print(ep_string)
         else:
             rewbuffer = deque(maxlen=100)
             lenbuffer = deque(maxlen=100)
@@ -180,7 +190,7 @@ class PPO:
         self.tot_time += locs["collection_time"] + locs["learn_time"]
         iteration_time = locs["collection_time"] + locs["learn_time"]
 
-        ep_string = ""
+        ep_string = f""
         if locs["ep_infos"]:
             for key in locs["ep_infos"][0]:
                 infotensor = torch.tensor([], device=self.device)
@@ -189,6 +199,8 @@ class PPO:
                 value = torch.mean(infotensor)
                 # self.writer.add_scalar("Episode/" + key, value, locs["it"])
                 ep_string += f"""{f"Mean episode {key}:":>{pad}} {value:.4f}\n"""
+                if key == "total_succ_rate":
+                    locs["mean_succ_rate"] = value.item()
         mean_std = self.actor_critic.log_std.exp().mean()
 
         # self.writer.add_scalar("Loss/value_function", locs["mean_value_loss"], locs["it"])
@@ -248,6 +260,7 @@ class PPO:
                 "Policy/noise_std": mean_std.item(),
                 "Train/mean_reward_per_step": locs["mean_reward"],
                 "Train/mean_episode_length_per_episode": locs["mean_trajectory_length"],
+                "Train/mean_succ_rate": locs["mean_succ_rate"],
                 "Train/fps": fps,
                 "timesteps_total": self.tot_timesteps,
                 "iteration_time": iteration_time,

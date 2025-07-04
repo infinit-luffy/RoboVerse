@@ -29,7 +29,7 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 @configclass
 class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
-    """class for bidex shadow hand over tasks."""
+    """class for bidex shadow hand catch underarm tasks."""
 
     source_benchmark = BenchmarkType.BIDEX
     task_type = TaskType.TABLETOP_MANIPULATION
@@ -222,6 +222,9 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
     fall_penalty = 0.0
     reset_position_noise = 0.01
     reset_dof_pos_noise = 0.2
+
+    def set_objects(self) -> None:
+        self.objects.append(self.objects_cfg[self.current_object_type])
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
@@ -511,6 +514,9 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
         Returns:
             reset_state: The updated states of the environment after resetting.
         """
+        if self.reset_dof_pos_noise == 0.0 and self.reset_position_noise == 0.0:
+            # If no noise is applied, return the initial states directly
+            return deepcopy(init_states)
         reset_state = deepcopy(init_states)
         num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
         x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))

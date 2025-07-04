@@ -203,6 +203,9 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
     reset_dof_pos_noise = 0.2
     w_throw_bonus = True
 
+    def set_objects(self) -> None:
+        self.objects.append(self.objects_cfg[self.current_object_type])
+
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
         self.init_states = [
@@ -481,6 +484,9 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         Returns:
             reset_state: The updated states of the environment after resetting.
         """
+        if self.reset_dof_pos_noise == 0.0 and self.reset_position_noise == 0.0:
+            # If no noise is applied, return the initial states directly
+            return deepcopy(init_states)
         self.env_throw_bonus[env_ids] = True
         reset_state = deepcopy(init_states)
         num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]

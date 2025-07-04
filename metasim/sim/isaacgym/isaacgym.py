@@ -250,17 +250,17 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options = gymapi.AssetOptions()
             asset_options.armature = 0.01
             asset_options.fix_base_link = object.fix_base_link
-            asset_options.disable_gravity = not object.enabled_gravity
-            asset_options.flip_visual_attachments = False
+            asset_options.disable_gravity = object.disable_gravity
+            asset_options.flip_visual_attachments = object.flip_visual_attachments
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
             asset = self.gym.create_box(self.sim, object.size[0], object.size[1], object.size[2], asset_options)
         elif isinstance(object, PrimitiveSphereCfg):
             asset_options = gymapi.AssetOptions()
             asset_options.armature = 0.01
-            asset_options.fix_base_link = object.fix_base_link
-            asset_options.disable_gravity = not object.enabled_gravity
-            asset_options.flip_visual_attachments = False
+            asset_options.fix_base_link = Fobject.fix_base_link
+            asset_options.disable_gravity = object.disable_gravity
+            asset_options.flip_visual_attachments = object.flip_visual_attachments
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
             asset = self.gym.create_sphere(self.sim, object.radius, asset_options)
@@ -270,8 +270,8 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options = gymapi.AssetOptions()
             asset_options.armature = 0.01
             asset_options.fix_base_link = object.fix_base_link
-            asset_options.disable_gravity = not object.enabled_gravity
-            asset_options.flip_visual_attachments = False
+            asset_options.disable_gravity = object.disable_gravity
+            asset_options.flip_visual_attachments = object.flip_visual_attachments
             asset_options.vhacd_enabled = True
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
@@ -282,10 +282,11 @@ class IsaacgymHandler(BaseSimHandler):
             asset_path = object.mjcf_path if object.isaacgym_read_mjcf else object.urdf_path
             asset_options = gymapi.AssetOptions()
             asset_options.fix_base_link = object.fix_base_link
-            asset_options.disable_gravity = False
+            asset_options.disable_gravity = object.disable_gravity
             # For XFORM physics (goal object), disable gravity
             if hasattr(object, "physics") and object.physics == PhysicStateType.XFORM:
                 asset_options.disable_gravity = True
+            asset_options.flip_visual_attachments = object.flip_visual_attachments
             asset_options.vhacd_enabled = True
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density

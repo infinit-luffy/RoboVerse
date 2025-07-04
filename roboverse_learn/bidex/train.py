@@ -112,9 +112,9 @@ def train(args):
     task = get_task(args.task)
     if args.objects is not None:
         task.current_object_type = args.objects
-    task.objects.append(task.objects_cfg[task.current_object_type])
     task.num_envs = args.num_envs
     task.device = args.device
+    task.set_objects()
     task.set_init_states()
     scenario = ScenarioCfg(
         task=task,

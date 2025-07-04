@@ -445,7 +445,6 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
         reset_goal_buf,
         episode_length_buf,
         success_buf,
-        success_rate,
     ) -> torch.Tensor:
         """Compute the reward of all environment. The core function is compute_hand_reward.
 

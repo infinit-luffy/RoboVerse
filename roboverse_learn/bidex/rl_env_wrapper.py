@@ -161,7 +161,6 @@ class BiDexEnvWrapper:
             reset_goal_buf=self.episode_goal_reset,
             episode_length_buf=self.episode_lengths,
             success_buf=self.episode_success,
-            success_rate=self.mean_success_rate,
         )
 
     def step(

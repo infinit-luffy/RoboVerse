@@ -224,7 +224,7 @@ class PPO:
                 f"""{"#" * width}\n"""
                 f"""{str.center(width, " ")}\n\n"""
                 f"""{"Computation:":>{pad}} {fps:.0f} steps/s (collection: {locs["collection_time"]:.3f}s, learning {locs["learn_time"]:.3f}s)\n"""
-                f"""{"Value function loss:":>{pad}} {locs["mean_value_loss"]:.4f}\n"""
+                # f"""{"Value function loss:":>{pad}} {locs["mean_value_loss"]:.4f}\n"""
                 f"""{"Surrogate loss:":>{pad}} {locs["mean_surrogate_loss"]:.4f}\n"""
                 f"""{"Mean action noise std:":>{pad}} {mean_std.item():.2f}\n"""
                 f"""{"Mean reward:":>{pad}} {statistics.mean(locs["rewbuffer"]):.2f}\n"""
@@ -237,7 +237,7 @@ class PPO:
                 f"""{"#" * width}\n"""
                 f"""{str.center(width, " ")}\n\n"""
                 f"""{"Computation:":>{pad}} {fps:.0f} steps/s (collection: {locs["collection_time"]:.3f}s, learning {locs["learn_time"]:.3f}s)\n"""
-                f"""{"Value function loss:":>{pad}} {locs["mean_value_loss"]:.4f}\n"""
+                # f"""{"Value function loss:":>{pad}} {locs["mean_value_loss"]:.4f}\n"""
                 f"""{"Surrogate loss:":>{pad}} {locs["mean_surrogate_loss"]:.4f}\n"""
                 f"""{"Mean action noise std:":>{pad}} {mean_std.item():.2f}\n"""
                 f"""{"Mean reward/step:":>{pad}} {locs["mean_reward"]:.2f}\n"""
@@ -255,7 +255,7 @@ class PPO:
         print(log_string)
         if self.wandb_run is not None:
             log_data = {
-                "Value/value_loss": locs["mean_value_loss"],
+                # "Value/value_loss": locs["mean_value_loss"],
                 "Loss/surrogate": locs["mean_surrogate_loss"],
                 "Policy/noise_std": mean_std.item(),
                 "Train/mean_reward_per_step": locs["mean_reward"],

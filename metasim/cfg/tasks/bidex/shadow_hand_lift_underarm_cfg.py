@@ -236,7 +236,7 @@ class ShadowHandLiftUnderarmCfg(BaseRLTaskCfg):
                 "robots": {
                     "shadow_hand_right": {
                         "pos": torch.tensor([0, 0.05, 0.45]),
-                        "rot": torch.tensor([0.0, 0.0, -0.707, 0.707]),
+                        "rot": torch.tensor([0.0, 0.0, -0.707, 0.707]), #TODO
                         "dof_pos": {
                             "robot0_WRJ1": 0.0,
                             "robot0_WRJ0": 0.0,
@@ -266,7 +266,7 @@ class ShadowHandLiftUnderarmCfg(BaseRLTaskCfg):
                     },
                     "shadow_hand_left": {
                         "pos": torch.tensor([0, -1.25, 0.45]),
-                        "rot": torch.tensor([-0.707, 0.707, 0.0, 0.0]),
+                        "rot": torch.tensor([-0.707, 0.707, 0.0, 0.0]), #TODO
                         "dof_pos": {
                             "robot0_WRJ1": 0.0,
                             "robot0_WRJ0": 0.0,

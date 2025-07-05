@@ -44,7 +44,6 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
         "button": ArticulationObjCfg(
             name="button",
             scale=(1, 1, 1),
-            physics=PhysicStateType.RIGIDBODY,
             urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf", #TODO
             default_density=500.0,
             fix_base_link= True,

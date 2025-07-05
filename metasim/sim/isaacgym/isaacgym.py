@@ -572,6 +572,11 @@ class IsaacgymHandler(BaseSimHandler):
                         self.objects[obj_i].color[2],
                     )
                     self.gym.set_rigid_body_color(env, obj_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, color)
+                    if self.objects[obj_i].friction is not None:
+                        shape_props = self.gym.get_actor_rigid_shape_properties(env, obj_handle)
+                        for shape_prop in shape_props:
+                            shape_prop.friction = 0.5
+                        self.gym.set_actor_rigid_shape_properties(env, obj_handle, shape_props)
                 elif isinstance(self.objects[obj_i], PrimitiveSphereCfg):
                     color = gymapi.Vec3(
                         self.objects[obj_i].color[0],

@@ -163,6 +163,9 @@ class PrimitiveCubeCfg(_PrimitiveMixin, BaseRigidObjCfg):
     size: list[float] = MISSING
     """Size of the object (in m)."""
 
+    friction: float| None = None
+    """Friction of the sphere."""
+
     @property
     def half_size(self) -> list[float]:
         """Half of the extend, for SAPIEN usage."""

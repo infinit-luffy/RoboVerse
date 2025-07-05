@@ -273,6 +273,7 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options.disable_gravity = object.disable_gravity
             asset_options.flip_visual_attachments = object.flip_visual_attachments
             asset_options.vhacd_enabled = True
+            asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
             asset = self.gym.load_asset(self.sim, asset_root, asset_path, asset_options)

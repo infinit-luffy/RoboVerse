@@ -385,10 +385,10 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         num_envs = envstates.robots["shadow_hand_right"].root_state.shape[0]
         if self.num_envs is None:
             self.num_envs = num_envs
-        if self.goal_pos is None:
-            self.goal_pos = torch.tensor(self.init_goal_pos, dtype=torch.float32).view(1, -1).repeat(num_envs, 1)
-        if self.goal_rot is None:
-            self.goal_rot = torch.tensor(self.init_goal_rot, dtype=torch.float32).view(1, -1).repeat(num_envs, 1)
+        if self.left_goal_pos is None:
+            self.left_goal_pos = torch.tensor(self.init_left_goal_pos, dtype=torch.float32).view(1, -1).repeat(num_envs, 1)
+        if self.right_goal_pos is None:
+            self.right_goal_pos = torch.tensor(self.init_right_goal_pos, dtype=torch.float32).view(1, -1).repeat(num_envs, 1)
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
@@ -518,11 +518,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             dist_reward_scale=self.dist_reward_scale,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
-            success_tolerance=self.success_tolerance,
             reach_goal_bonus=self.reach_goal_bonus,
-            throw_bonus=self.throw_bonus,
-            fall_penalty=self.fall_penalty,
-            ignore_z_rot=False,  # Todo : set to True if the object is a pen or similar object that does not require z-rotation alignment
         )
         return reward, reset_buf, reset_goal_buf, success_buf
 

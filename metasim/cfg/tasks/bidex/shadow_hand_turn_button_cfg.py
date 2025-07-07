@@ -721,7 +721,7 @@ def compute_hand_reward(
     )
 
     # Reset because of terminate or fall or success
-    resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
+    resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(reset_buf), reset_buf)
     resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     return reward, resets, goal_resets, success_buf

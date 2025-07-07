@@ -258,7 +258,7 @@ class IsaacgymHandler(BaseSimHandler):
         elif isinstance(object, PrimitiveSphereCfg):
             asset_options = gymapi.AssetOptions()
             asset_options.armature = 0.01
-            asset_options.fix_base_link = Fobject.fix_base_link
+            asset_options.fix_base_link = object.fix_base_link
             asset_options.disable_gravity = object.disable_gravity
             asset_options.flip_visual_attachments = object.flip_visual_attachments
             if hasattr(object, "default_density") and object.default_density is not None:
@@ -944,6 +944,10 @@ class IsaacgymHandler(BaseSimHandler):
         else:
             if not self.headless:
                 self.gym.poll_viewer_events(self.viewer)
+        if self.headless and len(self.cameras) > 0:
+            # if headless, we still need to render the cameras
+            self.gym.step_graphics(self.sim)
+            self.gym.render_all_camera_sensors(self.sim)
 
     def _set_states(self, states: list[DictEnvState] | torch.Tensor, env_ids: list[int] | None = None):
         ## Support setting status only for specified env_ids

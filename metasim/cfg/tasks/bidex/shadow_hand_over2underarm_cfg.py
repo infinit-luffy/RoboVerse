@@ -231,7 +231,7 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
             {
                 "objects": {
                     self.current_object_type: {
-                        "pos": torch.tensor([0.0, 0.05, 1.0]),
+                        "pos": torch.tensor([0.0, -0.05, 1.0]),
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
                 },
@@ -655,8 +655,8 @@ def compute_hand_reward(
         success_buf,
     )
 
-    right_hand_base_dist = torch.norm(right_hand_base_pos - torch.tensor([0.0, 0.0, 0.5], dtype=torch.float, device=device), p=2, dim=-1)
-    left_hand_base_dist = torch.norm(left_hand_base_pos - torch.tensor([0.0, -0.8, 0.5], dtype=torch.float, device=device), p=2, dim=-1)
+    right_hand_base_dist = torch.norm(right_hand_base_pos - torch.tensor([0.0, 0.0, 0.5], dtype=torch.float, device=right_hand_base_pos.device), p=2, dim=-1)
+    left_hand_base_dist = torch.norm(left_hand_base_pos - torch.tensor([0.0, -0.8, 0.5], dtype=torch.float, device=left_hand_base_pos.device), p=2, dim=-1)
 
 
     # Reward for throwing the object

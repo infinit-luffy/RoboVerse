@@ -9,6 +9,7 @@
 node_modules/
 .next/
 wandb/
+logs/
 *.ckpt
 GSNet
 logs/

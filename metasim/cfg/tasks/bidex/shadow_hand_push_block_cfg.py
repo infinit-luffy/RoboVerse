@@ -48,13 +48,13 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf",
             default_density=500.0,
         ),
-        "egg": RigidObjCfg(
-            name="egg",
-            scale=(1, 1, 1),
-            physics=PhysicStateType.RIGIDBODY,
-            mjcf_path="roboverse_data/assets/bidex/open_ai_assets/mjcf/hand/egg.xml",
-            isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
-        ),
+        # "egg": RigidObjCfg(
+        #     name="egg",
+        #     scale=(1, 1, 1),
+        #     physics=PhysicStateType.RIGIDBODY,
+        #     mjcf_path="roboverse_data/assets/bidex/open_ai_assets/mjcf/hand/egg.xml",
+        #     isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
+        # ),
         "table": PrimitiveCubeCfg(
             name="table",
             size=(1.0, 1.0, 0.6),
@@ -62,6 +62,8 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             fix_base_link=True,
             flip_visual_attachments=True,
             friction=0.5,
+            color=[0.8, 0.8, 0.8],
+            physics=PhysicStateType.RIGIDBODY,
         )
     }
     objects = []
@@ -251,7 +253,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
                 "robots": {
                     "shadow_hand_right": {
                         "pos": torch.tensor([0.55, 0.2, 0.8]),
-                        "rot": torch.tensor([0.0, 0.0, -0.707, 0.707]), # TODO
+                        "rot": torch.tensor([0.5, 0.5, -0.5, -0.5]),
                         "dof_pos": {
                             "robot0_WRJ1": 0.0,
                             "robot0_WRJ0": 0.0,
@@ -281,7 +283,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
                     },
                     "shadow_hand_left": {
                         "pos": torch.tensor([0.55, -0.2, 0.8]),
-                        "rot": torch.tensor([-0.707, 0.707, 0.0, 0.0]), # TODO
+                        "rot": torch.tensor([0.5, 0.5, -0.5, -0.5]),
                         "dof_pos": {
                             "robot0_WRJ1": 0.0,
                             "robot0_WRJ0": 0.0,
@@ -515,7 +517,6 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             left_hand_rf_pos=left_hand_rf_pos,
             left_hand_lf_pos=left_hand_lf_pos,
             left_hand_th_pos=left_hand_th_pos,
-            dist_reward_scale=self.dist_reward_scale,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,

@@ -40,14 +40,12 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
     obs_shape = 422
     action_shape = 52
     current_object_type = "egg"
-    # objects_usd_path = ["roboverse_data/assets/bidex/objects/usd/cube_multicolor.usd"]
     objects_cfg = {
         "cube": RigidObjCfg(
             name="cube",
             scale=(1, 1, 1),
             physics=PhysicStateType.RIGIDBODY,
-            urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf",
-            # usd_path=objects_usd_path[0],
+            urdf_path="roboverse_data/assets/bidex/objects/urdf/cube_multicolor.urdf",
             default_density=500.0,
         ),
         "egg": RigidObjCfg(
@@ -66,6 +64,7 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
+            actuated_link='robot0_hand mount',
         ),
         ShadowHandCfg(
             name="shadow_hand_left",
@@ -73,6 +72,7 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
+            actuated_link='robot0_hand mount',
         ),
     ]
     num_actuated_joints = {}
@@ -98,12 +98,6 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
     dt = sim_params.dt  # Simulation time step
     transition_scale = 0.05
     orientation_scale = 0.5
-    init_goal_pos = torch.tensor(
-        [0.0, -0.79, 0.54], dtype=torch.float32, device=device
-    )  # Initial goal position, shape (3,)
-    init_goal_rot = torch.tensor(
-        [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=device
-    )  # Initial goal rotation, shape (4,)
     goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     goal_rot = None  # Placeholder for goal rotation, to be set later, shape (num_envs, 4)
     fingertips = ["robot0_ffdistal", "robot0_mfdistal", "robot0_rfdistal", "robot0_lfdistal", "robot0_thdistal"]
@@ -118,99 +112,6 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
     l_fingertips_idx = None
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
-    joint_reindex = torch.tensor(
-        [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
-        dtype=torch.int32,
-        device=device,
-    )
-    actuated_dof_indices = torch.tensor(
-        [
-            0,
-            1,
-            2,
-            3,
-            4,
-            6,
-            7,
-            8,
-            10,
-            11,
-            12,
-            14,
-            15,
-            16,
-            17,
-            19,
-            20,
-            21,
-            22,
-            23,
-        ],
-        dtype=torch.int32,
-        device=device,
-    )
-    shadow_hand_dof_lower_limits: torch.Tensor = torch.tensor(
-        [
-            -0.489,
-            -0.698,
-            -0.349,
-            0,
-            0,
-            0,
-            -0.349,
-            0,
-            0,
-            0,
-            -0.349,
-            0,
-            0,
-            0,
-            0,
-            -0.349,
-            0,
-            0,
-            0,
-            -1.047,
-            0,
-            -0.209,
-            -0.524,
-            -1.571,
-        ],
-        dtype=torch.float32,
-        device=device,
-    )
-    shadow_hand_dof_upper_limits: torch.Tensor = torch.tensor(
-        [
-            0.14,
-            0.489,
-            0.349,
-            1.571,
-            1.571,
-            1.571,
-            0.349,
-            1.571,
-            1.571,
-            1.571,
-            0.349,
-            1.571,
-            1.571,
-            1.571,
-            0.785,
-            0.349,
-            1.571,
-            1.571,
-            1.571,
-            1.047,
-            1.222,
-            0.209,
-            0.524,
-            0,
-        ],
-        dtype=torch.float32,
-        device=device,
-    )
-    shadow_hand_dof_lower_limits_cpu = shadow_hand_dof_lower_limits.cpu()
-    shadow_hand_dof_upper_limits_cpu = shadow_hand_dof_upper_limits.cpu()
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
@@ -228,6 +129,105 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
+        self.init_goal_pos = torch.tensor(
+            [0.0, -0.79, 0.54], dtype=torch.float32, device=self.device
+        )  # Initial goal position, shape (3,)
+        self.init_goal_rot = torch.tensor(
+            [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
+        )  # Initial goal rotation, shape (4,)
+        self.joint_reindex = torch.tensor(
+            [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
+            dtype=torch.int32,
+            device=self.device,
+        )
+        self.actuated_dof_indices = torch.tensor(
+            [
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                7,
+                8,
+                10,
+                11,
+                12,
+                14,
+                15,
+                16,
+                17,
+                19,
+                20,
+                21,
+                22,
+                23,
+            ],
+            dtype=torch.int32,
+            device=self.device,
+        )
+        self.shadow_hand_dof_lower_limits: torch.Tensor = torch.tensor(
+            [
+                -0.489,
+                -0.698,
+                -0.349,
+                0,
+                0,
+                0,
+                -0.349,
+                0,
+                0,
+                0,
+                -0.349,
+                0,
+                0,
+                0,
+                0,
+                -0.349,
+                0,
+                0,
+                0,
+                -1.047,
+                0,
+                -0.209,
+                -0.524,
+                -1.571,
+            ],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        self.shadow_hand_dof_upper_limits: torch.Tensor = torch.tensor(
+            [
+                0.14,
+                0.489,
+                0.349,
+                1.571,
+                1.571,
+                1.571,
+                0.349,
+                1.571,
+                1.571,
+                1.571,
+                0.349,
+                1.571,
+                1.571,
+                1.571,
+                0.785,
+                0.349,
+                1.571,
+                1.571,
+                1.571,
+                1.047,
+                1.222,
+                0.209,
+                0.524,
+                0,
+            ],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        self.shadow_hand_dof_lower_limits_cpu = self.shadow_hand_dof_lower_limits.cpu()
+        self.shadow_hand_dof_upper_limits_cpu = self.shadow_hand_dof_upper_limits.cpu()
         self.init_states = [
             {
                 "objects": {
@@ -652,7 +652,7 @@ def compute_hand_reward(
     reward = torch.where(thrown, reward + throw_bonus, reward)
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
+    reward = torch.where(success_buf >= 1, reward + reach_goal_bonus, reward)
 
     # Fall penalty: distance to the goal is larger than a threashold
     reward = torch.where(object_pos[:, 2] <= 0.1, reward - fall_penalty, reward)

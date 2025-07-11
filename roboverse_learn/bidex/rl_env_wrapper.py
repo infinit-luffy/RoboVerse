@@ -47,6 +47,7 @@ class BiDexEnvWrapper:
         # Create an observation space (398 dimensions) for a single environment, instead of the entire batch (num_envs,398).
         obs_shape = (self.task.obs_shape,)
         self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=obs_shape, dtype=np.float32)
+        self.tensor_states = None
         log.info(f"Observation space: {self.observation_space}")
         log.info(f"Action space: {self.action_space}")
 
@@ -118,7 +119,7 @@ class BiDexEnvWrapper:
     def reset(self):
         """Reset the environment."""
         obs, _ = self.env.reset(states=self.init_states)
-
+        self.tensor_states = obs
         observations = self.task.observation_fn(
             obs, torch.zeros((self.num_envs, self.action_shape), device=self.sim_device)
         )
@@ -219,6 +220,7 @@ class BiDexEnvWrapper:
             envstates = self.reset_env(env_ids)
             actions[env_ids] = torch.zeros_like(actions[env_ids])  # Reset actions for the reset environments
 
+        self.tensor_states = envstates
         observations = self.task.observation_fn(envstates=envstates, actions=actions, device=self.sim_device)
         observations = torch.clamp(
             observations,

@@ -30,6 +30,7 @@ from algorithms.ppo.ppo import PPO
 from rl_env_wrapper import BiDexEnvWrapper
 
 from metasim.cfg.scenario import ScenarioCfg
+from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.utils import configclass
 from metasim.utils.setup_util import get_task
 
@@ -73,7 +74,7 @@ class Args:
 
 
 def get_config_path(args):
-    if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm",]:
+    if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm", "ShadowHandPushBlock", "ShadowHandTurnButton"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",
@@ -125,7 +126,10 @@ def train(args):
         num_envs=args.num_envs,
         sim_params=task.sim_params,
     )
-    scenario.cameras = []
+    if args.test:
+        scenario.cameras = [PinholeCameraCfg(width=1024, height=1024, pos=(-1.5, -1.5, 1.5), look_at=(0.0, -0.2, 0.0))]
+    else:
+        scenario.cameras = []
     env = BiDexEnvWrapper(
         scenario=scenario,
         seed=args.seed,

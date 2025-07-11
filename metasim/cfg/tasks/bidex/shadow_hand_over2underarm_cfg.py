@@ -46,7 +46,6 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
             scale=(1, 1, 1),
             physics=PhysicStateType.RIGIDBODY,
             urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf",
-            # usd_path=objects_usd_path[0],
             default_density=500.0,
         ),
         "egg": RigidObjCfg(
@@ -117,99 +116,6 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
     l_fingertips_idx = None
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
-    joint_reindex = torch.tensor(
-        [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
-        dtype=torch.int32,
-        device=device,
-    )
-    actuated_dof_indices = torch.tensor(
-        [
-            0,
-            1,
-            2,
-            3,
-            4,
-            6,
-            7,
-            8,
-            10,
-            11,
-            12,
-            14,
-            15,
-            16,
-            17,
-            19,
-            20,
-            21,
-            22,
-            23,
-        ],
-        dtype=torch.int32,
-        device=device,
-    )
-    shadow_hand_dof_lower_limits: torch.Tensor = torch.tensor(
-        [
-            -0.489,
-            -0.698,
-            -0.349,
-            0,
-            0,
-            0,
-            -0.349,
-            0,
-            0,
-            0,
-            -0.349,
-            0,
-            0,
-            0,
-            0,
-            -0.349,
-            0,
-            0,
-            0,
-            -1.047,
-            0,
-            -0.209,
-            -0.524,
-            -1.571,
-        ],
-        dtype=torch.float32,
-        device=device,
-    )
-    shadow_hand_dof_upper_limits: torch.Tensor = torch.tensor(
-        [
-            0.14,
-            0.489,
-            0.349,
-            1.571,
-            1.571,
-            1.571,
-            0.349,
-            1.571,
-            1.571,
-            1.571,
-            0.349,
-            1.571,
-            1.571,
-            1.571,
-            0.785,
-            0.349,
-            1.571,
-            1.571,
-            1.571,
-            1.047,
-            1.222,
-            0.209,
-            0.524,
-            0,
-        ],
-        dtype=torch.float32,
-        device=device,
-    )
-    shadow_hand_dof_lower_limits_cpu = shadow_hand_dof_lower_limits.cpu()
-    shadow_hand_dof_upper_limits_cpu = shadow_hand_dof_upper_limits.cpu()
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
@@ -227,6 +133,99 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
+        self.joint_reindex = torch.tensor(
+            [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
+            dtype=torch.int32,
+            device=self.device,
+        )
+        self.actuated_dof_indices = torch.tensor(
+            [
+                0,
+                1,
+                2,
+                3,
+                4,
+                6,
+                7,
+                8,
+                10,
+                11,
+                12,
+                14,
+                15,
+                16,
+                17,
+                19,
+                20,
+                21,
+                22,
+                23,
+            ],
+            dtype=torch.int32,
+            device=self.device,
+        )
+        self.shadow_hand_dof_lower_limits: torch.Tensor = torch.tensor(
+            [
+                -0.489,
+                -0.698,
+                -0.349,
+                0,
+                0,
+                0,
+                -0.349,
+                0,
+                0,
+                0,
+                -0.349,
+                0,
+                0,
+                0,
+                0,
+                -0.349,
+                0,
+                0,
+                0,
+                -1.047,
+                0,
+                -0.209,
+                -0.524,
+                -1.571,
+            ],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        self.shadow_hand_dof_upper_limits: torch.Tensor = torch.tensor(
+            [
+                0.14,
+                0.489,
+                0.349,
+                1.571,
+                1.571,
+                1.571,
+                0.349,
+                1.571,
+                1.571,
+                1.571,
+                0.349,
+                1.571,
+                1.571,
+                1.571,
+                0.785,
+                0.349,
+                1.571,
+                1.571,
+                1.571,
+                1.047,
+                1.222,
+                0.209,
+                0.524,
+                0,
+            ],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        self.shadow_hand_dof_lower_limits_cpu = self.shadow_hand_dof_lower_limits.cpu()
+        self.shadow_hand_dof_upper_limits_cpu = self.shadow_hand_dof_upper_limits.cpu()
         self.init_states = [
             {
                 "objects": {

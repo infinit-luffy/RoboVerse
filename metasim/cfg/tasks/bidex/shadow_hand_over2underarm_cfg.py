@@ -658,15 +658,11 @@ def compute_hand_reward(
     left_hand_base_dist = torch.norm(left_hand_base_pos - torch.tensor([0.0, -0.8, 0.5], dtype=torch.float, device=left_hand_base_pos.device), p=2, dim=-1)
 
 
-    # Reward for throwing the object
-    # thrown = (diff_xy[:, 1] >= -0.25) & (diff_xy[:, 1] <= -0.1) & (object_pos[:, 2] >= 0.4)
-    # reward = torch.where(thrown, reward + throw_bonus, reward)
-
     # Success bonus: orientation is within `success_tolerance` of goal orientation
     reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
 
     # Fall penalty: distance to the goal is larger than a threashold
-    reward = torch.where(object_pos[:, 2] <= 0.1, reward - fall_penalty, reward)
+    reward = torch.where(object_pos[:, 2] <= 0.3, reward - fall_penalty, reward)
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(object_pos[:, 2] <= 0.3, torch.ones_like(reset_buf), reset_buf)

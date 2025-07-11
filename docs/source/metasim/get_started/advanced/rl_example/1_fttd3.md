@@ -65,5 +65,3 @@ You can also use other simulators.
         </video>
     </div>
 </div>
-
-

@@ -191,7 +191,7 @@ class BiDexEnvWrapper:
         info["successes"] = deepcopy(self.episode_success)
 
         step_resets = self.episode_reset.sum().item()
-        step_successes = self.episode_success.sum().item()
+        step_successes = torch.logical_and(self.episode_reset.bool(), self.episode_success.bool()).sum().item()
 
         success_rate = step_successes / step_resets if step_resets else self.last_success_rate
         self.last_success_rate = success_rate

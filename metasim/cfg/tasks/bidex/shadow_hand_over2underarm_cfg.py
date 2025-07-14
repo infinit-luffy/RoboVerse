@@ -33,6 +33,7 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
 
     source_benchmark = BenchmarkType.BIDEX
     task_type = TaskType.TABLETOP_MANIPULATION
+    is_testing = False
     episode_length = 75
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandOver2Underarm/v2/initial_state_v2.json"
     device = "cuda:0"
@@ -125,6 +126,7 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
     reach_goal_bonus = 250.0
     throw_bonus = 15.0
     fall_penalty = 0.0
+    leave_penalty = 2.0  # Penalty for leaving the base
     reset_position_noise = 0.0
     reset_dof_pos_noise = 0.0
 
@@ -483,7 +485,8 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
             reach_goal_bonus=self.reach_goal_bonus,
             throw_bonus=self.throw_bonus,
             fall_penalty=self.fall_penalty,
-            ignore_z_rot=False,  # Todo : set to True if the object is a pen or similar object that does not require z-rotation alignment
+            leave_penalty=self.leave_penalty,
+            is_testing=self.is_testing,
         )
         return reward, reset_buf, reset_goal_buf, success_buf
 
@@ -573,7 +576,8 @@ def compute_hand_reward(
     reach_goal_bonus: float,
     throw_bonus: float,
     fall_penalty: float,
-    ignore_z_rot: bool,
+    leave_penalty: float,
+    is_testing: bool = False,
 ):
     """Compute the reward of all environment.
 
@@ -614,8 +618,9 @@ def compute_hand_reward(
 
         fall_penalty (float): The reward given when the object is fell
 
-        ignore_z_rot (bool): Is it necessary to ignore the rot of the z-axis, which is usually used
-            for some specific objects (e.g. pen)
+        leave_penalty (float): The reward given when the hand leaves the base
+
+        is_testing (bool): Whether the environment is in testing mode, default False
     """
     # Distance from the hand to the object
     # diff_xy = target_pos[:, :2] - object_pos[:, :2]
@@ -624,9 +629,6 @@ def compute_hand_reward(
     # reward_dist = torch.where(reward_dist_xy <= 0.23, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
     goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
     reward_dist = goal_dist
-    if ignore_z_rot:
-        success_tolerance = 2.0 * success_tolerance
-
     # Orientation alignment for the cube in hand and goal cube
     quat_diff = math.quat_mul(object_rot, math.quat_inv(target_rot))
     rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 1:4], p=2, dim=-1), max=1.0))
@@ -663,11 +665,14 @@ def compute_hand_reward(
 
     # Fall penalty: distance to the goal is larger than a threashold
     reward = torch.where(object_pos[:, 2] <= 0.3, reward - fall_penalty, reward)
+    reward = torch.where(right_hand_base_dist >= 0.1, reward - leave_penalty, reward)
+    reward = torch.where(left_hand_base_dist >= 0.1, reward - leave_penalty, reward)
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(object_pos[:, 2] <= 0.3, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_base_dist >= 0.1, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_base_dist >= 0.1, torch.ones_like(resets), resets)
+    if not is_testing:
+        resets = torch.where(right_hand_base_dist >= 0.1, torch.ones_like(resets), resets)
+        resets = torch.where(left_hand_base_dist >= 0.1, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

@@ -115,6 +115,7 @@ def train(args):
         task.current_object_type = args.objects
     task.num_envs = args.num_envs
     task.device = args.device
+    task.is_testing = args.test
     task.set_objects()
     task.set_init_states()
     scenario = ScenarioCfg(
@@ -154,10 +155,11 @@ def train(args):
 
     wandb_run = None
     if args.use_wandb and not is_testing:
+        wandb_name = f"{args.task}_{args.algo}_{args.name}_{task.current_object_type}_{time.strftime('%Y_%m_%d_%H_%M_%S')}" if args.experiment == "Base" else f"{args.task}_{args.algo}_{args.name}_{task.current_object_type}_{args.experiment}_{time.strftime('%Y_%m_%d_%H_%M_%S')}"
         wandb_run = wandb.init(
             project=args.wandb_project,
             config=args.train_cfg,
-            name=f"{args.task}_{args.algo}_{args.name}_{task.current_object_type}_{time.strftime('%Y_%m_%d_%H_%M_%S')}",
+            name=wandb_name,
             dir=logdir,
         )
 

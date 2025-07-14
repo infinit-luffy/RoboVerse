@@ -14,6 +14,7 @@ from metasim.cfg.scenario import ScenarioCfg
 from metasim.constants import SimType
 from metasim.types import Action, EnvState
 from metasim.utils.setup_util import get_sim_env_class
+from metasim.utils.state import list_state_to_tensor
 
 
 class BiDexEnvWrapper:
@@ -30,7 +31,8 @@ class BiDexEnvWrapper:
         env_class = get_sim_env_class(SimType(scenario.sim))
         self.env = env_class(scenario)
 
-        self.init_states = [copy.deepcopy(scenario.task.init_states[0]) for _ in range(self.num_envs)]
+        self.init_states = [copy.deepcopy(scenario.task.init_states) for _ in range(self.num_envs)]
+        self.init_states_tensor = list_state_to_tensor(handler=self.env.handler, env_states=self.init_states, device=self.sim_device)
 
         # FIXME action limit differs with joint limit in locomotion configuration(desire pos = scale*action + default pos)
         # Set up action space based on robot joint limits
@@ -118,7 +120,7 @@ class BiDexEnvWrapper:
 
     def reset(self):
         """Reset the environment."""
-        obs, _ = self.env.reset(states=self.init_states)
+        obs, _ = self.env.reset(states=self.init_states_tensor)
         self.tensor_states = obs
         observations = self.task.observation_fn(
             obs, torch.zeros((self.num_envs, self.action_shape), device=self.sim_device)
@@ -240,7 +242,7 @@ class BiDexEnvWrapper:
         self.episode_success[env_ids] = 0
         self.episode_reset[env_ids] = 0
         self.reset_goal_pose(env_ids)
-        reset_states = self.task.reset_init_pose_fn(self.init_states, env_ids=env_ids)
+        reset_states = self.task.reset_init_pose_fn(self.init_states_tensor, env_ids=env_ids)
         env_states, _ = self.env.reset(states=reset_states, env_ids=env_ids.tolist())
         return env_states
 

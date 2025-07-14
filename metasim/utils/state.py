@@ -260,7 +260,7 @@ def list_state_to_tensor(
     obj_names = sorted({n for es in env_states for n in es["objects"].keys()})
     robot_names = sorted({n for es in env_states for n in es["robots"].keys()})
     cam_names = sorted({n for es in env_states if "cameras" in es for n in es["cameras"].keys()})
-    sensor_names = sorted({n for es in env_states if "sensors" in es for n in es["sensors"].keys()})
+    sensor_names = sorted({n for es in env_states for n in es.get("sensors", {}).keys()})
     extra_names = sorted({n for es in env_states if "extras" in es for n in es["extras"].keys()})
 
     n_env = len(env_states)
@@ -391,17 +391,33 @@ def list_state_to_tensor(
         ).to(dev)
         cameras[cam] = CameraState(rgb=rgb, depth=depth)
 
-    # -------- sensors ----------------------------------------------
+    # -------- sensors ---------------------------------------------
     for sensor in sensor_names:
-        # Note: SensorState structure is not defined, so this is a placeholder
-        sensor_states = [es["sensors"][sensor] for es in env_states if "sensors" in es and sensor in es["sensors"]]
-        torque = torch.stack(
-            [es["sensors"][sensor]["torque"] for es in env_states if "sensors" in es and sensor in es["sensors"]], dim=0
-        ).to(dev)
         force = torch.stack(
             [es["sensors"][sensor]["force"] for es in env_states if "sensors" in es and sensor in es["sensors"]], dim=0
         ).to(dev)
-        sensors[sensor] = SensorState(torque=torque, force=force)
+        torque = (
+            torch.stack(
+                [
+                    es["sensors"][sensor]["torque"]
+                    for es in env_states
+                    if (
+                        "sensors" in es and
+                        sensor in es["sensors"] and
+                        es["sensors"][sensor]["torque"] is not None
+                    )
+                ],
+                dim=0
+            ).to(dev)
+            if (
+                env_states and
+                "sensors" in env_states[0] and
+                sensor in env_states[0]["sensors"] and
+                "torque" in env_states[0]["sensors"][sensor]
+            )
+            else None
+        )
+        sensors[sensor] = SensorState(force=force, torque=torque)
 
     # -------- extras ----------------------------------------------
     for extra_key in extra_names:
@@ -441,3 +457,4 @@ def adapt_actions_to_dict(
     elif isinstance(actions, list):
         actions = actions[0]
     return actions
+

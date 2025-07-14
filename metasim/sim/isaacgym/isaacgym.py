@@ -647,6 +647,12 @@ class IsaacgymHandler(BaseSimHandler):
 
         # GET initial state, copy for reset later
         self._initial_state = np.copy(self.gym.get_sim_rigid_body_states(self.sim, gymapi.STATE_ALL))
+        self.actor_indices = torch.zeros((self.num_envs, len(self.objects) + len(self.robots)), dtype=torch.int32, device=self.device)
+        for env_id in range(self.num_envs):
+            env_offset = env_id * (len(self.objects) + len(self.robots))
+            self.actor_indices[env_id, :len(self.objects) + len(self.robots)] = torch.arange(
+                env_offset, env_offset + len(self.objects) + len(self.robots)
+            )
 
         ###### set VIEWER camera ######
         # point camera at middle env
@@ -663,6 +669,11 @@ class IsaacgymHandler(BaseSimHandler):
             if reverse
             else state[..., [0, 1, 2, 6, 3, 4, 5, 7, 8, 9, 10, 11, 12]]
         )
+
+    def _reorder_quat_wxyz_to_xyzw(self, state: torch.Tensor) -> torch.Tensor:
+        quat_wxyz = state[..., 3:7]
+        quat_xyzw = torch.cat([quat_wxyz[..., 1:4], quat_wxyz[..., 0:1]], dim=-1)
+        return torch.cat([state[..., 0:3], quat_xyzw, state[..., 7:]], dim=-1)
 
     def _get_states(self, env_ids: list[int] | None = None) -> list[DictEnvState]:
         if env_ids is None:
@@ -1027,41 +1038,44 @@ class IsaacgymHandler(BaseSimHandler):
 
         # if states is TensorState, reindex the tensors and set state
         elif isinstance(states, TensorState):
-            new_root_states = self._root_states.view(self.num_envs, -1, 13)
-            new_dof_states = self._dof_states.view(self.num_envs, -1, 2)
-            for idx, obj in enumerate(self.objects):
+            env_ids_tensor = torch.tensor(env_ids, dtype=torch.int32, device=self.device)
+            new_root_states = self._root_states.view(self.num_envs, -1, 13).clone()
+            new_dof_states = self._dof_states.view(self.num_envs, -1, 2).clone()
+            for obj_id, obj in enumerate(self.objects):
                 obj_state = states.objects[obj.name]
-                roo_state = self._reorder_quat_xyzw_to_wxyz(obj_state.root_state, reverse=True)
-                new_root_states[env_ids, idx, :] = roo_state[env_ids, :]
+                root_state = self._reorder_quat_wxyz_to_xyzw(obj_state.root_state)
+                new_root_states[env_ids, obj_id, :] = root_state[env_ids, :]
                 if isinstance(obj, ArticulationObjCfg):
                     joint_pos = obj_state.joint_pos
                     joint_vel = obj_state.joint_vel
-                    joint_ids_reindex = self.get_joint_reindex(obj.name, inverse=True)
-                    new_dof_states[env_ids, :, 0] = joint_pos[env_ids, :][:, joint_ids_reindex]
-                    new_dof_states[env_ids, :, 1] = joint_vel[env_ids, :][:, joint_ids_reindex]
-            for idx, robot in enumerate(self.robots):
+                    global_dof_indices = torch.tensor(list(self._joint_info[obj.name]["global_indices"].values()), dtype=torch.int32, device=self.device)
+                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[env_ids, :]
+                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[env_ids, :]
+            for robot_id, robot in enumerate(self.robots):
                 robot_state = states.robots[robot.name]
-                root_state = self._reorder_quat_xyzw_to_wxyz(robot_state.root_state, reverse=True)
-                new_root_states[env_ids, len(self.objects) + idx, :] = root_state[env_ids, :]
+                root_state = self._reorder_quat_wxyz_to_xyzw(robot_state.root_state)
+                new_root_states[env_ids, len(self.objects) + robot_id, :] = root_state[env_ids, :]
                 joint_pos = robot_state.joint_pos
                 joint_vel = robot_state.joint_vel
-                joint_ids_reindex = self.get_joint_reindex(robot.name, inverse=True)
-                new_dof_states[env_ids, self._obj_num_dof :, 0] = joint_pos[env_ids, :][:, joint_ids_reindex]
-                new_dof_states[env_ids, self._obj_num_dof :, 1] = joint_vel[env_ids, :][:, joint_ids_reindex]
+                global_dof_indices = torch.tensor(list(self._joint_info[robot.name]["global_indices"].values()), dtype=torch.int32, device=self.device)
+                new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[env_ids, :].clone()
+                new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[env_ids, :].clone()
 
-            env_ids_int32_tensor = torch.tensor(env_ids, dtype=torch.int32, device=self.device)
-            self.gym.set_actor_root_state_tensor_indexed(
+            new_root_states = new_root_states.view(-1, 13)
+            new_dof_states = new_dof_states.view(-1, 2)
+            root_reset_actors_indices = self.actor_indices[env_ids, :].view(-1)
+
+            res = self.gym.set_actor_root_state_tensor_indexed(
                 self.sim,
                 gymtorch.unwrap_tensor(new_root_states),
-                gymtorch.unwrap_tensor(env_ids_int32_tensor),
-                len(env_ids),
+                gymtorch.unwrap_tensor(root_reset_actors_indices),
+                len(root_reset_actors_indices),
             )
-            self.gym.set_dof_state_tensor_indexed(
-                self.sim,
-                gymtorch.unwrap_tensor(new_dof_states),
-                gymtorch.unwrap_tensor(env_ids_int32_tensor),
-                len(env_ids),
-            )
+            assert res
+
+            res = self.gym.set_dof_state_tensor(self.sim, gymtorch.unwrap_tensor(new_dof_states))
+            assert res
+
         else:
             raise Exception("Unsupported state type, must be DictEnvState or TensorState")
 

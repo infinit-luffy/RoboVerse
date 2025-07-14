@@ -18,6 +18,7 @@ from metasim.constants import BenchmarkType, PhysicStateType, TaskType
 from metasim.types import EnvState
 from metasim.utils import configclass, math
 from metasim.utils.bidex_util import randomize_rotation
+from metasim.utils.state import ObjectState, RobotState, TensorState
 
 logging.addLevelName(5, "TRACE")
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
@@ -233,8 +234,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         self.init_left_goal_pos = torch.tensor(
             [-0.2, -0.2, 0.625], dtype=torch.float32, device=self.device
         )  # Initial right goal position, shape (3,)
-        self.init_states = [
-            {
+        self.init_states = {
                 "objects": {
                     "table":{
                         "pos": torch.tensor([0.0, 0.0, 0.3]),
@@ -312,7 +312,16 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
                     },
                 },
             }
-        ]
+
+        self.robot_dof_default_pos = {}
+        self.robot_dof_default_pos_cpu = {}
+        for robot in self.robots:
+            self.robot_dof_default_pos[robot.name] = torch.tensor(
+                list(self.init_states["robots"][robot.name]["dof_pos"].values()),
+                dtype=torch.float32,
+                device=self.device,
+            )
+            self.robot_dof_default_pos_cpu[robot.name] = self.robot_dof_default_pos[robot.name].cpu()
         self.x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
         self.z_unit_tensor = torch.tensor([0, 0, 1], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
@@ -389,9 +398,9 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         if self.num_envs is None:
             self.num_envs = num_envs
         if self.left_goal_pos is None:
-            self.left_goal_pos = torch.tensor(self.init_left_goal_pos, dtype=torch.float32).view(1, -1).repeat(num_envs, 1)
+            self.left_goal_pos = torch.tensor(self.init_left_goal_pos, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
         if self.right_goal_pos is None:
-            self.right_goal_pos = torch.tensor(self.init_right_goal_pos, dtype=torch.float32).view(1, -1).repeat(num_envs, 1)
+            self.right_goal_pos = torch.tensor(self.init_right_goal_pos, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
@@ -598,44 +607,74 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         Returns:
             reset_state: The updated states of the environment after resetting.
         """
-        # if issinstance(init_states, list):
         if self.reset_dof_pos_noise == 0.0 and self.reset_position_noise == 0.0:
             # If no noise is applied, return the initial states directly
             return deepcopy(init_states)
-        reset_state = deepcopy(init_states)
-        num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
-        x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
-        y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
+        if isinstance(init_states, list):
+            reset_state = deepcopy(init_states)
+            num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
+            x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
+            y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
 
-        # generate random values
-        rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device="cpu")
+            # generate random values
+            rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device="cpu")
 
-        new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
+            new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
 
-        robot_dof_default_pos = torch.tensor(
-            list(self.init_states[0]["robots"][self.robots[0].name]["dof_pos"].values()),
-            dtype=torch.float32,
-            device="cpu",
-        )
-        delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
-        delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
+            robot_dof_default_pos = self.robot_dof_default_pos_cpu[self.robots[0].name]
+            delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
+            delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
 
-        for i, env_id in enumerate(env_ids):
-            # reset object
-            for obj_name in reset_state[env_id]["objects"].keys():
-                reset_state[env_id]["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
-                reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
+            for i, env_id in enumerate(env_ids):
+                # reset object
+                for obj_name in reset_state[env_id]["objects"].keys():
+                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
 
-            # reset shadow hand
-            for robot_name in reset_state[env_id]["robots"].keys():
-                rand_delta = delta_min + (delta_max - delta_min) * rand_floats[i, 5 : 5 + num_shadow_hand_dofs]
+                # reset shadow hand
+                for robot_name in reset_state[env_id]["robots"].keys():
+                    rand_delta = delta_min + (delta_max - delta_min) * rand_floats[i, 5 : 5 + num_shadow_hand_dofs]
+                    dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
+                    reset_state[env_id]["robots"][robot_name]["dof_pos"] = {
+                        name: dof_pos[j].item()
+                        for j, name in enumerate(reset_state[env_id]["robots"][robot_name]["dof_pos"].keys())
+                    }
+
+            return reset_state
+        elif isinstance(init_states, TensorState):
+            reset_state = deepcopy(init_states) # in sorted order
+            num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
+            x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
+            y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
+
+            # generate random values
+            rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device=self.device)
+
+            new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
+            for obj_id, obj in enumerate(self.objects):
+                root_state = reset_state.objects[obj.name].root_state
+                root_state[env_ids, :3] += self.reset_position_noise * rand_floats[:, :3]
+                obj_state = ObjectState(
+                    root_state=root_state,
+                )
+                reset_state.objects[obj.name] = obj_state
+
+            for robot_id, robot in enumerate(self.robots):
+                robot_dof_default_pos = self.robot_dof_default_pos[robot.name][self.joint_reindex]
+                delta_max = self.shadow_hand_dof_upper_limits[self.joint_reindex] - robot_dof_default_pos
+                delta_min = self.shadow_hand_dof_lower_limits[self.joint_reindex] - robot_dof_default_pos
+                rand_delta = delta_min + (delta_max - delta_min) * rand_floats[:, 5 : 5 + num_shadow_hand_dofs]
                 dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
-                reset_state[env_id]["robots"][robot_name]["dof_pos"] = {
-                    name: dof_pos[j].item()
-                    for j, name in enumerate(reset_state[env_id]["robots"][robot_name]["dof_pos"].keys())
-                }
+                joint_pos = reset_state.robots[robot.name].joint_pos
+                joint_pos[env_ids, :] = dof_pos
+                robot_state = RobotState(
+                    root_state=reset_state.robots[robot.name].root_state,
+                    joint_pos=joint_pos,
+                )
+                reset_state.robots[robot.name] = robot_state
 
-        return reset_state
+            return reset_state
+        else:
+            raise Exception("Unsupported state type, must be EnvState or TensorState")
 
 
 @torch.jit.script
@@ -773,7 +812,7 @@ def compute_hand_reward(
 
     # # Total reward is: position distance + orientation alignment + action regularization + success bonus + fall penalty
     up_rew = torch.zeros_like(right_hand_dist_rew)
-    up_rew = 2.5 - 5 * left_goal_dist - 5 * right_goal_dist
+    up_rew = 5 - 5 * left_goal_dist - 5 * right_goal_dist
     reward = right_hand_dist_rew + left_hand_dist_rew + up_rew
 
     success = (torch.abs(left_goal_dist) <= 0.1) & (torch.abs(right_goal_dist) <= 0.1)
@@ -787,7 +826,7 @@ def compute_hand_reward(
         success_buf,
     )
 
-    reward = torch.where(success_buf == 1, reward + reach_goal_bonus, reward)
+    # reward = torch.where(success_buf == 1, reward + reach_goal_bonus, reward)
     # Check env termination conditions, including maximum success number
     resets = torch.where(right_hand_finger_dist >= 1.2, torch.ones_like(reset_buf), reset_buf)
     resets = torch.where(left_hand_finger_dist >= 1.2, torch.ones_like(resets), resets)

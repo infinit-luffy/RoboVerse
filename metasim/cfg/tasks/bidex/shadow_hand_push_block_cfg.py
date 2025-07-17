@@ -793,7 +793,7 @@ def compute_hand_reward(
     # right_force_push_dir_reward = torch.sum(right_force * right_dir, dim=-1)
     # left_force_push_dir_reward = torch.sum(left_force * left_dir, dim=-1)
 
-    right_hand_dist_rew = 1.2 - 4 * right_hand_dist
+    # right_hand_dist_rew = 1.2 - 4 * right_hand_dist
     # right_hand_dist_rew = torch.where(right_hand_dist < 0.08, right_hand_dist_rew + 1.2 - 1 * right_hand_finger_dist, right_hand_dist_rew)
     # right_hand_dist_rew = torch.where(right_hand_dist < 0.09, right_hand_dist_rew + 4.0 + right_force_push_dir_reward * 0.5, right_hand_dist_rew + right_force_reach_dir_reward * 0.5)
     # left_hand_dist_rew = 1.2 - 4 * left_hand_dist

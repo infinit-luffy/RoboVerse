@@ -74,7 +74,7 @@ class Args:
 
 
 def get_config_path(args):
-    if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm", "ShadowHandPushBlock", "ShadowHandTurnButton"]:
+    if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm", "ShadowHandPushBlock", "ShadowHandTurnButton", "ShadowHandCatchAbreast"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",
@@ -128,7 +128,8 @@ def train(args):
         sim_params=task.sim_params,
     )
     if args.test:
-        scenario.cameras = [PinholeCameraCfg(width=1024, height=1024, pos=(-1.5, -1.5, 1.5), look_at=(0.0, -0.2, 0.0))]
+        scenario.cameras = [PinholeCameraCfg(width=1024, height=1024, pos=(-1.5, -1.5, 1.5), look_at=(0.0, -0.6, 0.0))]
+        scenario.cameras = []
     else:
         scenario.cameras = []
     env = BiDexEnvWrapper(

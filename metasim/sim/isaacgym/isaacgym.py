@@ -650,7 +650,7 @@ class IsaacgymHandler(BaseSimHandler):
         self.actor_indices = torch.zeros((self.num_envs, len(self.objects) + len(self.robots)), dtype=torch.int32, device=self.device)
         for env_id in range(self.num_envs):
             env_offset = env_id * (len(self.objects) + len(self.robots))
-            self.actor_indices[env_id, :len(self.objects) + len(self.robots)] = torch.arange(
+            self.actor_indices[env_id, :] = torch.arange(
                 env_offset, env_offset + len(self.objects) + len(self.robots)
             )
 
@@ -1044,17 +1044,17 @@ class IsaacgymHandler(BaseSimHandler):
             for obj_id, obj in enumerate(self.objects):
                 obj_state = states.objects[obj.name]
                 root_state = self._reorder_quat_wxyz_to_xyzw(obj_state.root_state)
-                new_root_states[env_ids, obj_id, :] = root_state[env_ids, :]
+                new_root_states[env_ids, obj_id, :] = root_state[env_ids, :].clone()
                 if isinstance(obj, ArticulationObjCfg):
                     joint_pos = obj_state.joint_pos
                     joint_vel = obj_state.joint_vel
                     global_dof_indices = torch.tensor(list(self._joint_info[obj.name]["global_indices"].values()), dtype=torch.int32, device=self.device)
-                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[env_ids, :]
-                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[env_ids, :]
+                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[env_ids, :].clone()
+                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[env_ids, :].clone()
             for robot_id, robot in enumerate(self.robots):
                 robot_state = states.robots[robot.name]
                 root_state = self._reorder_quat_wxyz_to_xyzw(robot_state.root_state)
-                new_root_states[env_ids, len(self.objects) + robot_id, :] = root_state[env_ids, :]
+                new_root_states[env_ids, len(self.objects) + robot_id, :] = root_state[env_ids, :].clone()
                 joint_pos = robot_state.joint_pos
                 joint_vel = robot_state.joint_vel
                 global_dof_indices = torch.tensor(list(self._joint_info[robot.name]["global_indices"].values()), dtype=torch.int32, device=self.device)

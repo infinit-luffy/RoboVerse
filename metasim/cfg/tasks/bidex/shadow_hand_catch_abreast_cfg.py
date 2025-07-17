@@ -42,14 +42,12 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
     obs_shape = 422
     action_shape = 52
     current_object_type = "egg"
-    # objects_usd_path = ["roboverse_data/assets/bidex/objects/usd/cube_multicolor.usd"]
     objects_cfg = {
         "cube": RigidObjCfg(
             name="cube",
             scale=(1, 1, 1),
             physics=PhysicStateType.RIGIDBODY,
             urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf",
-            # usd_path=objects_usd_path[0],
             default_density=500.0,
         ),
         "egg": RigidObjCfg(
@@ -68,6 +66,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
+            dof_drive_mode='none',
         ),
         ShadowHandCfg(
             name="shadow_hand_left",
@@ -75,6 +74,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
+            dof_drive_mode='none',
         ),
     ]
     num_actuated_joints = {}
@@ -733,11 +733,6 @@ def compute_hand_reward(
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
-    # print(left_hand_base_dist)
-    # print(diff_xy[:, 1].max())
-    # print(object_pos[:, 2].min())
-    # print(right_hand_pos[:, 2].min())
-    # print(right_hand_base_dist.max())
+    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     return reward, resets, goal_resets, success_buf

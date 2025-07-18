@@ -29,14 +29,14 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
 @configclass
-class ShadowHandCloseInwardCfg(BaseRLTaskCfg):
-    """class for bidex shadow hand close inward tasks."""
+class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
+    """class for bidex shadow hand open outward tasks."""
 
     source_benchmark = BenchmarkType.BIDEX
     task_type = TaskType.TABLETOP_MANIPULATION
     is_testing = False
     episode_length = 250
-    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandCloseInward/v2/initial_state_v2.json"
+    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandOpenOutward/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
     obs_shape = 404

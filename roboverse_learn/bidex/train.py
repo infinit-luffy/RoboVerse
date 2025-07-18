@@ -74,12 +74,16 @@ class Args:
 
 
 def get_config_path(args):
-    if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm", "ShadowHandPushBlock", "ShadowHandTurnButton", "ShadowHandCatchAbreast"]:
+    if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm", "ShadowHandPushBlock", "ShadowHandTurnButton", "ShadowHandCatchAbreast", "ShadowHandSwingCup", "ShadowHandCloseInward", "ShadowHandOpenOutward"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",
         )
-
+    elif args.task in ["ShadowHandLiftUnderarm"]:
+        return (
+            os.path.join(args.logdir, f"{args.task}/{args.algo}"),
+            f"roboverse_learn/bidex/cfg/{args.algo}/lift_config.yaml",
+        )
     else:
         raise ValueError(f"Unrecognized task: {args.task}. Please specify a valid task.")
 
@@ -97,8 +101,6 @@ def load_cfg(args, train_cfg_path, logdir):
         train_cfg["seed"] = args.seed
 
     log_id = logdir
-    if args.experiment != "Base":
-        log_id = args.logdir + f"_{args.experiment}"
 
     logdir = os.path.realpath(log_id)
     # os.makedirs(logdir, exist_ok=True)
@@ -150,6 +152,8 @@ def train(args):
         args.train_cfg["learn"]["max_iterations"] = args.max_iterations
 
     logdir = args.logdir + f"_seed{args.seed}" + f"_{task.current_object_type}"
+    if args.experiment != "Base":
+        logdir += f"_{args.experiment}"
 
     if not os.path.exists(logdir):
         os.makedirs(logdir, exist_ok=True)

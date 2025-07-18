@@ -46,9 +46,10 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
         "button": ArticulationObjCfg(
             name="button",
             scale=(1, 1, 1),
-            urdf_path="roboverse_data/assets/bidex/objects/urdf/mobility.urdf",
+            urdf_path="roboverse_data/assets/bidex/objects/urdf/switch_mobility.urdf",
             default_density=500.0,
             fix_base_link= True,
+            use_vhacd=True,
         ),
         "table": PrimitiveCubeCfg(
             name="table",
@@ -110,6 +111,7 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
         sensors.append(ContactForceSensorCfg(base_link=("shadow_hand_left", name), source_link=None, name=l_name))
     r_fingertips_idx = None
     l_fingertips_idx = None
+    palm_name = "robot0_palm"
     r_palm_idx = None  # Index of the right hand palm in the body state
     l_palm_idx = None  # Index of the left hand palm in the body state
     handle_name = "link_0"
@@ -236,7 +238,6 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
                         "rot": torch.tensor([0, -0.7071, 0, 0.7071]),
                         "dof_pos": {
                             "joint_0": 0.5585,  # Initial position of the switch
-                            "joint_1": 0.0,  # Initial position of the switch
                         }
                     },
                     f"{self.current_object_type}_2": {
@@ -244,7 +245,6 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
                         "rot": torch.tensor([0, -0.7071, 0, 0.7071]),
                         "dof_pos": {
                             "joint_0": 0.5585,  # Initial position of the switch
-                            "joint_1": 0.0,  # Initial position of the switch
                         }
                     },
                 },
@@ -413,7 +413,7 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
         if self.r_palm_idx is None:
-            self.r_palm_idx = envstates.robots["shadow_hand_right"].body_names.index("robot0_palm")
+            self.r_palm_idx = envstates.robots["shadow_hand_right"].body_names.index(self.palm_name)
         right_hand_pos = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, :3]
         right_hand_rot = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, 3:7]
         right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.z_unit_tensor * 0.08)
@@ -448,7 +448,7 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
         if self.l_palm_idx is None:
-            self.l_palm_idx = envstates.robots["shadow_hand_left"].body_names.index("robot0_palm")
+            self.l_palm_idx = envstates.robots["shadow_hand_left"].body_names.index(self.palm_name)
         left_hand_pos = envstates.robots["shadow_hand_left"].body_state[:, self.l_palm_idx, :3]
         left_hand_rot = envstates.robots["shadow_hand_left"].body_state[:, self.l_palm_idx, 3:7]
         left_hand_pos = left_hand_pos + math.quat_apply(left_hand_rot, self.z_unit_tensor * 0.08)
@@ -652,11 +652,12 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
             for obj_id, obj in enumerate(self.objects):
                 root_state = reset_state.objects[obj.name].root_state
                 root_state[env_ids, :3] += self.reset_position_noise * rand_floats[:, :3]
-                joint_pos = reset_state.objects[obj.name].joint_pos
                 obj_state = ObjectState(
                     root_state=root_state,
-                    joint_pos=joint_pos,
                 )
+                if isinstance(obj, ArticulationObjCfg):
+                    joint_pos = reset_state.objects[obj.name].joint_pos
+                    obj_state.joint_pos = joint_pos
                 reset_state.objects[obj.name] = obj_state
 
             for robot_id, robot in enumerate(self.robots):

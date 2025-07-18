@@ -49,6 +49,7 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
             physics=PhysicStateType.RIGIDBODY,
             urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf",
             default_density=500.0,
+            use_vhacd=True,
         ),
         "egg": RigidObjCfg(
             name="egg",
@@ -56,6 +57,7 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
             physics=PhysicStateType.RIGIDBODY,
             mjcf_path="roboverse_data/assets/bidex/open_ai_assets/mjcf/hand/egg.xml",
             isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
+            use_vhacd=True,
         ),
     }
     objects = []
@@ -576,6 +578,9 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
                 obj_state = ObjectState(
                     root_state=root_state,
                 )
+                if isinstance(obj, ArticulationObjCfg):
+                    joint_pos = reset_state.objects[obj.name].joint_pos
+                    obj_state.joint_pos = joint_pos
                 reset_state.objects[obj.name] = obj_state
 
             for robot_id, robot in enumerate(self.robots):

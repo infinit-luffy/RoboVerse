@@ -101,6 +101,9 @@ class BaseObjCfg:
     flip_visual_attachments: bool = False
     """Whether to flip the visual attachments of the object, default is False"""
 
+    friction: float| None = None
+    """Friction of the object."""
+
 
 ##################################################
 # Level 1: Base rigid object and base articulation object
@@ -147,12 +150,22 @@ class BaseArticulationObjCfg(BaseObjCfg):
 
 @configclass
 class RigidObjCfg(_FileBasedMixin, BaseRigidObjCfg):
+    use_vhacd: bool = False
+    override_com: bool = False
+    override_inertia: bool = False
+    use_mesh_materials: bool = False
+    mesh_normal_mode: str | None = None
     """Rigid object cfg."""
 
 
 @configclass
 class ArticulationObjCfg(_FileBasedMixin, BaseArticulationObjCfg):
     fix_base_link: bool = True
+    use_vhacd: bool = False
+    override_com: bool = False
+    override_inertia: bool = False
+    use_mesh_materials: bool = False
+    mesh_normal_mode: str | None = None
     """Articulation object cfg."""
 
 
@@ -162,9 +175,6 @@ class PrimitiveCubeCfg(_PrimitiveMixin, BaseRigidObjCfg):
 
     size: list[float] = MISSING
     """Size of the object (in m)."""
-
-    friction: float| None = None
-    """Friction of the sphere."""
 
     @property
     def half_size(self) -> list[float]:

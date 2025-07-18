@@ -19,6 +19,10 @@ def __get_quick_ref():
     from .bidex.shadow_hand_catch_abreast_cfg import ShadowHandCatchAbreastCfg
     from .bidex.shadow_hand_lift_underarm_cfg import ShadowHandLiftUnderarmCfg
     from .bidex.shadow_hand_turn_button_cfg import ShadowHandTurnButtonCfg
+    from .bidex.shadow_hand_swing_cup_cfg import ShadowHandSwingCupCfg
+    from .bidex.shadow_hand_close_inward_cfg import ShadowHandCloseInwardCfg
+    from .bidex.shadow_hand_open_outward_cfg import ShadowHandOpenOutwardCfg
+
     from .calvin.calvin import MoveSliderLeftACfg
     from .debug.reach_cfg import ReachOriginCfg
     from .dmcontrol.walker_walk_cfg import WalkerWalkCfg

@@ -49,6 +49,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             physics=PhysicStateType.RIGIDBODY,
             urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf",
             default_density=500.0,
+            use_vhacd=True,
         ),
         "egg": RigidObjCfg(
             name="egg",
@@ -56,6 +57,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             physics=PhysicStateType.RIGIDBODY,
             mjcf_path="roboverse_data/assets/bidex/open_ai_assets/mjcf/hand/egg.xml",
             isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
+            use_vhacd=True,
         ),
     }
     objects = []
@@ -112,6 +114,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
         sensors.append(ContactForceSensorCfg(base_link=("shadow_hand_left", name), source_link=None, name=l_name))
     r_fingertips_idx = None
     l_fingertips_idx = None
+    palm_name = "robot0_palm"
     r_palm_idx = None  # Index of the right hand palm in the body state
     l_palm_idx = None  # Index of the left hand palm in the body state
     vel_obs_scale: float = 0.2  # Scale for velocity observations
@@ -409,7 +412,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
         if self.r_palm_idx is None:
-            self.r_palm_idx = envstates.robots["shadow_hand_right"].body_names.index("robot0_palm")
+            self.r_palm_idx = envstates.robots["shadow_hand_right"].body_names.index(self.palm_name)
         obs[:, 167:170] = envstates.robots["shadow_hand_right"].root_state[:, :3]  # right hand base position
         roll, pitch, yaw = math.euler_xyz_from_quat(envstates.robots["shadow_hand_right"].root_state[:, 3:7])
         obs[:, 170] = roll
@@ -440,7 +443,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
         if self.l_palm_idx is None:
-            self.l_palm_idx = envstates.robots["shadow_hand_left"].body_names.index("robot0_palm")
+            self.l_palm_idx = envstates.robots["shadow_hand_left"].body_names.index(self.palm_name)
         obs[:, 366:369] = envstates.robots["shadow_hand_left"].root_state[:, :3]  # left hand base position
         roll, pitch, yaw = math.euler_xyz_from_quat(envstates.robots["shadow_hand_left"].root_state[:, 3:7])
         obs[:, 369] = roll
@@ -586,6 +589,9 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
                 obj_state = ObjectState(
                     root_state=root_state,
                 )
+                if isinstance(obj, ArticulationObjCfg):
+                    joint_pos = reset_state.objects[obj.name].joint_pos
+                    obj_state.joint_pos = joint_pos
                 reset_state.objects[obj.name] = obj_state
 
             for robot_id, robot in enumerate(self.robots):

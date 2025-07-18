@@ -276,7 +276,21 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options.fix_base_link = object.fix_base_link
             asset_options.disable_gravity = object.disable_gravity
             asset_options.flip_visual_attachments = object.flip_visual_attachments
-            asset_options.vhacd_enabled = True
+            if object.override_com:
+                asset_options.override_com = True
+            if object.override_inertia:
+                asset_options.override_inertia = True
+            if object.use_mesh_materials:
+                asset_options.use_mesh_materials = True
+            if object.mesh_normal_mode is not None:
+                if object.mesh_normal_mode == "vertex":
+                    asset_options.mesh_normal_mode = gymapi.COMPUTE_PER_VERTEX
+                elif object.mesh_normal_mode == "face":
+                    asset_options.mesh_normal_mode = gymapi.COMPUTE_PER_FACE
+                else:
+                    raise ValueError(f"Invalid mesh_normal_mode: {object.mesh_normal_mode}. Use 'vertex' or 'face'.")
+            if object.use_vhacd:
+                asset_options.vhacd_enabled = True
             asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
@@ -292,7 +306,21 @@ class IsaacgymHandler(BaseSimHandler):
             if hasattr(object, "physics") and object.physics == PhysicStateType.XFORM:
                 asset_options.disable_gravity = True
             asset_options.flip_visual_attachments = object.flip_visual_attachments
-            asset_options.vhacd_enabled = True
+            if object.override_com:
+                asset_options.override_com = True
+            if object.override_inertia:
+                asset_options.override_inertia = True
+            if object.use_mesh_materials:
+                asset_options.use_mesh_materials = True
+            if object.mesh_normal_mode is not None:
+                if object.mesh_normal_mode == "vertex":
+                    asset_options.mesh_normal_mode = gymapi.COMPUTE_PER_VERTEX
+                elif object.mesh_normal_mode == "face":
+                    asset_options.mesh_normal_mode = gymapi.COMPUTE_PER_FACE
+                else:
+                    raise ValueError(f"Invalid mesh_normal_mode: {object.mesh_normal_mode}. Use 'vertex' or 'face'.")
+            if object.use_vhacd:
+                asset_options.vhacd_enabled = True
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
             asset = self.gym.load_asset(self.sim, asset_root, asset_path, asset_options)
@@ -320,7 +348,8 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options.flip_visual_attachments = robot.isaacgym_flip_visual_attachments
             asset_options.collapse_fixed_joints = robot.collapse_fixed_joints
             asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
-            asset_options.vhacd_enabled = True
+            if robot.use_vhacd:
+                asset_options.vhacd_enabled = True
             asset_options.use_physx_armature = True
             # Angular velocity damping for rigid bodies
             if hasattr(robot, "angular_damping") and robot.angular_damping is not None:
@@ -568,6 +597,12 @@ class IsaacgymHandler(BaseSimHandler):
                 # Create actor with collision group 0 and filter 0 (matches IsaacGymEnvs)
                 obj_handle = self.gym.create_actor(env, obj_asset, obj_pose, obj.name, i, 0, 0)
 
+                if self.objects[obj_i].friction is not None:
+                    shape_props = self.gym.get_actor_rigid_shape_properties(env, obj_handle)
+                    for shape_prop in shape_props:
+                        shape_prop.friction = self.objects[obj_i].friction
+                    self.gym.set_actor_rigid_shape_properties(env, obj_handle, shape_props)
+
                 if isinstance(self.objects[obj_i], _FileBasedMixin):
                     self.gym.set_actor_scale(env, obj_handle, self.objects[obj_i].scale[0])
                 elif isinstance(self.objects[obj_i], PrimitiveCubeCfg):
@@ -577,11 +612,6 @@ class IsaacgymHandler(BaseSimHandler):
                         self.objects[obj_i].color[2],
                     )
                     self.gym.set_rigid_body_color(env, obj_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, color)
-                    if self.objects[obj_i].friction is not None:
-                        shape_props = self.gym.get_actor_rigid_shape_properties(env, obj_handle)
-                        for shape_prop in shape_props:
-                            shape_prop.friction = self.objects[obj_i].friction
-                        self.gym.set_actor_rigid_shape_properties(env, obj_handle, shape_props)
                 elif isinstance(self.objects[obj_i], PrimitiveSphereCfg):
                     color = gymapi.Vec3(
                         self.objects[obj_i].color[0],

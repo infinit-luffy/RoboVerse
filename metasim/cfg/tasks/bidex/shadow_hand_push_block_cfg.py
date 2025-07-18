@@ -49,6 +49,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             physics=PhysicStateType.RIGIDBODY,
             urdf_path="roboverse_data/assets/bidex/objects/urdf/cube_multicolor.urdf",
             default_density=500.0,
+            use_vhacd=True,
         ),
         "table": PrimitiveCubeCfg(
             name="table",
@@ -115,6 +116,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         sensors.append(ContactForceSensorCfg(base_link=("shadow_hand_left", name), source_link=None, name=l_name))
     r_fingertips_idx = None
     l_fingertips_idx = None
+    palm_name = "robot0_palm"  # Name of the palm in the body state
     r_palm_idx = None  # Index of the right hand palm in the body state
     l_palm_idx = None  # Index of the left hand palm in the body state
     vel_obs_scale: float = 0.2  # Scale for velocity observations
@@ -425,7 +427,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
         if self.r_palm_idx is None:
-            self.r_palm_idx = envstates.robots["shadow_hand_right"].body_names.index("robot0_palm")
+            self.r_palm_idx = envstates.robots["shadow_hand_right"].body_names.index(self.palm_name)
         right_hand_pos = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, :3]
         right_hand_rot = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, 3:7]
         right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.z_unit_tensor * 0.08)
@@ -460,7 +462,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
         if self.l_palm_idx is None:
-            self.l_palm_idx = envstates.robots["shadow_hand_left"].body_names.index("robot0_palm")
+            self.l_palm_idx = envstates.robots["shadow_hand_left"].body_names.index(self.palm_name)
         left_hand_pos = envstates.robots["shadow_hand_left"].body_state[:, self.l_palm_idx, :3]
         left_hand_rot = envstates.robots["shadow_hand_left"].body_state[:, self.l_palm_idx, 3:7]
         left_hand_pos = left_hand_pos + math.quat_apply(left_hand_rot, self.z_unit_tensor * 0.08)
@@ -656,6 +658,9 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
                 obj_state = ObjectState(
                     root_state=root_state,
                 )
+                if isinstance(obj, ArticulationObjCfg):
+                    joint_pos = reset_state.objects[obj.name].joint_pos
+                    obj_state.joint_pos = joint_pos
                 reset_state.objects[obj.name] = obj_state
 
             for robot_id, robot in enumerate(self.robots):

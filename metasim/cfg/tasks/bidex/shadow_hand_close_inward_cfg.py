@@ -117,8 +117,8 @@ class ShadowHandCloseInwardCfg(BaseRLTaskCfg):
     l_palm_idx = None  # Index of the left hand palm in the body state
     r_handle_name = "link_1"  # Name of the right hand handle in the body state
     l_handle_name = "link_2"  # Name of the left hand handle in the body state
-    l_handle_idx = None  # Index of the left hand handle in the body state
     r_handle_idx = None  # Index of the right hand handle in the body state
+    l_handle_idx = None  # Index of the left hand handle in the body state
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
@@ -793,7 +793,7 @@ def compute_hand_reward(
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    # reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
+    reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(right_hand_finger_dist >= 1.5, torch.ones_like(reset_buf), reset_buf)
@@ -804,7 +804,5 @@ def compute_hand_reward(
     # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     goal_resets = torch.zeros_like(resets)
-    # print(right_hand_dist.min())
-    # print(left_hand_dist.min())
 
     return reward, resets, goal_resets, success_buf

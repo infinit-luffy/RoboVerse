@@ -38,6 +38,7 @@ class SimParamCfg:
     substeps: int = 1  # for IsaacGym
     max_depenetration_velocity: float = 1.0
     default_buffer_size_multiplier: int = 2.0
+    env_spacing: int = 1.0
 
     ## MJX specific parameters
     nconmax: int | None = None

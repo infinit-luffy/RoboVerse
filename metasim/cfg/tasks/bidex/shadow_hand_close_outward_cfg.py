@@ -29,14 +29,14 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
 @configclass
-class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
-    """class for bidex shadow hand open outward tasks."""
+class ShadowHandCloseOutwardCfg(BaseRLTaskCfg):
+    """class for bidex shadow hand close outward tasks."""
 
     source_benchmark = BenchmarkType.BIDEX
     task_type = TaskType.TABLETOP_MANIPULATION
     is_testing = False
     episode_length = 250
-    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandOpenOutward/v2/initial_state_v2.json"
+    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandCloseOutward/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
     obs_shape = 404
@@ -236,8 +236,8 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
                         "pos": torch.tensor([0, 0.0, 0.7]),
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                         "dof_pos": {
-                            "joint_1": 0.0,  # Initial position of the switch
-                            "joint_2": 0.0,  # Initial position of the switch
+                            "joint_1": 1.57,  # Initial position of the switch
+                            "joint_2": 1.57,  # Initial position of the switch
                         }
                     },
                 },
@@ -774,12 +774,12 @@ def compute_hand_reward(
     up_rew = torch.zeros_like(right_hand_dist_rew)
     up_rew = torch.where(right_hand_finger_dist < 0.5,
                     torch.where(left_hand_finger_dist < 0.5,
-                                    torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) * 2, up_rew), up_rew)
+                                    1 - torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) * 2, up_rew), up_rew)
 
 
-    reward = 2 - right_hand_dist_rew - left_hand_dist_rew + up_rew
+    reward = 6 - right_hand_dist_rew - left_hand_dist_rew + up_rew
 
-    success = torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) > 0.5
+    success = torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) < 0.5
 
     # Find out which envs hit the goal and update successes count
     success_buf = torch.where(
@@ -796,8 +796,8 @@ def compute_hand_reward(
     reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_finger_dist >= 1.5, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(left_hand_finger_dist >= 1.5, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_finger_dist >= 3.0, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(left_hand_finger_dist >= 3.0, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

@@ -122,6 +122,7 @@ class BiDexEnvWrapper:
     def reset(self):
         """Reset the environment."""
         obs, _ = self.env.reset(states=self.init_states_tensor)
+        env_ids = torch.arange(self.num_envs, device=self.sim_device)
         self.tensor_states = obs
         observations = self.task.observation_fn(
             obs, torch.zeros((self.num_envs, self.action_shape), device=self.sim_device)
@@ -132,6 +133,7 @@ class BiDexEnvWrapper:
             torch.tensor(self.observation_space.high, device=self.sim_device),
         )
         self.tensor_obs = observations
+        self.reset_goal_pose(env_ids)
 
         # Reset episode tracking variables
         self.episode_rewards = torch.zeros(self.num_envs, dtype=torch.float32, device=self.sim_device)

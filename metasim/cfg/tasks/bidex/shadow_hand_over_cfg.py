@@ -10,7 +10,7 @@ import torch
 from loguru import logger as log
 from rich.logging import RichHandler
 
-from metasim.cfg.objects import RigidObjCfg
+from metasim.cfg.objects import RigidObjCfg, ArticulationObjCfg
 from metasim.cfg.robots import ShadowHandCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg

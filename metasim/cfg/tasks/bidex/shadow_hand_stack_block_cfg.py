@@ -10,7 +10,7 @@ import torch
 from loguru import logger as log
 from rich.logging import RichHandler
 
-from metasim.cfg.objects import RigidObjCfg, ArticulationObjCfg
+from metasim.cfg.objects import RigidObjCfg, PrimitiveCubeCfg, ArticulationObjCfg
 from metasim.cfg.robots import ShadowHandCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
@@ -29,36 +29,39 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
 @configclass
-class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
-    """class for bidex shadow hand catch abreast tasks."""
+class ShadowHandStackBlockCfg(BaseRLTaskCfg):
+    """class for bidex shadow stack push block tasks."""
 
     source_benchmark = BenchmarkType.BIDEX
     task_type = TaskType.TABLETOP_MANIPULATION
     is_testing = False
-    episode_length = 150
-    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandCatchAbreast/v2/initial_state_v2.json"
+    episode_length = 250
+    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandStackBlock/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
-    obs_shape = 422
+    obs_shape = 424
     action_shape = 52
-    current_object_type = "egg"
+    current_object_type = "cube"
     objects_cfg = {
         "cube": RigidObjCfg(
             name="cube",
             scale=(1, 1, 1),
             physics=PhysicStateType.RIGIDBODY,
-            urdf_path="roboverse_data/assets/bidex/objects/cube_multicolor.urdf",
-            default_density=500.0,
+            urdf_path="roboverse_data/assets/bidex/objects/urdf/cube_multicolor.urdf",
+            default_density=100.0,
             use_vhacd=True,
+            friction=0.25,
         ),
-        "egg": RigidObjCfg(
-            name="egg",
-            scale=(1, 1, 1),
+        "table": PrimitiveCubeCfg(
+            name="table",
+            size=(0.5, 1.0, 0.6),
+            disable_gravity=True,
+            fix_base_link=True,
+            flip_visual_attachments=True,
+            friction=0.2,
+            color=[0.8, 0.8, 0.8],
             physics=PhysicStateType.RIGIDBODY,
-            mjcf_path="roboverse_data/assets/bidex/open_ai_assets/mjcf/hand/egg.xml",
-            isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
-            use_vhacd=True,
-        ),
+        )
     }
     objects = []
     robots = [
@@ -68,7 +71,8 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
-            dof_drive_mode='none',
+            # dof_drive_mode='none',
+            use_vhacd=False,
         ),
         ShadowHandCfg(
             name="shadow_hand_left",
@@ -76,7 +80,8 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
-            dof_drive_mode='none',
+            # dof_drive_mode='none',
+            use_vhacd=False,
         ),
     ]
     num_actuated_joints = {}
@@ -98,12 +103,12 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
         substeps=2,
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
+        env_spacing=1.5,
     )
     dt = sim_params.dt  # Simulation time step
-    transition_scale = 0.5
-    orientation_scale = 1.0
+    transition_scale = 0.2
+    orientation_scale = 0.02
     goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
-    goal_rot = None  # Placeholder for goal rotation, to be set later, shape (num_envs, 4)
     fingertips = ["robot0_ffdistal", "robot0_mfdistal", "robot0_rfdistal", "robot0_lfdistal", "robot0_thdistal"]
     sensors = []
     for name in fingertips:
@@ -114,7 +119,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
         sensors.append(ContactForceSensorCfg(base_link=("shadow_hand_left", name), source_link=None, name=l_name))
     r_fingertips_idx = None
     l_fingertips_idx = None
-    palm_name = "robot0_palm"
+    palm_name = "robot0_palm"  # Name of the palm in the body state
     r_palm_idx = None  # Index of the right hand palm in the body state
     l_palm_idx = None  # Index of the left hand palm in the body state
     vel_obs_scale: float = 0.2  # Scale for velocity observations
@@ -122,27 +127,19 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
-    dist_reward_scale = 50.0
     action_penalty_scale = 0
-    success_tolerance = 0.1
-    reach_goal_bonus = 500.0
-    throw_bonus = 10.0
-    fall_penalty = 0.0
-    leave_penalty = 0.0  # Penalty for leaving the base
-    reset_position_noise = 0.001
-    reset_dof_pos_noise = 0.01
+    reach_goal_bonus = 250.0
+    reset_position_noise = 0.0
+    reset_dof_pos_noise = 0.0
+    leave_penalty = 5.0
 
     def set_objects(self) -> None:
-        self.objects.append(self.objects_cfg[self.current_object_type])
+        self.objects.append(self.objects_cfg["table"])
+        self.objects.append(self.objects_cfg[self.current_object_type].replace(name=f"{self.current_object_type}_1"))
+        self.objects.append(self.objects_cfg[self.current_object_type].replace(name=f"{self.current_object_type}_2"))
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
-        self.init_goal_pos = torch.tensor(
-            [-0.39, -1.15, 0.54], dtype=torch.float32, device=self.device
-        )  # Initial goal position, shape (3,)
-        self.init_goal_rot = torch.tensor(
-            [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
-        )  # Initial goal rotation, shape (4,)
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -201,7 +198,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
                 -0.524,
                 -1.571,
             ],
-            dtype=torch.float32,
+            dtype=torch.float,
             device=self.device,
         )
         self.shadow_hand_dof_upper_limits: torch.Tensor = torch.tensor(
@@ -231,22 +228,33 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
                 0.524,
                 0,
             ],
-            dtype=torch.float32,
+            dtype=torch.float,
             device=self.device,
         )
         self.shadow_hand_dof_lower_limits_cpu = self.shadow_hand_dof_lower_limits.cpu()
         self.shadow_hand_dof_upper_limits_cpu = self.shadow_hand_dof_upper_limits.cpu()
+        self.init_goal_pos = torch.tensor(
+            [0.0, 0.1, 0.625], dtype=torch.float, device=self.device
+        )  # Initial right goal position, shape (3,)
         self.init_states = {
                 "objects": {
-                    self.current_object_type: {
-                        "pos": torch.tensor([-0.39, -0.55, 0.54]),
+                    "table":{
+                        "pos": torch.tensor([0.0, 0.0, 0.3]),
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    },
+                    f"{self.current_object_type}_1": {
+                        "pos": torch.tensor([0.0, 0.1, 0.625]),
+                        "rot": torch.tensor([0.5, 0.5, 0.5, -0.5]),
+                    },
+                    f"{self.current_object_type}_2": {
+                        "pos": torch.tensor([0.0, -0.1, 0.625]),
+                        "rot": torch.tensor([0.5, 0.5, 0.5, -0.5]),
                     },
                 },
                 "robots": {
                     "shadow_hand_right": {
-                        "pos": torch.tensor([0.0, -0.55, 0.5]),
-                        "rot": torch.tensor([-0.5, 0.5, 0.5, -0.5]),
+                        "pos": torch.tensor([0.0, 0.6, 0.7]),
+                        "rot": torch.tensor([0.707, 0.707, 0.0, 0.0]),
                         "dof_pos": {
                             "robot0_WRJ1": 0.0,
                             "robot0_WRJ0": 0.0,
@@ -275,8 +283,8 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
                         },
                     },
                     "shadow_hand_left": {
-                        "pos": torch.tensor([0.0, -1.15, 0.5]),
-                        "rot": torch.tensor([-0.5, 0.5, 0.5, -0.5]),
+                        "pos": torch.tensor([0.0, -0.6, 0.7]),
+                        "rot": torch.tensor([0.0, 0.0, -0.707, -0.707]),
                         "dof_pos": {
                             "robot0_WRJ1": 0.0,
                             "robot0_WRJ0": 0.0,
@@ -306,15 +314,19 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
                     },
                 },
             }
+
         self.robot_dof_default_pos = {}
         self.robot_dof_default_pos_cpu = {}
         for robot in self.robots:
             self.robot_dof_default_pos[robot.name] = torch.tensor(
                 list(self.init_states["robots"][robot.name]["dof_pos"].values()),
-                dtype=torch.float32,
+                dtype=torch.float,
                 device=self.device,
             )
             self.robot_dof_default_pos_cpu[robot.name] = self.robot_dof_default_pos[robot.name].cpu()
+        self.x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
+        self.y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
+        self.z_unit_tensor = torch.tensor([0, 0, 1], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
 
     def scale_action_fn(self, actions: torch.Tensor) -> torch.Tensor:
         """Scale actions to the range of the action space.
@@ -353,7 +365,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             Compute the observations of all environment. The observation is composed of three parts:
             the state values of the left and right hands, and the information of objects and target.
             The state values of the left and right hands were the same for each task, including hand
-            joint and finger positions, velocity, and force information. The detail 422-dimensional
+            joint and finger positions, velocity, and force information. The detail 430-dimensional
             observational space as shown in below:
 
             Index       Description
@@ -373,11 +385,14 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             366 - 368	left shadow hand base position
             369 - 371	left shadow hand base rotation
             372 - 397	left shadow hand actions
-            398 - 404	object pose
-            405 - 407	object linear velocity
-            408 - 410	object angle velocity
-            411 - 417	goal pose
-            418 - 421	goal rot - object rot
+            398 - 404	block1 pose
+            405 - 407	block1 linear velocity
+            408 - 410	block1 angle velocity
+            411 - 417	block2 pose
+            418 - 420	block2 linear velocity
+            421 - 423	block2 angle velocity
+            424 - 426   left goal position
+            427 - 429   right goal position
         """
         if device is None:
             device = self.device
@@ -385,10 +400,8 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
         if self.num_envs is None:
             self.num_envs = num_envs
         if self.goal_pos is None:
-            self.goal_pos = torch.tensor(self.init_goal_pos, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
-        if self.goal_rot is None:
-            self.goal_rot = torch.tensor(self.init_goal_rot, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
-        obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
+            self.goal_pos = torch.tensor(self.init_goal_pos, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
+        obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
             self.shadow_hand_dof_lower_limits[self.joint_reindex],
@@ -413,7 +426,11 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             t += 6
         if self.r_palm_idx is None:
             self.r_palm_idx = envstates.robots["shadow_hand_right"].body_names.index(self.palm_name)
-        obs[:, 167:170] = envstates.robots["shadow_hand_right"].root_state[:, :3]  # right hand base position
+        right_hand_pos = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, :3]
+        right_hand_rot = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, 3:7]
+        right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.z_unit_tensor * 0.08)
+        right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.y_unit_tensor * -0.02)
+        obs[:, 167:170] = right_hand_pos # right hand base position
         roll, pitch, yaw = math.euler_xyz_from_quat(envstates.robots["shadow_hand_right"].root_state[:, 3:7])
         obs[:, 170] = roll
         obs[:, 171] = pitch
@@ -444,18 +461,20 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             t += 6
         if self.l_palm_idx is None:
             self.l_palm_idx = envstates.robots["shadow_hand_left"].body_names.index(self.palm_name)
-        obs[:, 366:369] = envstates.robots["shadow_hand_left"].root_state[:, :3]  # left hand base position
+        left_hand_pos = envstates.robots["shadow_hand_left"].body_state[:, self.l_palm_idx, :3]
+        left_hand_rot = envstates.robots["shadow_hand_left"].body_state[:, self.l_palm_idx, 3:7]
+        left_hand_pos = left_hand_pos + math.quat_apply(left_hand_rot, self.z_unit_tensor * 0.08)
+        left_hand_pos = left_hand_pos + math.quat_apply(left_hand_rot, self.y_unit_tensor * -0.02)
+        obs[:, 366:369] = left_hand_pos  # left hand base position
         roll, pitch, yaw = math.euler_xyz_from_quat(envstates.robots["shadow_hand_left"].root_state[:, 3:7])
         obs[:, 369] = roll
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left hand
-        obs[:, 398:411] = envstates.objects[self.current_object_type].root_state
-        obs[:, 408:411] *= self.vel_obs_scale  # object angvel
-        obs[:, 411:418] = torch.cat([self.goal_pos, self.goal_rot], dim=1)  # goal position and rotation (num_envs, 7)
-        obs[:, 418:] = math.quat_mul(
-            envstates.objects[self.current_object_type].root_state[:, 3:7], math.quat_inv(self.goal_rot)
-        )  # goal rotation - object rotation
+        obs[:, 398:411] = envstates.objects[f"{self.current_object_type}_1"].root_state
+        obs[:, 408:411] *= self.vel_obs_scale  # object1 angvel
+        obs[:, 411:424] = envstates.objects[f"{self.current_object_type}_2"].root_state
+        obs[:, 421:424] *= self.vel_obs_scale  # object2 angvel
         return obs
 
     def reward_fn(
@@ -484,29 +503,83 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             reset_goal_buf (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
             success_buf (torch.Tensor): The success buffer of all environments at this time, shape (num_envs,)
         """
+        # right hand fingertip positions and rotations
+        right_fingertip_pos_tensor = envstates.robots["shadow_hand_right"].body_state[:, self.r_fingertips_idx, :3]
+        right_hand_ff_pos =  right_fingertip_pos_tensor[:, 0, :]
+        right_hand_mf_pos =  right_fingertip_pos_tensor[:, 1, :]
+        right_hand_rf_pos =  right_fingertip_pos_tensor[:, 2, :]
+        right_hand_lf_pos =  right_fingertip_pos_tensor[:, 3, :]
+        right_hand_th_pos =  right_fingertip_pos_tensor[:, 4, :]
+        right_fingertip_rot_tensor = envstates.robots["shadow_hand_right"].body_state[:, self.r_fingertips_idx, 3:7]
+        right_hand_ff_rot =  right_fingertip_rot_tensor[:, 0, :]
+        right_hand_mf_rot =  right_fingertip_rot_tensor[:, 1, :]
+        right_hand_rf_rot =  right_fingertip_rot_tensor[:, 2, :]
+        right_hand_lf_rot =  right_fingertip_rot_tensor[:, 3, :]
+        right_hand_th_rot =  right_fingertip_rot_tensor[:, 4, :]
+
+        # Move the fingertips forward by 2 cm in local z direction
+        right_hand_ff_pos = right_hand_ff_pos + math.quat_apply(right_hand_ff_rot, self.z_unit_tensor * 0.02)
+        right_hand_mf_pos = right_hand_mf_pos + math.quat_apply(right_hand_mf_rot, self.z_unit_tensor * 0.02)
+        right_hand_rf_pos = right_hand_rf_pos + math.quat_apply(right_hand_rf_rot, self.z_unit_tensor * 0.02)
+        right_hand_lf_pos = right_hand_lf_pos + math.quat_apply(right_hand_lf_rot, self.z_unit_tensor * 0.02)
+        right_hand_th_pos = right_hand_th_pos + math.quat_apply(right_hand_th_rot, self.z_unit_tensor * 0.02)
+
+        # left hand fingertip positions and rotations
+        left_fingertip_pos_tensor = envstates.robots["shadow_hand_left"].body_state[:, self.l_fingertips_idx, :3]
+        left_hand_ff_pos =  left_fingertip_pos_tensor[:, 0, :]
+        left_hand_mf_pos =  left_fingertip_pos_tensor[:, 1, :]
+        left_hand_rf_pos =  left_fingertip_pos_tensor[:, 2, :]
+        left_hand_lf_pos =  left_fingertip_pos_tensor[:, 3, :]
+        left_hand_th_pos =  left_fingertip_pos_tensor[:, 4, :]
+        left_fingertip_rot_tensor = envstates.robots["shadow_hand_left"].body_state[:, self.l_fingertips_idx, 3:7]
+        left_hand_ff_rot =  left_fingertip_rot_tensor[:, 0, :]
+        left_hand_mf_rot =  left_fingertip_rot_tensor[:, 1, :]
+        left_hand_rf_rot =  left_fingertip_rot_tensor[:, 2, :]
+        left_hand_lf_rot =  left_fingertip_rot_tensor[:, 3, :]
+        left_hand_th_rot =  left_fingertip_rot_tensor[:, 4, :]
+
+        # Move the fingertips forward by 2 cm in local z direction
+        left_hand_ff_pos = left_hand_ff_pos + math.quat_apply(left_hand_ff_rot, self.z_unit_tensor * 0.02)
+        left_hand_mf_pos = left_hand_mf_pos + math.quat_apply(left_hand_mf_rot, self.z_unit_tensor * 0.02)
+        left_hand_rf_pos = left_hand_rf_pos + math.quat_apply(left_hand_rf_rot, self.z_unit_tensor * 0.02)
+        left_hand_lf_pos = left_hand_lf_pos + math.quat_apply(left_hand_lf_rot, self.z_unit_tensor * 0.02)
+        left_hand_th_pos = left_hand_th_pos + math.quat_apply(left_hand_th_rot, self.z_unit_tensor * 0.02)
+
+        # compute right and left hand positions
         right_hand_pos = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, :3]
+        right_hand_rot = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, 3:7]
+        right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.z_unit_tensor * 0.08)
+        right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.y_unit_tensor * -0.02)
         left_hand_pos = envstates.robots["shadow_hand_left"].body_state[:, self.l_palm_idx, :3]
+        left_hand_rot = envstates.robots["shadow_hand_left"].body_state[:, self.l_palm_idx, 3:7]
+        left_hand_pos = left_hand_pos + math.quat_apply(left_hand_rot, self.z_unit_tensor * 0.08)
+        left_hand_pos = left_hand_pos + math.quat_apply(left_hand_rot, self.y_unit_tensor * -0.02)
+
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_hand_reward(
             reset_buf=reset_buf,
             reset_goal_buf=reset_goal_buf,
             episode_length_buf=episode_length_buf,
             success_buf=success_buf,
             max_episode_length=self.episode_length,
-            object_pos=envstates.objects[self.current_object_type].root_state[:, :3],
-            object_rot=envstates.objects[self.current_object_type].root_state[:, 3:7],
+            right_object_pos=envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3],
+            left_object_pos=envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3],
             target_pos=self.goal_pos,
-            target_rot=self.goal_rot,
             right_hand_pos=right_hand_pos,
-            left_hand_pos= left_hand_pos,
-            dist_reward_scale=self.dist_reward_scale,
+            left_hand_pos=left_hand_pos,
+            right_hand_ff_pos=right_hand_ff_pos,
+            right_hand_mf_pos=right_hand_mf_pos,
+            right_hand_rf_pos=right_hand_rf_pos,
+            right_hand_lf_pos=right_hand_lf_pos,
+            right_hand_th_pos=right_hand_th_pos,
+            left_hand_ff_pos=left_hand_ff_pos,
+            left_hand_mf_pos=left_hand_mf_pos,
+            left_hand_rf_pos=left_hand_rf_pos,
+            left_hand_lf_pos=left_hand_lf_pos,
+            left_hand_th_pos=left_hand_th_pos,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
-            success_tolerance=self.success_tolerance,
             reach_goal_bonus=self.reach_goal_bonus,
-            throw_bonus=self.throw_bonus,
-            fall_penalty=self.fall_penalty,
             leave_penalty=self.leave_penalty,
-            is_testing=self.is_testing,
         )
         return reward, reset_buf, reset_goal_buf, success_buf
 
@@ -516,16 +589,7 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
         Args:
             env_ids (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs_to_reset,).
         """
-        # rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), 4), device=self.device)
-        # x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
-        # y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
-
-        # new_rot = randomize_rotation(rand_floats[:, 0], rand_floats[:, 1], x_unit_tensor, y_unit_tensor)
-
-        # self.goal_pos[env_ids] = self.init_goal_pos.clone()
-        # self.goal_rot[env_ids] = new_rot
-
-        return
+        pass
 
     def reset_init_pose_fn(self, init_states: list[EnvState], env_ids: torch.Tensor) -> list[EnvState]:
         """Reset the initial pose of the environment.
@@ -552,7 +616,6 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
 
             robot_dof_default_pos = self.robot_dof_default_pos_cpu[self.robots[0].name]
-
             delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
             delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
 
@@ -560,7 +623,6 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
                 # reset object
                 for obj_name in reset_state[env_id]["objects"].keys():
                     reset_state[env_id]["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
-                    reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
 
                 # reset shadow hand
                 for robot_name in reset_state[env_id]["robots"].keys():
@@ -585,7 +647,6 @@ class ShadowHandCatchAbreastCfg(BaseRLTaskCfg):
             for obj_id, obj in enumerate(self.objects):
                 root_state = reset_state.objects[obj.name].root_state
                 root_state[env_ids, :3] += self.reset_position_noise * rand_floats[:, :3]
-                root_state[env_ids, 3:7] = new_object_rot
                 obj_state = ObjectState(
                     root_state=root_state,
                 )
@@ -620,21 +681,25 @@ def compute_hand_reward(
     episode_length_buf,
     success_buf,
     max_episode_length: float,
-    object_pos,
-    object_rot,
+    right_object_pos,
+    left_object_pos,
     target_pos,
-    target_rot,
     right_hand_pos,
     left_hand_pos,
-    dist_reward_scale: float,
+    right_hand_ff_pos,
+    right_hand_mf_pos,
+    right_hand_rf_pos,
+    right_hand_lf_pos,
+    right_hand_th_pos,
+    left_hand_ff_pos,
+    left_hand_mf_pos,
+    left_hand_rf_pos,
+    left_hand_lf_pos,
+    left_hand_th_pos,
     action_penalty_scale: float,
     actions,
-    success_tolerance: float,
     reach_goal_bonus: float,
-    throw_bonus: float,
-    fall_penalty: float,
     leave_penalty: float,
-    is_testing: bool = False,
 ):
     """Compute the reward of all environment.
 
@@ -649,96 +714,112 @@ def compute_hand_reward(
 
         max_episode_length (float): The max episode length in this environment
 
-        object_pos (tensor): The position of the object
+        right_object_pos (tensor): The position of the right object, shape (num_envs, 3)
 
-        object_rot (tensor): The rotation of the object
+        left_object_pos (tensor): The position of the left object, shape (num_envs, 3)
 
-        target_pos (tensor): The position of the target
-
-        target_rot (tensor): The rotate of the target
+        target_pos (tensor): The position of the goal, shape (num_envs, 3)
 
         right_hand_pos (tensor): The position of the right hand, shape (num_envs, 3)
 
         left_hand_pos (tensor): The position of the left hand, shape (num_envs, 3)
 
-        dist_reward_scale (float): The scale of the distance reward
+        right_hand_ff_pos (tensor): The position of the right hand's index finger, shape (num_envs, 3)
+
+        right_hand_mf_pos (tensor): The position of the right hand's middle finger, shape (num_envs, 3)
+
+        right_hand_rf_pos (tensor): The position of the right hand's ring finger, shape (num_envs, 3)
+
+        right_hand_lf_pos (tensor): The position of the right hand's little finger, shape (num_envs, 3)
+
+        right_hand_th_pos (tensor): The position of the right hand's thumb, shape (num_envs, 3)
+
+        left_hand_ff_pos (tensor): The position of the left hand's index finger, shape (num_envs, 3)
+
+        left_hand_mf_pos (tensor): The position of the left hand's middle finger, shape (num_envs, 3)
+
+        left_hand_rf_pos (tensor): The position of the left hand's ring finger, shape (num_envs, 3)
+
+        left_hand_lf_pos (tensor): The position of the left hand's little finger, shape (num_envs, 3)
+
+        left_hand_th_pos (tensor): The position of the left hand's thumb, shape (num_envs, 3)
 
         action_penalty_scale (float): The scale of the action penalty
 
         actions (tensor): The action buffer of all environments at this time
 
-        success_tolerance (float): The tolerance of the success determined
-
         reach_goal_bonus (float): The reward given when the object reaches the goal
 
-        throw_bonus (float): The reward given when the object is thrown
+        leave_penalty (float): The penalty for leaving the goal area
 
-        fall_penalty (float): The reward given when the object is fell
-
-        leave_penalty (float): The reward given when hand leaves its base position
-
-        is_testing (bool): Whether the environment is in testing mode, default False
     """
+    stack_pos1 = target_pos.clone()
+    stack_pos2 = target_pos.clone()
+
+    stack_pos1[:, 1] -= 0.1
+    stack_pos2[:, 1] -= 0.1
+    # stack_pos1[:, 2] += 0.025
+    stack_pos1[:, 2] += 0.05
     # Distance from the hand to the object
-    diff_xy = target_pos[:, :2] - object_pos[:, :2]
-    reward_dist_xy = torch.norm(diff_xy, p=2, dim=-1)
-    reward_dist_z = torch.clamp(torch.abs(target_pos[:, 2] - object_pos[:, 2]), max=0.03)
-    reward_dist = torch.where(reward_dist_xy <= 0.5, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
-    goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
+    goal_dist1 = torch.norm(stack_pos1 - left_object_pos, p=2, dim=-1)
+    goal_dist2 = torch.norm(stack_pos2 - right_object_pos, p=2, dim=-1)
 
     # Orientation alignment for the cube in hand and goal cube
-    quat_diff = math.quat_mul(object_rot, math.quat_inv(target_rot))
-    rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 1:4], p=2, dim=-1), max=1.0))
+    right_hand_dist = torch.norm(right_object_pos - right_hand_pos, p=2, dim=-1)
+    left_hand_dist = torch.norm(left_object_pos - left_hand_pos, p=2, dim=-1)
 
-    dist_rew = reward_dist
+    right_hand_finger_dist = (torch.norm(right_object_pos - right_hand_ff_pos, p=2, dim=-1) + torch.norm(right_object_pos - right_hand_mf_pos, p=2, dim=-1)
+                            + torch.norm(right_object_pos - right_hand_rf_pos, p=2, dim=-1) + torch.norm(right_object_pos - right_hand_lf_pos, p=2, dim=-1)
+                            + torch.norm(right_object_pos - right_hand_th_pos, p=2, dim=-1))
+    left_hand_finger_dist = (torch.norm(left_object_pos - left_hand_ff_pos, p=2, dim=-1) + torch.norm(left_object_pos - left_hand_mf_pos, p=2, dim=-1)
+                            + torch.norm(left_object_pos - left_hand_rf_pos, p=2, dim=-1) + torch.norm(left_object_pos - left_hand_lf_pos, p=2, dim=-1)
+                            + torch.norm(left_object_pos - left_hand_th_pos, p=2, dim=-1))
 
     action_penalty = torch.sum(actions**2, dim=-1)
 
-    # Total reward is: position distance + orientation alignment + action regularization + success bonus + fall penalty
-    reward = torch.exp(-0.2 * (dist_rew * dist_reward_scale)) - action_penalty * action_penalty_scale
+    # No goal reset
+    goal_resets = torch.zeros_like(reset_buf, dtype=torch.float32)
 
-    # Find out which envs hit the goal and update successes count
-    goal_resets = torch.where(
-        torch.abs(goal_dist) <= 0.03,
-        torch.ones_like(reset_goal_buf),
-        reset_goal_buf,
-    )
+    right_hand_dist_rew = right_hand_finger_dist
+    left_hand_dist_rew = left_hand_finger_dist
+
+    action_penalty = torch.sum(actions ** 2, dim=-1)
+
+    # # Total reward is: position distance + orientation alignment + action regularization + success bonus + fall penalty
+    up_rew = torch.zeros_like(right_hand_dist_rew)
+    up_rew = torch.where(right_hand_finger_dist < 0.5,
+                    torch.where(left_hand_finger_dist < 0.5,
+                        (0.24 - goal_dist1 - goal_dist2) * 2, up_rew), up_rew)
+
+    stack_rew = torch.zeros_like(right_hand_dist_rew)
+    stack_rew = torch.where(goal_dist2 < 0.07,
+                    torch.where(goal_dist1 < 0.07,
+                        (0.05-torch.abs(stack_pos1[:, 2] - left_object_pos[:, 2])) * 50 ,stack_rew),stack_rew)
+
+    reward = 1.5 - right_hand_dist_rew - left_hand_dist_rew + up_rew + stack_rew
+
+    success = stack_rew > 1
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            torch.abs(goal_dist) <= 0.03,
+            success,
             torch.ones_like(success_buf),
-            success_buf,
+            torch.zeros_like(success_buf),
         ),
         success_buf,
     )
 
-    # Reward for throwing the object
-    thrown = (diff_xy[:, 1] >= -0.40) & (diff_xy[:, 1] <= -0.1) & (object_pos[:, 2] >= 0.4)
-    reward = torch.where(thrown, reward + (diff_xy[:, 1] + 1.4) * throw_bonus, reward)
-    # reward = torch.where(thrown, reward + throw_bonus, reward)
-
-    # Success bonus: orientation is within `success_tolerance` of goal orientation
-    reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
-
-    # Fall penalty: distance to the goal is larger than a threashold
-    reward = torch.where(object_pos[:, 2] <= 0.2, reward - fall_penalty, reward)
+    reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(object_pos[:, 2] <= 0.2, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(right_hand_dist_rew <= 0, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(right_hand_finger_dist >= 0.75, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_finger_dist >= 0.75, torch.ones_like(resets), resets)
 
-    right_hand_base_dist = torch.norm(right_hand_pos - torch.tensor([-0.3, -0.55, 0.5], dtype=torch.float, device=right_hand_pos.device), p=2, dim=-1)
-    left_hand_base_dist = torch.norm(left_hand_pos - torch.tensor([-0.3, -1.15, 0.5], dtype=torch.float, device=left_hand_pos.device), p=2, dim=-1)
-
-    reward = torch.where(right_hand_base_dist >= 0.1, reward - leave_penalty, reward)
-    reward = torch.where(left_hand_base_dist >= 0.1, reward - leave_penalty, reward)
-
-    if not is_testing:
-        resets = torch.where(right_hand_base_dist >= 0.1, torch.ones_like(resets), resets)
-        resets = torch.where(left_hand_base_dist >= 0.1, torch.ones_like(resets), resets)
+    penalty = (left_hand_finger_dist >= 1.2) | (right_hand_finger_dist >= 1.2)
+    reward = torch.where(penalty, reward - leave_penalty, reward)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
-
+    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
     return reward, resets, goal_resets, success_buf

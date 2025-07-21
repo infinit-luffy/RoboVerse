@@ -663,6 +663,12 @@ class IsaacgymHandler(BaseSimHandler):
                 env_robot_handles.append(robot_handle)
                 self.gym.set_actor_dof_properties(env, robot_handle, robot_dof_props)
 
+                if hasattr(robot, "friction") and robot.friction is not None:
+                    shape_props = self.gym.get_actor_rigid_shape_properties(env, robot_handle)
+                    for shape_prop in shape_props:
+                        shape_prop.friction = robot.friction
+                    self.gym.set_actor_rigid_shape_properties(env, obj_handle, shape_props)
+
                 robot_rigid_body_indices = {}
                 robot_link_dict = self._robot_link_dict_list[robot_idx]
                 for rigid_body_name, rigid_body_idx in robot_link_dict.items():

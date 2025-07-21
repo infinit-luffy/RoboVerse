@@ -35,7 +35,7 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
     source_benchmark = BenchmarkType.BIDEX
     task_type = TaskType.TABLETOP_MANIPULATION
     is_testing = False
-    episode_length = 150
+    episode_length = 125
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandPen/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None

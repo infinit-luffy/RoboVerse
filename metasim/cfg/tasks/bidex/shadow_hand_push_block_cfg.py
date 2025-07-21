@@ -10,7 +10,7 @@ import torch
 from loguru import logger as log
 from rich.logging import RichHandler
 
-from metasim.cfg.objects import RigidObjCfg, PrimitiveCubeCfg
+from metasim.cfg.objects import RigidObjCfg, PrimitiveCubeCfg, ArticulationObjCfg
 from metasim.cfg.robots import ShadowHandCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
@@ -39,7 +39,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandPushBlock/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
-    obs_shape = 410
+    obs_shape = 430
     action_shape = 52
     current_object_type = "cube"
     objects_cfg = {
@@ -243,12 +243,12 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
                     f"{self.current_object_type}_1": {
-                        "pos": torch.tensor([0.0, 0.2, 0.6]),
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                        "pos": torch.tensor([0.0, 0.2, 0.625]),
+                        "rot": torch.tensor([0.5, 0.5, 0.5, -0.5]),
                     },
                     f"{self.current_object_type}_2": {
-                        "pos": torch.tensor([0.0, -0.2, 0.6]),
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                        "pos": torch.tensor([0.0, -0.2, 0.625]),
+                        "rot": torch.tensor([0.5, 0.5, 0.5, -0.5]),
                     },
                 },
                 "robots": {
@@ -473,16 +473,16 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left hand
-        obs[:, 398:401] = envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3]  # object1 position
-        obs[:, 401:404] = envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3]  # object2 position
-        obs[:, 404:407] = self.right_goal_pos  # object 1 goal position
-        obs[:, 407:410] = self.left_goal_pos  # object 2 goal position
-        # obs[:, 398:411] = envstates.objects[f"{self.current_object_type}_1"].root_state
-        # obs[:, 408:411] *= self.vel_obs_scale  # object1 angvel
-        # obs[:, 411:424] = envstates.objects[f"{self.current_object_type}_2"].root_state
-        # obs[:, 421:424] *= self.vel_obs_scale  # object2 angvel
-        # obs[:, 424:427] = self.right_goal_pos  # object 1 goal position
-        # obs[:, 427:] = self.left_goal_pos  # object 2 goal position
+        # obs[:, 398:401] = envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3]  # object1 position
+        # obs[:, 401:404] = envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3]  # object2 position
+        # obs[:, 404:407] = self.right_goal_pos  # object 1 goal position
+        # obs[:, 407:410] = self.left_goal_pos  # object 2 goal position
+        obs[:, 398:411] = envstates.objects[f"{self.current_object_type}_1"].root_state
+        obs[:, 408:411] *= self.vel_obs_scale  # object1 angvel
+        obs[:, 411:424] = envstates.objects[f"{self.current_object_type}_2"].root_state
+        obs[:, 421:424] *= self.vel_obs_scale  # object2 angvel
+        obs[:, 424:427] = self.right_goal_pos  # object 1 goal position
+        obs[:, 427:] = self.left_goal_pos  # object 2 goal position
         return obs
 
     def reward_fn(
@@ -781,39 +781,11 @@ def compute_hand_reward(
 
     action_penalty = torch.sum(actions**2, dim=-1)
 
-    # right_force = actions[:, :3]
-    # left_force = actions[:, 26:29]
-
-    # left_dir = left_object_pos - left_hand_pos
-    # left_dir = left_dir / (torch.norm(left_dir, dim=-1, keepdim=True) + 1e-8)
-    # right_dir = right_object_pos - right_hand_pos
-    # right_dir = right_dir / (torch.norm(right_dir, dim=-1, keepdim=True) + 1e-8)
-    # right_force_reach_dir_reward = torch.sum(right_force * right_dir, dim=-1)
-    # left_force_reach_dir_reward = torch.sum(left_force * left_dir, dim=-1)
-
-    # left_dir = left_target_pos - left_object_pos
-    # left_dir = left_dir / (torch.norm(left_dir, dim=-1, keepdim=True) + 1e-8)
-    # right_dir = right_target_pos - right_object_pos
-    # right_dir = right_dir / (torch.norm(right_dir, dim=-1, keepdim=True) + 1e-8)
-    # right_force_push_dir_reward = torch.sum(right_force * right_dir, dim=-1)
-    # left_force_push_dir_reward = torch.sum(left_force * left_dir, dim=-1)
-
-    # right_hand_dist_rew = 1.2 - 4 * right_hand_dist
-    # right_hand_dist_rew = torch.where(right_hand_dist < 0.08, right_hand_dist_rew + 1.2 - 1 * right_hand_finger_dist, right_hand_dist_rew)
-    # right_hand_dist_rew = torch.where(right_hand_dist < 0.09, right_hand_dist_rew + 4.0 + right_force_push_dir_reward * 0.5, right_hand_dist_rew + right_force_reach_dir_reward * 0.5)
-    # left_hand_dist_rew = 1.2 - 4 * left_hand_dist
-    # left_hand_dist_rew = torch.where(left_hand_dist < 0.08, left_hand_dist_rew + 1.2 - 1 * left_hand_finger_dist, left_hand_dist_rew)
-    # left_hand_dist_rew = torch.where(left_hand_dist < 0.09, left_hand_dist_rew + 4.0 + left_force_push_dir_reward * 0.5, left_hand_dist_rew + left_force_reach_dir_reward * 0.5)
-    # up_rew = torch.zeros_like(right_hand_dist_rew)
-    # up_rew = 4 - 5 * left_goal_dist - 5 * right_goal_dist
-    # reward = right_hand_dist_rew + left_hand_dist_rew + up_rew
-    # # No goal reset
+    # No goal reset
     goal_resets = torch.zeros_like(reset_buf, dtype=torch.float32)
 
     right_hand_dist_rew = 1.2 - 1 * right_hand_finger_dist
     left_hand_dist_rew = 1.2 - 1 * left_hand_finger_dist
-
-    action_penalty = torch.sum(actions ** 2, dim=-1)
 
     # # Total reward is: position distance + orientation alignment + action regularization + success bonus + fall penalty
     up_rew = torch.zeros_like(right_hand_dist_rew)
@@ -831,13 +803,13 @@ def compute_hand_reward(
         success_buf,
     )
 
-    # reward = torch.where(success_buf == 1, reward + reach_goal_bonus, reward)
+    reward = torch.where(success_buf == 1, reward + reach_goal_bonus, reward)
     # Check env termination conditions, including maximum success number
     resets = torch.where(right_hand_finger_dist >= 1.2, torch.ones_like(reset_buf), reset_buf)
     resets = torch.where(left_hand_finger_dist >= 1.2, torch.ones_like(resets), resets)
 
-    penalty = (left_hand_finger_dist >= 1.2) | (right_hand_finger_dist >= 1.2)
-    reward = torch.where(penalty, reward - leave_penalty, reward)
+    # penalty = (left_hand_finger_dist >= 1.2) | (right_hand_finger_dist >= 1.2)
+    # reward = torch.where(penalty, reward - leave_penalty, reward)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

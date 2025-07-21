@@ -793,6 +793,7 @@ def compute_hand_reward(
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
+    # reward = torch.where(success_buf == 1, reward + reach_goal_bonus, reward)
     reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number

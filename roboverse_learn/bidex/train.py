@@ -77,15 +77,26 @@ def get_config_path(args):
     if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm",
                      "ShadowHandPushBlock", "ShadowHandTurnButton", "ShadowHandCatchAbreast",
                      "ShadowHandSwingCup", "ShadowHandCloseInward", "ShadowHandOpenOutward",
-                     "ShadowHandCloseOutward", "ShadowHandOpenInward", "ShadowHandScissor"]:
+                     "ShadowHandCloseOutward", "ShadowHandOpenInward", "ShadowHandScissor",
+                     "ShadowHandPen"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",
+        )
+    elif args.task in ["ShadowHandStackBlock"]:
+        return (
+            os.path.join(args.logdir, f"{args.task}/{args.algo}"),
+            f"roboverse_learn/bidex/cfg/{args.algo}/stack_block_config.yaml",
         )
     elif args.task in ["ShadowHandLiftUnderarm"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/lift_config.yaml",
+        )
+    elif args.task in ["ShadowHandReOrientation"]:
+        return (
+            os.path.join(args.logdir, f"{args.task}/{args.algo}"),
+            f"roboverse_learn/bidex/cfg/{args.algo}/re_orientation_config.yaml",
         )
     else:
         raise ValueError(f"Unrecognized task: {args.task}. Please specify a valid task.")

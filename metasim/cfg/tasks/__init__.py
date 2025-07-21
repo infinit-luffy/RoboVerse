@@ -24,6 +24,7 @@ def __get_quick_ref():
     from .bidex.shadow_hand_open_outward_cfg import ShadowHandOpenOutwardCfg
     from .bidex.shadow_hand_close_outward_cfg import ShadowHandCloseOutwardCfg
     from .bidex.shadow_hand_open_inward_cfg import ShadowHandOpenInwardCfg
+    from .bidex.shadow_hand_scissor_cfg import ShadowHandScissorCfg
 
     from .calvin.calvin import MoveSliderLeftACfg
     from .debug.reach_cfg import ReachOriginCfg

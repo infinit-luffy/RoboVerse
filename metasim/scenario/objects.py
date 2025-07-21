@@ -166,6 +166,7 @@ class ArticulationObjCfg(_FileBasedMixin, BaseArticulationObjCfg):
     override_inertia: bool = False
     use_mesh_materials: bool = False
     mesh_normal_mode: str | None = None
+    collapse_fixed_joints: bool = False
     """Articulation object cfg."""
 
 

@@ -50,6 +50,7 @@ class BiDexEnvWrapper:
         obs_shape = (self.task.obs_shape,)
         self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=obs_shape, dtype=np.float32)
         self.tensor_states = None
+        self.tensor_obs = None
         log.info(f"Observation space: {self.observation_space}")
         log.info(f"Action space: {self.action_space}")
 
@@ -130,6 +131,7 @@ class BiDexEnvWrapper:
             torch.tensor(self.observation_space.low, device=self.sim_device),
             torch.tensor(self.observation_space.high, device=self.sim_device),
         )
+        self.tensor_obs = observations
 
         # Reset episode tracking variables
         self.episode_rewards = torch.zeros(self.num_envs, dtype=torch.float32, device=self.sim_device)
@@ -186,6 +188,13 @@ class BiDexEnvWrapper:
         step_action = self.pre_physics_step(actions, tensor=True)
         envstates, _, _, _, _ = self.env.step(step_action)
         self.post_physics_step(envstates, actions)
+
+        self.tensor_obs = self.task.observation_fn(envstates=envstates, actions=actions, device=self.sim_device)
+        self.tensor_obs = torch.clamp(
+            self.tensor_obs,
+            torch.tensor(self.observation_space.low, device=self.sim_device),
+            torch.tensor(self.observation_space.high, device=self.sim_device),
+        )
 
         rewards = deepcopy(self.episode_rewards)
         dones = deepcopy(self.episode_reset)

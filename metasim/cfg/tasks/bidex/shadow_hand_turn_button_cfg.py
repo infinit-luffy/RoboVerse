@@ -48,7 +48,7 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
             scale=(1, 1, 1),
             urdf_path="roboverse_data/assets/bidex/objects/urdf/switch_mobility.urdf",
             default_density=500.0,
-            fix_base_link= True,
+            disable_gravity=True,
             use_vhacd=True,
         ),
         "table": PrimitiveCubeCfg(

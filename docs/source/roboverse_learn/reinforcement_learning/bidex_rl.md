@@ -23,7 +23,7 @@ wandb login
 - IsaacGym:
 
     ```bash
-    python roboverse_learn/bidex/train.py 
+    python roboverse_learn/bidex/train.py
     --task ShadowHandOver # task to be trained
     --num_envs 128
     --episode_length 75
@@ -58,17 +58,18 @@ wandb login
 - [ ]  ShadowHandPushBlock
     - Still training bugs, can't be successfully solved
 - [x]  ShadowHandTurnBotton
-- [ ]  ShadowHandCatchAbreast
-    - Isn't be fully solved by original repo
+- [x]  ShadowHandCatchAbreast
 - [ ]  ShadowHandLiftUnderarm
-- [ ]  ShadowHandSwingCup
+    - Still training bugs, can't be successfully solved
 - [ ]  ShadowHandCatchTwoCatchUnderarm
     - Isn't be fully solved by original repo
 - [ ]  ShadowHandDoorOpenInward
-- [ ]  ShadowHandDoorOpenOutward
-- [ ]  ShadowHandDoorCloseInward
+- [x]  ShadowHandDoorOpenOutward
+- [x]  ShadowHandDoorCloseInward
+- [x]  ShadowHandDoorCloseOutward
 - [ ]  ShadowHandBottleCap
 - [ ]  ShadowHandOpenScissors
 - [ ]  ShadowHandOpenPenCap
 - [ ]  ShadowHandSwingCup
-- [ ]  ShadowHandGrasp AndPlace
+    - Still training bugs, can't be successfully solved
+- [ ]  ShadowHandGraspAndPlace

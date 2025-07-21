@@ -48,6 +48,7 @@ class ShadowHandLiftUnderarmCfg(BaseRLTaskCfg):
             urdf_path="roboverse_data/assets/bidex/objects/urdf/pot_mobility.urdf",
             default_density=1000.0,
             friction=3,
+            fix_base_link=False,
         ),
         "table": PrimitiveCubeCfg(
             name="table",

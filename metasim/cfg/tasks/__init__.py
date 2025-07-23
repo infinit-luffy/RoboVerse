@@ -30,6 +30,8 @@ def __get_quick_ref():
     from .bidex.shadow_hand_re_orientation_cfg import ShadowHandReOrientationCfg
     from .bidex.shadow_hand_two_catch_underarm_cfg import ShadowHandTwoCatchUnderarmCfg
     from .bidex.shadow_hand_bottle_cfg import ShadowHandBottleCfg
+    from .bidex.shadow_hand_grasp_place_cfg import ShadowHandGraspPlaceCfg
+    from .bidex.shadow_hand_kettle_cfg import ShadowHandKettleCfg
 
     from .calvin.calvin import MoveSliderLeftACfg
     from .debug.reach_cfg import ReachOriginCfg

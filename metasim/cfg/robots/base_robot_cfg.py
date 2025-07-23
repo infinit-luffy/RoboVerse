@@ -81,6 +81,8 @@ class BaseRobotCfg(ArticulationObjCfg):
     use_vhacd: bool = False
     """Whether to use VHACD for collision mesh generation. Default to False. If True, the VHACD algorithm will be used to generate the collision mesh for the robot. This is useful for robots with complex geometry or when the collision mesh is not provided in the asset file."""
 
+    vhacd_resolution: int | None = None
+
     ############################################################
     ## For motion planning and retargetting using cuRobo
     ############################################################

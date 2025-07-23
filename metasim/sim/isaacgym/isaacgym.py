@@ -296,6 +296,8 @@ class IsaacgymHandler(BaseSimHandler):
                     raise ValueError(f"Invalid mesh_normal_mode: {object.mesh_normal_mode}. Use 'vertex' or 'face'.")
             if object.use_vhacd:
                 asset_options.vhacd_enabled = True
+                if object.vhacd_resolution is not None:
+                    asset_options.vhacd_params.resolution = object.vhacd_resolution
             asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
@@ -328,6 +330,8 @@ class IsaacgymHandler(BaseSimHandler):
                     raise ValueError(f"Invalid mesh_normal_mode: {object.mesh_normal_mode}. Use 'vertex' or 'face'.")
             if object.use_vhacd:
                 asset_options.vhacd_enabled = True
+                if object.vhacd_resolution is not None:
+                    asset_options.vhacd_params.resolution = object.vhacd_resolution
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
             asset = self.gym.load_asset(self.sim, asset_root, asset_path, asset_options)

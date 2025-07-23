@@ -78,7 +78,8 @@ def get_config_path(args):
                      "ShadowHandPushBlock", "ShadowHandTurnButton", "ShadowHandCatchAbreast",
                      "ShadowHandSwingCup", "ShadowHandCloseInward", "ShadowHandOpenOutward",
                      "ShadowHandCloseOutward", "ShadowHandOpenInward", "ShadowHandScissor",
-                     "ShadowHandPen", "ShadowHandTwoCatchUnderarm", "ShadowHandBottle"]:
+                     "ShadowHandPen", "ShadowHandTwoCatchUnderarm", "ShadowHandBottle",
+                     "ShadowHandGraspPlace", "ShadowHandKettle"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",

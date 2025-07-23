@@ -155,6 +155,7 @@ class RigidObjCfg(_FileBasedMixin, BaseRigidObjCfg):
     override_inertia: bool = False
     use_mesh_materials: bool = False
     mesh_normal_mode: str | None = None
+    vhacd_resolution: int | None = None
     """Rigid object cfg."""
 
 
@@ -167,6 +168,7 @@ class ArticulationObjCfg(_FileBasedMixin, BaseArticulationObjCfg):
     use_mesh_materials: bool = False
     mesh_normal_mode: str | None = None
     collapse_fixed_joints: bool = False
+    vhacd_resolution: int | None = None
     """Articulation object cfg."""
 
 

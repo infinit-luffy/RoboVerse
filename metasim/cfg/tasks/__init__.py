@@ -28,6 +28,8 @@ def __get_quick_ref():
     from .bidex.shadow_hand_pen_cfg import ShadowHandPenCfg
     from .bidex.shadow_hand_stack_block_cfg import ShadowHandStackBlockCfg
     from .bidex.shadow_hand_re_orientation_cfg import ShadowHandReOrientationCfg
+    from .bidex.shadow_hand_two_catch_underarm_cfg import ShadowHandTwoCatchUnderarmCfg
+    from .bidex.shadow_hand_bottle_cfg import ShadowHandBottleCfg
 
     from .calvin.calvin import MoveSliderLeftACfg
     from .debug.reach_cfg import ReachOriginCfg

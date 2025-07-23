@@ -55,21 +55,32 @@ wandb login
 - [x]  ShadowHandOver
 - [x]  ShadowHandCatchUnderarm
 - [x]  ShadowHandOver2Underarm
-- [ ]  ShadowHandPushBlock
-    - Still training bugs, can't be successfully solved
-- [x]  ShadowHandTurnBotton
-- [x]  ShadowHandCatchAbreast
-- [ ]  ShadowHandLiftUnderarm
-    - Still training bugs, can't be successfully solved
-- [ ]  ShadowHandCatchTwoCatchUnderarm
-    - Isn't be fully solved by original repo
-- [ ]  ShadowHandDoorOpenInward
 - [x]  ShadowHandDoorOpenOutward
 - [x]  ShadowHandDoorCloseInward
 - [x]  ShadowHandDoorCloseOutward
-- [ ]  ShadowHandBottleCap
+- [x]  ShadowHandTurnBotton
+- [x]  ShadowHandCatchAbreast
+- [x]  ShadowHandBottleCap
+- [ ]  ShadowHandPushBlock
+    - To train
+- [ ]  ShadowHandLiftUnderarm
+    - To train
+- [ ]  ShadowHandDoorOpenInward
+    - To train
 - [ ]  ShadowHandOpenScissors
+    - To train
 - [ ]  ShadowHandOpenPenCap
+    - To train
 - [ ]  ShadowHandSwingCup
-    - Still training bugs, can't be successfully solved
+    - To train
+- [ ]  ShadowHandBlockStack
+    - To train
+- [ ]  ShadowHandReOrientation
+    - Isn't fully solved by original repo
+    - To train
+- [ ]  ShadowHandCatchTwoCatchUnderarm
+    - Isn't fully solved by original repo
+- [ ]  ShadowHandPourWater
+    - Isn't fully solved by original repo
 - [ ]  ShadowHandGraspAndPlace
+    - Isn't fully solved by original repo

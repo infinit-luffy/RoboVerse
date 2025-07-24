@@ -42,6 +42,8 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
     obs_shape = 430
     action_shape = 52
     current_object_type = "cube"
+    max_agg_bodies = 56
+    max_agg_shapes = 48
     objects_cfg = {
         "cube": RigidObjCfg(
             name="cube",
@@ -71,6 +73,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             angular_damping=100.0,
             linear_damping=100.0,
             dof_drive_mode='none',
+            use_vhacd=False,
         ),
         ShadowHandCfg(
             name="shadow_hand_left",
@@ -79,6 +82,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             angular_damping=100.0,
             linear_damping=100.0,
             dof_drive_mode='none',
+            use_vhacd=False,
         ),
     ]
     num_actuated_joints = {}
@@ -103,7 +107,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
     )
     dt = sim_params.dt  # Simulation time step
     transition_scale = 0.5
-    orientation_scale = 0.05
+    orientation_scale = 0.1
     right_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     left_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     fingertips = ["robot0_ffdistal", "robot0_mfdistal", "robot0_rfdistal", "robot0_lfdistal", "robot0_thdistal"]
@@ -568,8 +572,8 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             episode_length_buf=episode_length_buf,
             success_buf=success_buf,
             max_episode_length=self.episode_length,
-            right_object_pos=envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3],
-            left_object_pos=envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3],
+            right_object_pos=envstates.objects[f"{self.current_object_type}_1"].body_state[:, 0, :3],
+            left_object_pos=envstates.objects[f"{self.current_object_type}_2"].body_state[:, 0, :3],
             right_target_pos=self.right_goal_pos,
             left_target_pos=self.left_goal_pos,
             right_hand_pos=right_hand_pos,

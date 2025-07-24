@@ -63,15 +63,7 @@ wandb login
 - [x]  ShadowHandBottleCap
 - [ ]  ShadowHandPushBlock
     - To train
-- [ ]  ShadowHandLiftUnderarm
-    - To train
 - [ ]  ShadowHandDoorOpenInward
-    - To train
-- [ ]  ShadowHandOpenScissors
-    - To train
-- [ ]  ShadowHandOpenPenCap
-    - To train
-- [ ]  ShadowHandSwingCup
     - To train
 - [ ]  ShadowHandBlockStack
     - To train
@@ -80,6 +72,14 @@ wandb login
     - To train
 - [ ]  ShadowHandCatchTwoCatchUnderarm
     - Isn't fully solved by original repo
+- [ ]  ShadowHandLiftUnderarm
+    - To train
+- [ ]  ShadowHandOpenScissors
+    - To train
+- [ ]  ShadowHandOpenPenCap
+    - To train
+- [ ]  ShadowHandSwingCup
+    - To train
 - [ ]  ShadowHandPourWater
     - Isn't fully solved by original repo
 - [ ]  ShadowHandGraspAndPlace

@@ -48,7 +48,7 @@ class ShadowHandBottleCfg(BaseRLTaskCfg):
             urdf_path="roboverse_data/assets/bidex/objects/urdf/bottle_mobility.urdf",
             default_density=500.0,
             friction=100,
-            # fix_base_link=False,
+            fix_base_link=False,
         ),
         "table": PrimitiveCubeCfg(
             name="table",
@@ -129,7 +129,7 @@ class ShadowHandBottleCfg(BaseRLTaskCfg):
     fall_penalty = 0.0
     reset_position_noise = 0.0
     reset_dof_pos_noise = 0.0
-    rot_reward_scale = 5.0
+    rot_reward_scale = 1.0
     rot_eps = 0.1
 
     def set_objects(self) -> None:
@@ -788,9 +788,6 @@ def compute_hand_reward(
     resets = torch.where(bottle_cap_pos[:, 2] <= 0.5, torch.ones_like(reset_buf), reset_buf)
     resets = torch.where(left_hand_dist >= 0.5, torch.ones_like(resets), resets)
     resets = torch.where(right_hand_dist >= 0.2, torch.ones_like(resets), resets)
-
-    # reward = torch.where(right_hand_finger_dist >= 1.75, reward - 1.0, reward)
-    # reward = torch.where(left_hand_finger_dist >= 1.75, reward - 1.0, reward)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

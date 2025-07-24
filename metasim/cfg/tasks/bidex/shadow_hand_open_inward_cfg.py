@@ -55,6 +55,7 @@ class ShadowHandOpenInwardCfg(BaseRLTaskCfg):
             mesh_normal_mode="vertex",
             friction=0.1,
             use_vhacd=True,
+            vhacd_resolution=20000,
         ),
     }
     objects = []

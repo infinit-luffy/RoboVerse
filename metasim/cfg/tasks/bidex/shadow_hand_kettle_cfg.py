@@ -39,7 +39,7 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandKettle/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
-    obs_shape = 431
+    obs_shape = 430
     action_shape = 52
     current_object_type = "kettle"
     objects_cfg = {
@@ -48,7 +48,7 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
             urdf_path="roboverse_data/assets/bidex/objects/urdf/kettle_mobility.urdf",
             default_density=500.0,
             use_vhacd=True,
-            fix_base_link=False,
+            # fix_base_link=False,
             override_com=True,
             override_inertia=True,
             use_mesh_materials=True,
@@ -61,7 +61,7 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
             urdf_path="roboverse_data/assets/bidex/objects/urdf/bucket_mobility.urdf",
             default_density=500.0,
             use_vhacd=True,
-            fix_base_link=False,
+            # fix_base_link=False,
             override_com=True,
             override_inertia=True,
             use_mesh_materials=True,
@@ -263,6 +263,9 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
                     "kettle": {
                         "pos": torch.tensor([0.0, 0.0, 0.5]),
                         "rot": torch.tensor([0.707, 0.0, 0.0, 0.707]),
+                        "dof_pos": {
+                            "joint_0": 0.0,
+                        }
                     },
                     "bucket": {
                         "pos": torch.tensor([0.0, -0.3, 0.5]),
@@ -504,7 +507,7 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
         bucket_handle_rot = envstates.objects["bucket"].body_state[:, self.bucket_handle_idx, 3:7]
         bucket_handle_pos = bucket_handle_pos + math.quat_apply(bucket_handle_rot, self.z_unit_tensor * -0.1)
         obs[:, 424:427] = kettle_handle_pos
-        obs[:, 427:431] = bucket_handle_pos
+        obs[:, 427:430] = bucket_handle_pos
         return obs
 
     def reward_fn(
@@ -604,9 +607,9 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
             episode_length_buf=episode_length_buf,
             success_buf=success_buf,
             max_episode_length=self.episode_length,
-            right_object_pos=envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3],
-            left_object_pos=envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3],
-            target_pos=self.goal_pos,
+            kettle_handle_pos=kettle_handle_pos,
+            kettle_spout_pos=kettle_spout_pos,
+            bucket_handle_pos=bucket_handle_pos,
             right_hand_pos=right_hand_pos,
             left_hand_pos=left_hand_pos,
             right_hand_ff_pos=right_hand_ff_pos,

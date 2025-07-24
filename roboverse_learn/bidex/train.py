@@ -77,9 +77,8 @@ def get_config_path(args):
     if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm",
                      "ShadowHandPushBlock", "ShadowHandTurnButton", "ShadowHandCatchAbreast",
                      "ShadowHandSwingCup", "ShadowHandCloseInward", "ShadowHandOpenOutward",
-                     "ShadowHandCloseOutward", "ShadowHandOpenInward", "ShadowHandScissor",
-                     "ShadowHandPen", "ShadowHandTwoCatchUnderarm", "ShadowHandBottle",
-                     "ShadowHandGraspPlace", "ShadowHandKettle"]:
+                     "ShadowHandCloseOutward", "ShadowHandScissor", "ShadowHandPen",
+                     "ShadowHandTwoCatchUnderarm", "ShadowHandBottle", "ShadowHandGraspPlace", "ShadowHandKettle"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",
@@ -88,6 +87,11 @@ def get_config_path(args):
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/stack_block_config.yaml",
+        )
+    elif args.task in ["ShadowHandOpenInward", "ShadowHandOpenOutward"]:
+        return (
+            os.path.join(args.logdir, f"{args.task}/{args.algo}"),
+            f"roboverse_learn/bidex/cfg/{args.algo}/open_config.yaml",
         )
     elif args.task in ["ShadowHandLiftUnderarm"]:
         return (

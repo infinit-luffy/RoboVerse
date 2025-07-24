@@ -71,7 +71,7 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
-            # dof_drive_mode='none',
+            dof_drive_mode='none',
             use_vhacd=False,
         ),
         ShadowHandCfg(
@@ -80,7 +80,7 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
-            # dof_drive_mode='none',
+            dof_drive_mode='none',
             use_vhacd=False,
         ),
     ]
@@ -809,17 +809,18 @@ def compute_hand_reward(
         success_buf,
     )
 
-    reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
+    # reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(right_hand_dist_rew <= 0, torch.ones_like(reset_buf), reset_buf)
     resets = torch.where(right_hand_finger_dist >= 0.75, torch.ones_like(resets), resets)
     resets = torch.where(left_hand_finger_dist >= 0.75, torch.ones_like(resets), resets)
 
-    penalty = (left_hand_finger_dist >= 1.2) | (right_hand_finger_dist >= 1.2)
-    reward = torch.where(penalty, reward - leave_penalty, reward)
+    # penalty = (left_hand_finger_dist >= 0.75) | (right_hand_finger_dist >= 0.75)
+    # reward = torch.where(penalty, reward - leave_penalty, reward)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
     # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+
     return reward, resets, goal_resets, success_buf

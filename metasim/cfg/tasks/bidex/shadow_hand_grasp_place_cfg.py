@@ -582,7 +582,6 @@ class ShadowHandGraspPlaceCfg(BaseRLTaskCfg):
             max_episode_length=self.episode_length,
             right_object_pos=bucket_pos,
             left_object_pos=block_pos,
-            target_pos=self.goal_pos,
             right_hand_pos=right_hand_pos,
             left_hand_pos=left_hand_pos,
             right_hand_ff_pos=right_hand_ff_pos,

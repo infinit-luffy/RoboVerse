@@ -64,8 +64,8 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        ShadowHandCfg(name="shadow_hand_right", angular_damping=0.01),
-        ShadowHandCfg(name="shadow_hand_left", angular_damping=0.01),
+        ShadowHandCfg(name="shadow_hand_right"),
+        ShadowHandCfg(name="shadow_hand_left"),
     ]
     decimation = 1
     sim_params = SimParamCfg(

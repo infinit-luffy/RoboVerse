@@ -54,15 +54,17 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
     robots = [
         ShadowHandCfg(
             name="shadow_hand_right",
-            fix_base_link=True,
-            # dof_drive_mode='none',
+            dof_drive_mode='none',
             use_vhacd=False,
+            linear_damping=0.01,
+            angular_damping=0.01,
         ),
         ShadowHandCfg(
             name="shadow_hand_left",
-            fix_base_link=True,
-            # dof_drive_mode='none',
+            dof_drive_mode='none',
             use_vhacd=False,
+            linear_damping=0.01,
+            angular_damping=0.01,
         ),
     ]
     num_actuated_joints = {}
@@ -114,7 +116,7 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
     reset_position_noise = 0.01
     reset_dof_pos_noise = 0.2
     leave_penalty = 5.0
-    fall_penalty = 1.0
+    fall_penalty = 0.0
 
     def set_objects(self) -> None:
         self.objects.append(self.objects_cfg[self.current_object_type].replace(name=f"{self.current_object_type}_1"))
@@ -216,13 +218,13 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
         self.shadow_hand_dof_lower_limits_cpu = self.shadow_hand_dof_lower_limits.cpu()
         self.shadow_hand_dof_upper_limits_cpu = self.shadow_hand_dof_upper_limits.cpu()
         self.init_goal_pos = torch.tensor(
-            [0.0, -0.39, 0.56], dtype=torch.float, device=self.device
+            [0.0, -0.39, 0.54], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)
         self.init_goal_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
         )  # Initial right goal rotation, shape (4,)
         self.init_goal_another_pos = torch.tensor(
-            [0.0, -0.76, 0.56], dtype=torch.float, device=self.device
+            [0.0, -0.76, 0.54], dtype=torch.float, device=self.device
         )
         self.init_goal_another_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
@@ -683,10 +685,19 @@ def compute_hand_reward(
 
     reward = dist_rew + rot_rew + action_penalty * action_penalty_scale
 
-    goal_resets = torch.where(torch.abs(rot_dist) < 0.1, torch.ones_like(reset_goal_buf), reset_goal_buf)
-    goal_resets = torch.where(torch.abs(rot_another_dist) < 0.1, torch.ones_like(reset_goal_buf), reset_goal_buf)
+    success = (torch.abs(rot_dist) < 0.1) | (torch.abs(rot_another_dist) < 0.1)
 
-    success_buf = success_buf + goal_resets
+    goal_resets = torch.where(success, torch.ones_like(reset_goal_buf), reset_goal_buf)
+
+    success_buf = torch.where(
+        success_buf == 0,
+        torch.where(
+            success,
+            torch.ones_like(success_buf),
+            torch.zeros_like(success_buf),
+        ),
+        success_buf,
+    )
 
     reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
 
@@ -700,4 +711,5 @@ def compute_hand_reward(
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
     # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+
     return reward, resets, goal_resets, success_buf

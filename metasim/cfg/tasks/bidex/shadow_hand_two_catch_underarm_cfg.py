@@ -64,21 +64,19 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
     robots = [
         ShadowHandCfg(
             name="shadow_hand_right",
-            fix_base_link=False,
-            dof_drive_mode='none',
-            use_vhacd=False,
-            actuated_root=True,
+            fix_base_link=True,
+            actuated_root=False,
             angular_damping=100.0,
             linear_damping=100.0,
+            use_vhacd=False,
         ),
         ShadowHandCfg(
             name="shadow_hand_left",
-            fix_base_link=False,
-            dof_drive_mode='none',
+            fix_base_link=True,
+            actuated_root=False,
+            angular_damping=0.01,
+            linear_damping=0.01,
             use_vhacd=False,
-            actuated_root=True,
-            angular_damping=100.0,
-            linear_damping=100.0,
         ),
     ]
     num_actuated_joints = {}
@@ -129,7 +127,7 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
     rot_eps = 0.1
     action_penalty_scale = -0.0002
     reach_goal_bonus = 250.0
-    throw_bonus = 10.0
+    throw_bonus = 5.0
     reset_position_noise = 0.01
     reset_dof_pos_noise = 0.2
     leave_penalty = 5.0
@@ -700,8 +698,18 @@ def compute_hand_reward(
     """
     diff_xy = right_goal_pos[:, :2] - right_object_pos[:, :2]
     goal_dist = torch.norm(right_object_pos - right_goal_pos, p=2, dim=-1)
+    reward_dist_xy = torch.norm(diff_xy, p=2, dim=-1)
+    reward_dist_z = torch.clamp(torch.abs(right_goal_pos[:, 2] - right_object_pos[:, 2]), max=0.03)
+    reward_dist = torch.where(reward_dist_xy <= 0.23, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
+    # reward_dist = goal_dist
     diff_another_xy = left_goal_pos[:, :2] - left_object_pos[:, :2]
     goal_another_dist = torch.norm(left_object_pos - left_goal_pos, p=2, dim=-1)
+    reward_another_dist_xy = torch.norm(diff_another_xy, p=2, dim=-1)
+    reward_another_dist_z = torch.clamp(torch.abs(left_goal_pos[:, 2] - left_object_pos[:, 2]), max=0.03)
+    reward_another_dist = torch.where(
+        reward_another_dist_xy <= 0.23, reward_another_dist_xy + 0.05 * reward_another_dist_z, reward_another_dist_xy
+    )
+    # reward_another_dist = goal_another_dist
 
     quat_diff = math.quat_mul(
         right_object_rot, math.quat_inv(right_goal_rot)
@@ -713,31 +721,31 @@ def compute_hand_reward(
     )  # (num_envs, 4)
     rot_another_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_another_diff[:, 1:4], p=2, dim=-1), max=1.0))
 
-    # rot_rew = 1.0/(torch.abs(rot_dist) + rot_eps) * rot_reward_scale + 1.0/(torch.abs(rot_another_dist) + rot_eps) * rot_reward_scale
-
     action_penalty = torch.sum(actions**2, dim=-1)
 
-    reward = torch.exp(-0.2*(goal_dist * dist_reward_scale + rot_dist)) + torch.exp(-0.2*(goal_another_dist * dist_reward_scale + rot_another_dist))
+    reward = torch.exp(-0.2*(reward_dist * dist_reward_scale)) + torch.exp(-0.2*(reward_another_dist * dist_reward_scale))
 
     goal_resets = torch.zeros_like(reset_buf)
+
+    right_success = goal_dist < 0.03
+    left_success = goal_another_dist < 0.03
+    success = right_success & left_success
 
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            goal_dist + goal_another_dist < 0.06,
+            success,
             torch.ones_like(success_buf),
             success_buf,
         ),
         success_buf,
     )
 
-    right_thrown = (diff_xy[:, 1] >= 0.25) & (diff_xy[:, 1] <= -0.1) & (right_object_pos[:, 2] >= 0.4)
+    right_thrown = (diff_xy[:, 1] >= -0.25) & (diff_xy[:, 1] <= -0.1) & (right_object_pos[:, 2] >= 0.4)
     reward = torch.where(right_thrown, reward + throw_bonus, reward)
     left_thrown = (diff_another_xy[:, 1] <= 0.25) & (diff_another_xy[:, 1] >= 0.1) & (left_object_pos[:, 2] >= 0.4)
     reward = torch.where(left_thrown, reward + throw_bonus, reward)
 
-    right_success = goal_dist < 0.03
-    left_success = goal_another_dist < 0.03
     reward = torch.where(right_success == 1, reward + reach_goal_bonus // 2, reward)
     reward = torch.where(left_success == 1, reward + reach_goal_bonus // 2, reward)
 

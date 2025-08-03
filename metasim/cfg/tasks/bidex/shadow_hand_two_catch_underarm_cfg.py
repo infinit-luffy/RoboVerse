@@ -698,18 +698,10 @@ def compute_hand_reward(
     """
     diff_xy = right_goal_pos[:, :2] - right_object_pos[:, :2]
     goal_dist = torch.norm(right_object_pos - right_goal_pos, p=2, dim=-1)
-    reward_dist_xy = torch.norm(diff_xy, p=2, dim=-1)
-    reward_dist_z = torch.clamp(torch.abs(right_goal_pos[:, 2] - right_object_pos[:, 2]), max=0.03)
-    reward_dist = torch.where(reward_dist_xy <= 0.23, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
-    # reward_dist = goal_dist
+    reward_dist = goal_dist
     diff_another_xy = left_goal_pos[:, :2] - left_object_pos[:, :2]
     goal_another_dist = torch.norm(left_object_pos - left_goal_pos, p=2, dim=-1)
-    reward_another_dist_xy = torch.norm(diff_another_xy, p=2, dim=-1)
-    reward_another_dist_z = torch.clamp(torch.abs(left_goal_pos[:, 2] - left_object_pos[:, 2]), max=0.03)
-    reward_another_dist = torch.where(
-        reward_another_dist_xy <= 0.23, reward_another_dist_xy + 0.05 * reward_another_dist_z, reward_another_dist_xy
-    )
-    # reward_another_dist = goal_another_dist
+    reward_another_dist = goal_another_dist
 
     quat_diff = math.quat_mul(
         right_object_rot, math.quat_inv(right_goal_rot)

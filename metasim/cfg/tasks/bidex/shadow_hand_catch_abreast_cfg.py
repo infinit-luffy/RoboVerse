@@ -681,10 +681,8 @@ def compute_hand_reward(
     """
     # Distance from the hand to the object
     diff_xy = target_pos[:, :2] - object_pos[:, :2]
-    reward_dist_xy = torch.norm(diff_xy, p=2, dim=-1)
-    reward_dist_z = torch.clamp(torch.abs(target_pos[:, 2] - object_pos[:, 2]), max=0.03)
-    reward_dist = torch.where(reward_dist_xy <= 0.5, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
     goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
+    reward_dist = goal_dist
 
     # Orientation alignment for the cube in hand and goal cube
     quat_diff = math.quat_mul(object_rot, math.quat_inv(target_rot))
@@ -715,8 +713,7 @@ def compute_hand_reward(
 
     # Reward for throwing the object
     thrown = (diff_xy[:, 1] >= -0.40) & (diff_xy[:, 1] <= -0.1) & (object_pos[:, 2] >= 0.4)
-    reward = torch.where(thrown, reward + (diff_xy[:, 1] + 1.4) * throw_bonus, reward)
-    # reward = torch.where(thrown, reward + throw_bonus, reward)
+    reward = torch.where(thrown, reward + throw_bonus, reward)
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
     reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)

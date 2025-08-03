@@ -669,10 +669,6 @@ def compute_hand_reward(
         is_testing (bool): Whether the environment is in testing mode, default False
     """
     # Distance from the hand to the object
-    # diff_xy = target_pos[:, :2] - object_pos[:, :2]
-    # reward_dist_xy = torch.norm(diff_xy, p=2, dim=-1)
-    # reward_dist_z = torch.clamp(torch.abs(target_pos[:, 2] - object_pos[:, 2]), max=0.03)
-    # reward_dist = torch.where(reward_dist_xy <= 0.23, reward_dist_xy + 0.05 * reward_dist_z, reward_dist_xy)
     goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
     reward_dist = goal_dist
     # Orientation alignment for the cube in hand and goal cube

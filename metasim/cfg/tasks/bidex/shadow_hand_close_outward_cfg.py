@@ -375,12 +375,8 @@ class ShadowHandCloseOutwardCfg(BaseRLTaskCfg):
             366 - 368	left shadow hand base position
             369 - 371	left shadow hand base rotation
             372 - 397	left shadow hand actions
-            398 - 404	object pose
-            405 - 407	object linear velocity
-            408 - 410	object angle velocity
-            411 - 413	goal pos
-            414 - 416	pot right handle pos
-            417 - 419	pot left handle pos
+            398 - 400   right handle position
+            401 - 403   left handle position
         """
         if device is None:
             device = self.device

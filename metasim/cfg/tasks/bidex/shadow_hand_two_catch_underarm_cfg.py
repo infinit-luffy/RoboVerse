@@ -392,11 +392,13 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
             398 - 404	block1 pose
             405 - 407	block1 linear velocity
             408 - 410	block1 angle velocity
-            411 - 417	block2 pose
-            418 - 420	block2 linear velocity
-            421 - 423	block2 angle velocity
-            424 - 426   left goal position
-            427 - 429   right goal position
+            411 - 417 	goal1 pose
+            418 - 421 	goal1 rot - object1 rot
+            422 - 428 object2 pose |
+            429 - 431 object2 linear velocity |
+            432 - 434 object2 angle velocity |
+            435 - 441	goal2 pose |
+            442 - 445	goal2 rot - object2 rot
         """
         if device is None:
             device = self.device

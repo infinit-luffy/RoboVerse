@@ -104,6 +104,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         substeps=2,
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
+        env_spacing=1.5,
     )
     dt = sim_params.dt  # Simulation time step
     transition_scale = 0.5
@@ -129,7 +130,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         "isaacgym"
     )
     action_penalty_scale = 0
-    reach_goal_bonus = 20.0
+    reach_goal_bonus = 250.0
     reset_position_noise = 0.0
     reset_dof_pos_noise = 0.0
     leave_penalty = 5.0
@@ -199,7 +200,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
                 -0.524,
                 -1.571,
             ],
-            dtype=torch.float32,
+            dtype=torch.float,
             device=self.device,
         )
         self.shadow_hand_dof_upper_limits: torch.Tensor = torch.tensor(
@@ -229,16 +230,16 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
                 0.524,
                 0,
             ],
-            dtype=torch.float32,
+            dtype=torch.float,
             device=self.device,
         )
         self.shadow_hand_dof_lower_limits_cpu = self.shadow_hand_dof_lower_limits.cpu()
         self.shadow_hand_dof_upper_limits_cpu = self.shadow_hand_dof_upper_limits.cpu()
         self.init_right_goal_pos = torch.tensor(
-            [-0.2, 0.2, 0.625], dtype=torch.float32, device=self.device
+            [-0.2, 0.2, 0.625], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)
         self.init_left_goal_pos = torch.tensor(
-            [-0.2, -0.2, 0.625], dtype=torch.float32, device=self.device
+            [-0.2, -0.2, 0.625], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)
         self.init_states = {
                 "objects": {
@@ -324,7 +325,7 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         for robot in self.robots:
             self.robot_dof_default_pos[robot.name] = torch.tensor(
                 list(self.init_states["robots"][robot.name]["dof_pos"].values()),
-                dtype=torch.float32,
+                dtype=torch.float,
                 device=self.device,
             )
             self.robot_dof_default_pos_cpu[robot.name] = self.robot_dof_default_pos[robot.name].cpu()
@@ -404,10 +405,10 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         if self.num_envs is None:
             self.num_envs = num_envs
         if self.left_goal_pos is None:
-            self.left_goal_pos = torch.tensor(self.init_left_goal_pos, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
+            self.left_goal_pos = torch.tensor(self.init_left_goal_pos, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
         if self.right_goal_pos is None:
-            self.right_goal_pos = torch.tensor(self.init_right_goal_pos, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
-        obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
+            self.right_goal_pos = torch.tensor(self.init_right_goal_pos, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
+        obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
             self.shadow_hand_dof_lower_limits[self.joint_reindex],
@@ -477,10 +478,6 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left hand
-        # obs[:, 398:401] = envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3]  # object1 position
-        # obs[:, 401:404] = envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3]  # object2 position
-        # obs[:, 404:407] = self.right_goal_pos  # object 1 goal position
-        # obs[:, 407:410] = self.left_goal_pos  # object 2 goal position
         obs[:, 398:411] = envstates.objects[f"{self.current_object_type}_1"].root_state
         obs[:, 408:411] *= self.vel_obs_scale  # object1 angvel
         obs[:, 411:424] = envstates.objects[f"{self.current_object_type}_2"].root_state
@@ -572,8 +569,8 @@ class ShadowHandPushBlockCfg(BaseRLTaskCfg):
             episode_length_buf=episode_length_buf,
             success_buf=success_buf,
             max_episode_length=self.episode_length,
-            right_object_pos=envstates.objects[f"{self.current_object_type}_1"].body_state[:, 0, :3],
-            left_object_pos=envstates.objects[f"{self.current_object_type}_2"].body_state[:, 0, :3],
+            right_object_pos=envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3],
+            left_object_pos=envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3],
             right_target_pos=self.right_goal_pos,
             left_target_pos=self.left_goal_pos,
             right_hand_pos=right_hand_pos,
@@ -807,7 +804,7 @@ def compute_hand_reward(
         success_buf,
     )
 
-    reward = torch.where(success_buf == 1, reward + reach_goal_bonus, reward)
+    reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
     # Check env termination conditions, including maximum success number
     resets = torch.where(right_hand_finger_dist >= 1.2, torch.ones_like(reset_buf), reset_buf)
     resets = torch.where(left_hand_finger_dist >= 1.2, torch.ones_like(resets), resets)
@@ -817,5 +814,5 @@ def compute_hand_reward(
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
     return reward, resets, goal_resets, success_buf

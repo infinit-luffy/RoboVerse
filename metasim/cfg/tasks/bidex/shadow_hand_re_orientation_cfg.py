@@ -55,16 +55,10 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
         ShadowHandCfg(
             name="shadow_hand_right",
             dof_drive_mode='none',
-            use_vhacd=False,
-            linear_damping=0.01,
-            angular_damping=0.01,
         ),
         ShadowHandCfg(
             name="shadow_hand_left",
             dof_drive_mode='none',
-            use_vhacd=False,
-            linear_damping=0.01,
-            angular_damping=0.01,
         ),
     ]
     num_actuated_joints = {}
@@ -359,25 +353,23 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
             48 - 71	    right shadow hand dof force
             72 - 136	right shadow hand fingertip pose, linear velocity, angle velocity (5 x 13)
             137 - 166	right shadow hand fingertip force, torque (5 x 6)
-            167 - 169	right shadow hand base position
-            170 - 172	right shadow hand base rotation
-            173 - 198	right shadow hand actions
-            199 - 222	left shadow hand dof position
-            223 - 246	left shadow hand dof velocity
-            247 - 270	left shadow hand dof force
-            271 - 335	left shadow hand fingertip pose, linear velocity, angle velocity (5 x 13)
-            336 - 365	left shadow hand fingertip force, torque (5 x 6)
-            366 - 368	left shadow hand base position
-            369 - 371	left shadow hand base rotation
-            372 - 397	left shadow hand actions
-            398 - 404	block1 pose
-            405 - 407	block1 linear velocity
-            408 - 410	block1 angle velocity
-            411 - 417	block2 pose
-            418 - 420	block2 linear velocity
-            421 - 423	block2 angle velocity
-            424 - 426   left goal position
-            427 - 429   right goal position
+            167 - 186	right shadow hand actions
+            187 - 210	left shadow hand dof position
+            211 - 234	left shadow hand dof velocity
+            235 - 258	left shadow hand dof force
+            259 - 323	left shadow hand fingertip pose, linear velocity, angle velocity (5 x 13)
+            324 - 353	left shadow hand fingertip force, torque (5 x 6)
+            354 - 373	left shadow hand actions
+            374 - 380	object1 pose
+            381 - 383	object1 linear velocity
+            383 - 386	object1 angle velocity
+            387 - 393	goal1 pose
+            394 - 397	goal1 rot - object1 rot
+            398 - 404	object1 pose
+            405 - 407	object1 linear velocity
+            408 - 410	object1 angle velocity
+            411 - 417	goal1 pose
+            418 - 421	goal1 rot - object1 rot
         """
         if device is None:
             device = self.device
@@ -710,6 +702,6 @@ def compute_hand_reward(
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     return reward, resets, goal_resets, success_buf

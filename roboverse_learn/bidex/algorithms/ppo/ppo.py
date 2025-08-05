@@ -103,21 +103,17 @@ class PPO:
     def run(self, num_learning_iterations, log_interval=1):
         current_obs = self.vec_env.reset()
         if self.is_testing:
-            os.makedirs(f"{self.log_dir}/videos", exist_ok=True)
-            # obs_saver = ObsSaver(video_path=f"{self.log_dir}/videos/test.mp4")
-            # obs_saver.add(self.vec_env.tensor_states)
             step = 0
-            while step < 1250:
+            while True:
                 with torch.no_grad():
                     if self.apply_reset:
                         current_obs = self.vec_env.reset()
                     # Compute the action
-                    # actions = self.actor_critic.act_inference(current_obs)
-                    actions, actions_log_prob, values, mu, sigma = self.actor_critic.act(current_obs)
+                    actions = self.actor_critic.act_inference(current_obs)
+                    # actions, actions_log_prob, values, mu, sigma = self.actor_critic.act(current_obs)
                     # Step the vec_environment
                     next_obs, rews, dones, infos = self.vec_env.step(actions)
                     current_obs.copy_(next_obs)
-                    # obs_saver.add(self.vec_env.tensor_states)
                     ep_string = f""
                     if infos:
                         for key in infos:
@@ -129,7 +125,6 @@ class PPO:
                     print(ep_string)
                     step += 1
                     print(f"Step {step} done")
-            # obs_saver.save()
         else:
             rewbuffer = deque(maxlen=100)
             lenbuffer = deque(maxlen=100)

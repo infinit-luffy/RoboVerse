@@ -12,6 +12,7 @@ from rich.logging import RichHandler
 
 from metasim.cfg.objects import RigidObjCfg, ArticulationObjCfg
 from metasim.cfg.robots import ShadowHandCfg
+from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
 from metasim.constants import BenchmarkType, PhysicStateType, TaskType
@@ -39,7 +40,9 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandOver/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
+    obs_type = "state"
     obs_shape = 398  # 398-dimensional observation space
+    proprio_shape = 398
     action_shape = 40  # 20 actions for each hand, total 40 actions
     current_object_type = "egg"
     objects_cfg = {
@@ -112,6 +115,14 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         self.objects.append(self.objects_cfg[self.current_object_type])
 
     def set_init_states(self) -> None:
+        if self.obs_type == "state":
+            self.cameras = []
+            self.obs_shape = 398
+        elif self.obs_type == "rgb":
+            self.img_h = 256
+            self.img_w = 256
+            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(1.0, -1.0, 1.2), look_at=(0.0, -0.5, 0.6))]
+            self.obs_shape = 398 + 3 * self.img_h * self.img_w  # 398-dimensional state + RGB image
         self.init_goal_pos = torch.tensor(
             [0.0, -0.64, 0.54], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
@@ -348,6 +359,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
             383 - 386	object angle velocity
             387 - 393	goal pose
             394 - 397	goal rot - object rot
+            398 - :     visual observation, currently RGB image (3 x 256 x 256)
         """
         if device is None:
             device = self.device
@@ -408,10 +420,11 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         obs[:, 374:387] = envstates.objects[self.current_object_type].root_state
         obs[:, 384:387] *= self.vel_obs_scale  # object angvel
         obs[:, 387:394] = torch.cat([self.goal_pos, self.goal_rot], dim=1)  # goal position and rotation (num_envs, 7)
-        obs[:, 394:] = math.quat_mul(
+        obs[:, 394:398] = math.quat_mul(
             envstates.objects[self.current_object_type].root_state[:, 3:7], math.quat_inv(self.goal_rot)
         )  # goal rotation - object rotation
-        # print(obs[0, 259:324])
+        if self.obs_type == "rgb":
+            obs[:, 398:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(

@@ -67,6 +67,7 @@ class Args:
     """Use wandb for logging."""
     wandb_project: str = "roboverse_bidex_rl"
     objects: str = None
+    obs_type: str = "state"  # "state" or "rgb"
 
     train_cfg = None
 
@@ -137,22 +138,26 @@ def train(args):
     task.num_envs = args.num_envs
     task.device = args.device
     task.is_testing = args.test
+    task.obs_type = args.obs_type
     task.set_objects()
     task.set_init_states()
+    cameras = [] if not hasattr(task, "cameras") else task.cameras
+    sensors = [] if not hasattr(task, "sensors") else task.sensors
     scenario = ScenarioCfg(
         task=task,
         robots=task.robots,
-        sensors=task.sensors,
+        sensors=sensors,
+        cameras=cameras,
         sim=args.sim,
         headless=args.headless,
         num_envs=args.num_envs,
         sim_params=task.sim_params,
     )
-    if args.test:
-        scenario.cameras = [PinholeCameraCfg(width=1024, height=1024, pos=(-1.5, -1.5, 1.5), look_at=(0.0, -0.6, 0.0))]
-        scenario.cameras = []
-    else:
-        scenario.cameras = []
+    # if args.test:
+    #     scenario.cameras = [PinholeCameraCfg(width=1024, height=1024, pos=(-1.5, -1.5, 1.5), look_at=(0.0, -0.6, 0.0))]
+    #     scenario.cameras = []
+    # else:
+    #     scenario.cameras = []
     env = BiDexEnvWrapper(
         scenario=scenario,
         seed=args.seed,

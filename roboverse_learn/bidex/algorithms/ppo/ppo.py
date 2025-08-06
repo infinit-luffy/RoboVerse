@@ -11,7 +11,7 @@ import torch.optim as optim
 from gymnasium.spaces import Space
 
 # from torch.utils.tensorboard import SummaryWriter
-from roboverse_learn.bidex.algorithms.ppo.module import ActorCritic
+from roboverse_learn.bidex.algorithms.ppo.module import ActorCritic, ActorCritic_RGB
 from roboverse_learn.bidex.algorithms.ppo.storage import RolloutStorage
 from get_started.utils import ObsSaver
 
@@ -33,6 +33,10 @@ class PPO:
         if not isinstance(vec_env.action_space, Space):
             raise TypeError("vec_env.action_space must be a gym Space")
         self.observation_space = vec_env.observation_space
+        self.obs_type = getattr(vec_env, "obs_type", "state")
+        self.proprio_shape = getattr(vec_env, "proprio_shape", None)
+        self.img_h = getattr(vec_env, "img_h", None)
+        self.img_w = getattr(vec_env, "img_w", None)
         self.action_space = vec_env.action_space
         self.cfg_train = copy.deepcopy(cfg_train)
         learn_cfg = self.cfg_train["learn"]
@@ -47,12 +51,25 @@ class PPO:
 
         # PPO components
         self.vec_env = vec_env
-        self.actor_critic = ActorCritic(
-            self.observation_space.shape,
-            self.action_space.shape,
-            self.init_noise_std,
-            self.model_cfg,
-        )
+        if self.obs_type == "state":
+            self.actor_critic = ActorCritic(
+                self.observation_space.shape,
+                self.action_space.shape,
+                self.init_noise_std,
+                self.model_cfg,
+            )
+        elif self.obs_type == "rgb":
+            self.actor_critic = ActorCritic_RGB(
+                self.observation_space.shape,
+                self.action_space.shape,
+                self.init_noise_std,
+                self.model_cfg,
+                proprio_shape=self.proprio_shape,
+                img_h=self.img_h,
+                img_w=self.img_w,
+            )
+        else:
+            raise ValueError(f"Unsupported observation type: {self.obs_type}")
         self.actor_critic.to(self.device)
         self.storage = RolloutStorage(
             self.vec_env.num_envs,

@@ -47,8 +47,19 @@ class BiDexEnvWrapper:
 
         # observation space
         # Create an observation space (398 dimensions) for a single environment, instead of the entire batch (num_envs,398).
+        self.obs_type = getattr(scenario.task, "obs_type", "state")
         obs_shape = (self.task.obs_shape,)
         self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=obs_shape, dtype=np.float32)
+        if hasattr(self.task, "proprio_shape"):
+            self.proprio_shape = self.task.proprio_shape
+        else:
+            self.proprio_shape = None
+        if hasattr(self.task, "img_h") and hasattr(self.task, "img_w"):
+            self.img_h = self.task.img_h
+            self.img_w = self.task.img_w
+        else:
+            self.img_h = None
+            self.img_w = None
         self.tensor_states = None
         self.tensor_obs = None
         log.info(f"Observation space: {self.observation_space}")

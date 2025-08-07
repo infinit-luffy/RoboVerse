@@ -109,10 +109,12 @@ class ActorCritic_RGB(nn.Module):
             actor_hidden_dim = [256, 256, 256]
             critic_hidden_dim = [256, 256, 256]
             activation = get_activation("selu")
+            self.fix_img_encoder = False
         else:
             actor_hidden_dim = model_cfg["pi_hid_sizes"]
             critic_hidden_dim = model_cfg["vf_hid_sizes"]
             activation = get_activation(model_cfg["activation"])
+            self.fix_img_encoder = model_cfg.get("fix_img_encoder", False)
 
         self.proprio_shape = proprio_shape
         self.obs_shape = obs_shape
@@ -125,6 +127,9 @@ class ActorCritic_RGB(nn.Module):
         self.visual_feature_dim = self.resnet.fc.in_features
         del self.resnet.fc
         self.resnet.fc = nn.Identity()
+        if self.fix_img_encoder:
+            for param in self.resnet.parameters():
+                param.requires_grad = False
         self.fc_shape = self.visual_feature_dim * self.num_img + proprio_shape
 
         # Policy
@@ -184,7 +189,11 @@ class ActorCritic_RGB(nn.Module):
         # img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
         # cv2.imwrite("camera0_image.png", img_bgr)
         # exit(0)
-        img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
+        if self.fix_img_encoder:
+            with torch.no_grad():
+                img_features = self.resnet(img)
+        else:
+            img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
         proprio = observations[:, :self.proprio_shape] # (batch_size, proprio_shape)
         observations = torch.cat((img_features_flatten, proprio), dim=-1)
@@ -209,7 +218,11 @@ class ActorCritic_RGB(nn.Module):
 
     def act_inference(self, observations):
         img = observations[:, self.proprio_shape:].view(-1, 3, self.img_h, self.img_w)
-        img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
+        if self.fix_img_encoder:
+            with torch.no_grad():
+                img_features = self.resnet(img)
+        else:
+            img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
         proprio = observations[:, :self.proprio_shape] # (batch_size, proprio_shape)
         observations = torch.cat((img_features_flatten, proprio), dim=-1)
@@ -219,7 +232,11 @@ class ActorCritic_RGB(nn.Module):
 
     def evaluate(self, observations, actions):
         img = observations[:, self.proprio_shape:].view(-1, 3, self.img_h, self.img_w)
-        img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
+        if self.fix_img_encoder:
+            with torch.no_grad():
+                img_features = self.resnet(img)
+        else:
+            img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
         proprio = observations[:, :self.proprio_shape] # (batch_size, proprio_shape)
         observations = torch.cat((img_features_flatten, proprio), dim=-1)

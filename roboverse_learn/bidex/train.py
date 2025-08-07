@@ -80,10 +80,16 @@ def get_config_path(args):
                      "ShadowHandSwingCup", "ShadowHandCloseInward", "ShadowHandCloseOutward",
                      "ShadowHandScissor", "ShadowHandPen", "ShadowHandTwoCatchUnderarm",
                      "ShadowHandBottle", "ShadowHandGraspPlace", "ShadowHandKettle"]:
-        return (
-            os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",
-        )
+        if args.obs_type == "state":
+            return (
+                os.path.join(args.logdir, f"{args.task}/{args.algo}"),
+                f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",
+            )
+        elif args.obs_type == "rgb":
+            return (
+                os.path.join(args.logdir, f"{args.task}/{args.algo}"),
+                f"roboverse_learn/bidex/cfg/{args.algo}/rgb_config.yaml",
+            )
     elif args.task in ["ShadowHandStackBlock"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),

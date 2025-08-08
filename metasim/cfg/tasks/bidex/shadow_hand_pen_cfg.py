@@ -12,6 +12,7 @@ from rich.logging import RichHandler
 
 from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg
 from metasim.cfg.robots import ShadowHandCfg
+from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
 from metasim.constants import BenchmarkType, PhysicStateType, TaskType
@@ -39,7 +40,9 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandPen/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
+    obs_type = "state"  # "state" or "rgb"
     obs_shape = 417
+    proprio_shape = 417
     action_shape = 52
     current_object_type = "pen"
     objects_cfg = {
@@ -140,6 +143,14 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
+        if self.obs_type == "state":
+            self.cameras = []
+            self.obs_shape = 417
+        elif self.obs_type == "rgb":
+            self.img_h = 256
+            self.img_w = 256
+            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(-1.35, -1.0, 1.05), look_at=(0.0, -0.75, 0.5))] # TODO
+            self.obs_shape = 417 + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -384,9 +395,9 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
             398 - 404	object pose
             405 - 407	object linear velocity
             408 - 410	object angle velocity
-            411 - 413	goal pos
-            414 - 416	pot right handle pos
-            417 - 419	pot left handle pos
+            411 - 413	right pen handle position
+            414 - 416	left pen handle position
+            417 - :     visual observation, currently RGB image (3 x 256 x 256)
         """
         if device is None:
             device = self.device
@@ -477,6 +488,8 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
         pen_left_handle_pos = pen_left_handle_pos + math.quat_apply(pen_left_handle_rot, self.y_unit_tensor * 0.07)
         obs[:, 411:414] = pen_right_handle_pos
         obs[:, 414:417] = pen_left_handle_pos
+        if self.obs_type == "rgb":
+            obs[:, 417:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(

@@ -12,6 +12,7 @@ from rich.logging import RichHandler
 
 from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg
 from metasim.cfg.robots import ShadowHandCfg
+from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
 from metasim.constants import BenchmarkType, PhysicStateType, TaskType
@@ -39,7 +40,9 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandTurnButton/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
+    obs_type = "state"  # "state" or "rgb"
     obs_shape = 404
+    proprio_shape = 404
     action_shape = 52
     current_object_type = "button"
     objects_cfg = {
@@ -134,6 +137,14 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
+        if self.obs_type == "state":
+            self.cameras = []
+            self.obs_shape = 404
+        elif self.obs_type == "rgb":
+            self.img_h = 256
+            self.img_w = 256
+            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(-1.35, -1.0, 1.05), look_at=(0.0, -0.75, 0.5))] # TODO
+            self.obs_shape = 404 + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -383,6 +394,7 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
             372 - 397	left shadow hand actions
             398 - 400   right button handle position
             401 - 403   left button handle position
+            404 - :     visual observation, currently RGB image (3 x 256 x 256)
         """
         if device is None:
             device = self.device
@@ -473,6 +485,8 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
         left_object_pos = left_object_pos + math.quat_apply(left_object_rot, self.x_unit_tensor * -0.05)
         obs[:, 398:401] = right_object_pos  # right button handle position
         obs[:, 401:404] = left_object_pos  # left button handle position
+        if self.obs_type == "rgb":
+            obs[:, 404:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(

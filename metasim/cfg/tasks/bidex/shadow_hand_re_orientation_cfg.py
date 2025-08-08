@@ -12,6 +12,7 @@ from rich.logging import RichHandler
 
 from metasim.cfg.objects import RigidObjCfg, ArticulationObjCfg
 from metasim.cfg.robots import ShadowHandCfg
+from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
 from metasim.constants import BenchmarkType, PhysicStateType, TaskType
@@ -39,7 +40,9 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandReOrientation/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
+    obs_type = "state"
     obs_shape = 422
+    proprio_shape = 422
     action_shape = 40
     current_object_type = "cube"
     objects_cfg = {
@@ -118,6 +121,14 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
+        if self.obs_type == "state":
+            self.cameras = []
+            self.obs_shape = 422
+        elif self.obs_type == "rgb":
+            self.img_h = 256
+            self.img_w = 256
+            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(1.0, -1.0, 1.2), look_at=(0.0, -0.5, 0.6))] # TODO
+            self.obs_shape = 422 + 3 * self.img_h * self.img_w  # 398-dimensional state + RGB image
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -370,6 +381,7 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
             408 - 410	object1 angle velocity
             411 - 417	goal1 pose
             418 - 421	goal1 rot - object1 rot
+            422 - :     visual observation, currently RGB image (3 x 256 x 256)
         """
         if device is None:
             device = self.device
@@ -443,6 +455,8 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
         obs[:, 418:422] = math.quat_mul(
             envstates.objects[f"{self.current_object_type}_2"].root_state[:, 3:7], math.quat_inv(self.goal_another_rot)
         )
+        if self.obs_type == "rgb":
+            obs[:, 422:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(

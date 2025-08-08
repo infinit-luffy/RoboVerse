@@ -12,6 +12,7 @@ from rich.logging import RichHandler
 
 from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg
 from metasim.cfg.robots import ShadowHandCfg
+from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
 from metasim.constants import BenchmarkType, PhysicStateType, TaskType
@@ -39,7 +40,9 @@ class ShadowHandLiftUnderarmCfg(BaseRLTaskCfg):
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandLiftUnderarm/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
+    obs_type = "state"  # "state" or "rgb"
     obs_shape = 420
+    proprio_shape = 420  # Proprioceptive observation shape
     action_shape = 52
     current_object_type = "pot"
     objects_cfg = {
@@ -136,6 +139,14 @@ class ShadowHandLiftUnderarmCfg(BaseRLTaskCfg):
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
+        if self.obs_type == "state":
+            self.cameras = []
+            self.obs_shape = 420
+        elif self.obs_type == "rgb":
+            self.img_h = 256
+            self.img_w = 256
+            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(-1.35, -1.0, 1.05), look_at=(0.0, -0.75, 0.5))] # TODO
+            self.obs_shape = 420 + 3 * self.img_h * self.img_w
         self.init_goal_pos = torch.tensor(
             [0, -0.6, 0.85], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
@@ -386,6 +397,7 @@ class ShadowHandLiftUnderarmCfg(BaseRLTaskCfg):
             411 - 413	goal pos
             414 - 416	pot right handle pos
             417 - 419	pot left handle pos
+            420 - :     visual observation, currently RGB image (3 x 256 x 256)
         """
         if device is None:
             device = self.device
@@ -475,6 +487,8 @@ class ShadowHandLiftUnderarmCfg(BaseRLTaskCfg):
         pot_left_handle_pos = pot_left_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.06)
         obs[:, 414:417] = pot_right_handle_pos
         obs[:, 417:420] = pot_left_handle_pos
+        if self.obs_type == "rgb":
+            obs[:, 420:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(

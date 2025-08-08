@@ -12,6 +12,7 @@ from rich.logging import RichHandler
 
 from metasim.cfg.objects import RigidObjCfg, PrimitiveCubeCfg, ArticulationObjCfg
 from metasim.cfg.robots import ShadowHandCfg
+from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
 from metasim.constants import BenchmarkType, PhysicStateType, TaskType
@@ -39,7 +40,9 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
     traj_filepath = "roboverse_data/trajs/bidex/ShadowHandStackBlock/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
+    obs_type = "state"
     obs_shape = 424
+    proprio_shape = 424
     action_shape = 52
     current_object_type = "cube"
     objects_cfg = {
@@ -140,6 +143,14 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
 
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
+        if self.obs_type == "state":
+            self.cameras = []
+            self.obs_shape = 424
+        elif self.obs_type == "rgb":
+            self.img_h = 256
+            self.img_w = 256
+            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(-1.35, -1.0, 1.05), look_at=(0.0, -0.75, 0.5))] # TODO
+            self.obs_shape = 424 + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -391,6 +402,7 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
             411 - 417	block2 pose
             418 - 420	block2 linear velocity
             421 - 423	block2 angle velocity
+            424 - :     visual observation, currently RGB image (3 x 256 x 256)
         """
         if device is None:
             device = self.device
@@ -473,6 +485,8 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
         obs[:, 408:411] *= self.vel_obs_scale  # object1 angvel
         obs[:, 411:424] = envstates.objects[f"{self.current_object_type}_2"].root_state
         obs[:, 421:424] *= self.vel_obs_scale  # object2 angvel
+        if self.obs_type == "rgb":
+            obs[:, 424:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(

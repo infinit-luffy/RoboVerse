@@ -789,7 +789,7 @@ def compute_hand_reward(
 
     reward = 2 - right_hand_dist_rew - left_hand_dist_rew + up_rew
 
-    success = torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) < 0.5
+    success = torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) < 0.3
 
     # Find out which envs hit the goal and update successes count
     success_buf = torch.where(

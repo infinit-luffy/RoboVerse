@@ -181,7 +181,7 @@ def train(args):
     if args.max_iterations != -1:
         args.train_cfg["learn"]["max_iterations"] = args.max_iterations
 
-    logdir = args.logdir + f"_seed{args.seed}" + f"_{task.current_object_type}"
+    logdir = args.logdir + f"_seed{args.seed}" + f"_{task.current_object_type}" + f"_{args.obs_type}"
     if args.experiment != "Base":
         logdir += f"_{args.experiment}"
 

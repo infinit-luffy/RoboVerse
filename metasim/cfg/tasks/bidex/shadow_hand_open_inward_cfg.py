@@ -59,6 +59,8 @@ class ShadowHandOpenInwardCfg(BaseRLTaskCfg):
             friction=0.1,
             use_vhacd=True,
             vhacd_resolution=20000,
+            stiffness=100.0,
+            damping=100.0,
         ),
     }
     objects = []

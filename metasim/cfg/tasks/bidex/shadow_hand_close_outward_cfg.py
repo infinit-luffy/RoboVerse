@@ -58,6 +58,8 @@ class ShadowHandCloseOutwardCfg(BaseRLTaskCfg):
             mesh_normal_mode="vertex",
             friction=0.1,
             use_vhacd=True,
+            stiffness=100.0,
+            damping=100.0,
         ),
     }
     objects = []
@@ -789,7 +791,7 @@ def compute_hand_reward(
 
     reward = 6 - right_hand_dist_rew - left_hand_dist_rew + up_rew
 
-    success = torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) < 0.3
+    success = (torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) < 0.3) & (right_hand_finger_dist < 0.5) & (left_hand_finger_dist < 0.5)
 
     # Find out which envs hit the goal and update successes count
     success_buf = torch.where(

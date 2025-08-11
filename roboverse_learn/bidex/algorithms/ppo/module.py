@@ -102,7 +102,7 @@ class ActorCritic(nn.Module):
         return actions_log_prob, entropy, value, actions_mean, self.log_std.repeat(actions_mean.shape[0], 1)
 
 class ActorCritic_RGB(nn.Module):
-    def __init__(self, obs_shape, actions_shape, initial_std, model_cfg, proprio_shape, img_h=None, img_w=None):
+    def __init__(self, obs_shape, actions_shape, initial_std, model_cfg, state_shape, img_h=None, img_w=None):
         super().__init__()
 
         if model_cfg is None:
@@ -116,11 +116,11 @@ class ActorCritic_RGB(nn.Module):
             activation = get_activation(model_cfg["activation"])
             self.fix_img_encoder = model_cfg.get("fix_img_encoder", False)
 
-        self.proprio_shape = proprio_shape
+        self.state_shape = state_shape
         self.obs_shape = obs_shape
         self.img_h = img_h if img_h is not None else 256
         self.img_w = img_w if img_w is not None else 256
-        self.num_img = (obs_shape[0] - proprio_shape) // (3 * self.img_h * self.img_w)
+        self.num_img = (obs_shape[0] - state_shape) // (3 * self.img_h * self.img_w)
 
         # img encoder
         self.resnet = torchvision.models.resnet18(pretrained=True)
@@ -130,7 +130,7 @@ class ActorCritic_RGB(nn.Module):
         if self.fix_img_encoder:
             for param in self.resnet.parameters():
                 param.requires_grad = False
-        self.fc_shape = self.visual_feature_dim * self.num_img + proprio_shape
+        self.fc_shape = self.visual_feature_dim * self.num_img + state_shape
 
         # Policy
         actor_layers = []
@@ -181,7 +181,7 @@ class ActorCritic_RGB(nn.Module):
         raise NotImplementedError
 
     def act(self, observations):
-        img = observations[:, self.proprio_shape:].view(-1, 3, self.img_h, self.img_w)
+        img = observations[:, self.state_shape:].view(-1, 3, self.img_h, self.img_w)
         # import cv2
         # import numpy as np
         # img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
@@ -195,8 +195,8 @@ class ActorCritic_RGB(nn.Module):
         else:
             img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
-        proprio = observations[:, :self.proprio_shape] # (batch_size, proprio_shape)
-        observations = torch.cat((img_features_flatten, proprio), dim=-1)
+        state = observations[:, :self.state_shape] # (batch_size, state_shape)
+        observations = torch.cat((img_features_flatten, state), dim=-1)
 
         actions_mean = self.actor(observations)
 
@@ -217,29 +217,29 @@ class ActorCritic_RGB(nn.Module):
         )
 
     def act_inference(self, observations):
-        img = observations[:, self.proprio_shape:].view(-1, 3, self.img_h, self.img_w)
+        img = observations[:, self.state_shape:].view(-1, 3, self.img_h, self.img_w)
         if self.fix_img_encoder:
             with torch.no_grad():
                 img_features = self.resnet(img)
         else:
             img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
-        proprio = observations[:, :self.proprio_shape] # (batch_size, proprio_shape)
-        observations = torch.cat((img_features_flatten, proprio), dim=-1)
+        state = observations[:, :self.state_shape] # (batch_size, state_shape)
+        observations = torch.cat((img_features_flatten, state), dim=-1)
 
         actions_mean = self.actor(observations)
         return actions_mean
 
     def evaluate(self, observations, actions):
-        img = observations[:, self.proprio_shape:].view(-1, 3, self.img_h, self.img_w)
+        img = observations[:, self.state_shape:].view(-1, 3, self.img_h, self.img_w)
         if self.fix_img_encoder:
             with torch.no_grad():
                 img_features = self.resnet(img)
         else:
             img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
-        proprio = observations[:, :self.proprio_shape] # (batch_size, proprio_shape)
-        observations = torch.cat((img_features_flatten, proprio), dim=-1)
+        state = observations[:, :self.state_shape] # (batch_size, state_shape)
+        observations = torch.cat((img_features_flatten, state), dim=-1)
 
         actions_mean = self.actor(observations)
 

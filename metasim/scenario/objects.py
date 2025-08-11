@@ -169,6 +169,8 @@ class ArticulationObjCfg(_FileBasedMixin, BaseArticulationObjCfg):
     mesh_normal_mode: str | None = None
     collapse_fixed_joints: bool = False
     vhacd_resolution: int | None = None
+    stiffness: float | None = None
+    damping: float | None = None
     """Articulation object cfg."""
 
 

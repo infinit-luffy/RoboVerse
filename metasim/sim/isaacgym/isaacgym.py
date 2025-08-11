@@ -642,6 +642,12 @@ class IsaacgymHandler(BaseSimHandler):
                     pass
                 elif isinstance(self.objects[obj_i], ArticulationObjCfg):
                     self._articulated_obj_handles[-1].append(obj_handle)
+                    if self.objects[obj_i].stiffness is not None:
+                        for dof_prop in self._articulated_dof_prop_dict[self.objects[obj_i].name]:
+                            dof_prop[4] = self.objects[obj_i].stiffness
+                    if self.objects[obj_i].damping is not None:
+                        for dof_prop in self._articulated_dof_prop_dict[self.objects[obj_i].name]:
+                            dof_prop[5] = self.objects[obj_i].damping
                     self.gym.set_actor_dof_properties(env, obj_handle, self._articulated_dof_prop_dict[self.objects[obj_i].name])
                 else:
                     log.error("Unknown object type")

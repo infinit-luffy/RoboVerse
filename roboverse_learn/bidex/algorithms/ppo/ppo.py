@@ -34,7 +34,11 @@ class PPO:
             raise TypeError("vec_env.action_space must be a gym Space")
         self.observation_space = vec_env.observation_space
         self.obs_type = getattr(vec_env, "obs_type", "state")
-        self.proprio_shape = getattr(vec_env, "proprio_shape", None)
+        self.use_prio = getattr(vec_env, "use_prio", True)
+        if self.use_prio:
+            self.state_shape = getattr(vec_env, "proprio_shape", None)
+        else:
+            self.state_shape = getattr(vec_env, "proceptual_shape", None)
         self.img_h = getattr(vec_env, "img_h", None)
         self.img_w = getattr(vec_env, "img_w", None)
         self.action_space = vec_env.action_space
@@ -64,7 +68,7 @@ class PPO:
                 self.action_space.shape,
                 self.init_noise_std,
                 self.model_cfg,
-                proprio_shape=self.proprio_shape,
+                state_shape=self.state_shape,
                 img_h=self.img_h,
                 img_w=self.img_w,
             )

@@ -58,6 +58,8 @@ class ShadowHandCloseInwardCfg(BaseRLTaskCfg):
             mesh_normal_mode="vertex",
             friction=0.1,
             use_vhacd=True,
+            stiffness=100.0,
+            damping=100.0,
         ),
     }
     objects = []

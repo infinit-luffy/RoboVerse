@@ -68,10 +68,12 @@ class Args:
     wandb_project: str = "roboverse_bidex_rl"
     objects: str = None
     obs_type: str = "state"  # "state" or "rgb"
+    no_prio: bool = False  # Use proprioception in state observation
 
     train_cfg = None
 
     train = not test  # if test is True, then train is False
+    use_prio = not no_prio  # Use priority sampling in training
 
 
 def get_config_path(args):
@@ -80,35 +82,29 @@ def get_config_path(args):
                      "ShadowHandSwingCup", "ShadowHandCloseInward", "ShadowHandCloseOutward",
                      "ShadowHandScissor", "ShadowHandPen", "ShadowHandTwoCatchUnderarm",
                      "ShadowHandBottle", "ShadowHandGraspPlace", "ShadowHandKettle"]:
-        if args.obs_type == "state":
-            return (
-                os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-                f"roboverse_learn/bidex/cfg/{args.algo}/config.yaml",
-            )
-        elif args.obs_type == "rgb":
-            return (
-                os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-                f"roboverse_learn/bidex/cfg/{args.algo}/rgb_config.yaml",
-            )
+        return (
+            os.path.join(args.logdir, f"{args.task}/{args.algo}"),
+            f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/rgb_config.yaml",
+        )
     elif args.task in ["ShadowHandStackBlock"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/bidex/cfg/{args.algo}/stack_block_config.yaml",
+            f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/stack_block_config.yaml",
         )
     elif args.task in ["ShadowHandOpenInward", "ShadowHandOpenOutward"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/bidex/cfg/{args.algo}/open_config.yaml",
+            f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/open_config.yaml",
         )
     elif args.task in ["ShadowHandLiftUnderarm"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/bidex/cfg/{args.algo}/lift_config.yaml",
+            f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/lift_config.yaml",
         )
     elif args.task in ["ShadowHandReOrientation"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/bidex/cfg/{args.algo}/re_orientation_config.yaml",
+            f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/re_orientation_config.yaml",
         )
     else:
         raise ValueError(f"Unrecognized task: {args.task}. Please specify a valid task.")
@@ -145,6 +141,7 @@ def train(args):
     task.device = args.device
     task.is_testing = args.test
     task.obs_type = args.obs_type
+    task.use_prio = args.use_prio
     task.set_objects()
     task.set_init_states()
     cameras = [] if not hasattr(task, "cameras") else task.cameras

@@ -54,6 +54,7 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
             default_density=100.0,
             use_vhacd=True,
             friction=0.25,
+            friction_idx=[0],
         ),
         "table": PrimitiveCubeCfg(
             name="table",

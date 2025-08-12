@@ -618,8 +618,12 @@ class IsaacgymHandler(BaseSimHandler):
 
                 if self.objects[obj_i].friction is not None:
                     shape_props = self.gym.get_actor_rigid_shape_properties(env, obj_handle)
-                    for shape_prop in shape_props:
-                        shape_prop.friction = self.objects[obj_i].friction
+                    if self.objects[obj_i].friction_idx is None:
+                        for shape_prop in shape_props:
+                            shape_prop.friction = self.objects[obj_i].friction
+                    else:
+                        for friction_idx in self.objects[obj_i].friction_idx:
+                            shape_props[friction_idx].friction = self.objects[obj_i].friction
                     self.gym.set_actor_rigid_shape_properties(env, obj_handle, shape_props)
 
                 if isinstance(self.objects[obj_i], _FileBasedMixin):
@@ -665,7 +669,6 @@ class IsaacgymHandler(BaseSimHandler):
 
             # carefully set each robot
             env_robot_handles = []
-            collision_filter = 1
             for robot_idx, robot, robot_asset, robot_dof_props, robot_init_pos, robot_init_quat in enumerate(zip(
                 self.robots, robot_asset_list, robot_dof_props_list, self._robot_init_pos, self._robot_init_quat
             )):
@@ -674,8 +677,7 @@ class IsaacgymHandler(BaseSimHandler):
                 robot_pose.r = gymapi.Quat(
                     *self._robot_init_quat[self.robots[0].name][1:], self._robot_init_quat[self.robots[0].name][0]
                 )  # x, y, z, w order for gymapi.Quat
-                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, collision_filter)
-                collision_filter *= 2  # increase collision filter for next robot
+                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 1)
                 self.gym.enable_actor_dof_force_sensors(env, robot_handle)
                 assert robot.scale[0] == 1.0 and robot.scale[1] == 1.0 and robot.scale[2] == 1.0
                 self.gym.set_actor_scale(env, robot_handle, robot.scale[0])

@@ -104,6 +104,9 @@ class BaseObjCfg:
     friction: float| None = None
     """Friction of the object."""
 
+    friction_idx: list[int] | None = None
+    """Friction shape index of the object, used for multi-friction objects."""
+
 
 ##################################################
 # Level 1: Base rigid object and base articulation object

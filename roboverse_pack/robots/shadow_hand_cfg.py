@@ -19,7 +19,6 @@ class ShadowHandCfg(RobotCfg):
     isaacgym_read_mjcf: bool = True
     enabled_gravity: bool = False
     enabled_self_collisions: bool = False
-    collapse_fixed_joints: bool = True
     use_vhacd: bool = True
     dof_drive_mode: Literal["none", "position", "effort"] = "position"
     angular_damping: float = None

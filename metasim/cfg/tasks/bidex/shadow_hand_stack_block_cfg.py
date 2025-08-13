@@ -76,6 +76,7 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
             linear_damping=100.0,
             dof_drive_mode='none',
             use_vhacd=False,
+            collapse_fixed_joints=True,
         ),
         ShadowHandCfg(
             name="shadow_hand_left",
@@ -85,6 +86,7 @@ class ShadowHandStackBlockCfg(BaseRLTaskCfg):
             linear_damping=100.0,
             dof_drive_mode='none',
             use_vhacd=False,
+            collapse_fixed_joints=True,
         ),
     ]
     num_actuated_joints = {}

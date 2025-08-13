@@ -145,7 +145,7 @@ class ShadowHandCloseInwardCfg(BaseRLTaskCfg):
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
-            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(-1.35, -1.0, 1.05), look_at=(0.0, -0.75, 0.5))] # TODO
+            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(2, -0.2, 1.05), look_at=(0.0, -0.0, 0.5))]
             self.obs_shape = 404 + 3 * self.img_h * self.img_w
         self.init_goal_rot = torch.tensor(
             [-0.707, 0.0, 0.0, 0.707], dtype=torch.float32, device=self.device

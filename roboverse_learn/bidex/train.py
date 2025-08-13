@@ -78,13 +78,13 @@ class Args:
 
 def get_config_path(args):
     if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm",
-                     "ShadowHandPushBlock", "ShadowHandTurnButton", "ShadowHandCatchAbreast",
-                     "ShadowHandSwingCup", "ShadowHandCloseInward", "ShadowHandCloseOutward",
-                     "ShadowHandScissor", "ShadowHandPen", "ShadowHandTwoCatchUnderarm",
-                     "ShadowHandBottle", "ShadowHandGraspPlace", "ShadowHandKettle"]:
+                     "ShadowHandPushBlock", "ShadowHandCatchAbreast", "ShadowHandSwingCup",
+                     "ShadowHandCloseInward", "ShadowHandCloseOutward", "ShadowHandScissor",
+                     "ShadowHandPen", "ShadowHandTwoCatchUnderarm", "ShadowHandBottle",
+                     "ShadowHandGraspPlace", "ShadowHandKettle"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/rgb_config.yaml",
+            f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/config.yaml",
         )
     elif args.task in ["ShadowHandStackBlock"]:
         return (
@@ -105,6 +105,11 @@ def get_config_path(args):
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/re_orientation_config.yaml",
+        )
+    elif args.task in ["ShadowHandTurnButton"]:
+        return (
+            os.path.join(args.logdir, f"{args.task}/{args.algo}"),
+            f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/smooth_config.yaml",
         )
     else:
         raise ValueError(f"Unrecognized task: {args.task}. Please specify a valid task.")

@@ -138,7 +138,7 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
     def set_init_states(self) -> None:
         """Set the initial states for the shadow hand over task."""
         if self.obs_type == "state":
-            self.cameras = []
+            self.cameras = [PinholeCameraCfg(name="camera_0", pos=(-0.8, -0.5, 1.2), look_at=(0.0, 0.0, 0.5))]
             self.obs_shape = 404
         elif self.obs_type == "rgb":
             self.img_h = 256
@@ -245,14 +245,14 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
                     f"{self.current_object_type}_1": {
-                        "pos": torch.tensor([0.0, 0.2, 0.65]),
+                        "pos": torch.tensor([0.0, 0.2, 0.655]),
                         "rot": torch.tensor([0, -0.7071, 0, 0.7071]),
                         "dof_pos": {
                             "joint_0": 0.5585,  # Initial position of the switch
                         }
                     },
                     f"{self.current_object_type}_2": {
-                        "pos": torch.tensor([0.0, -0.2, 0.65]),
+                        "pos": torch.tensor([0.0, -0.2, 0.655]),
                         "rot": torch.tensor([0, -0.7071, 0, 0.7071]),
                         "dof_pos": {
                             "joint_0": 0.5585,  # Initial position of the switch
@@ -785,14 +785,14 @@ def compute_hand_reward(
     left_hand_dist_rew = left_hand_finger_dist
 
     up_rew = torch.zeros_like(right_hand_dist_rew)
-    up_rew = (1.4 - (right_object_pos[:, 2] + left_object_pos[:, 2])) * 50
+    up_rew = (1.41 - (right_object_pos[:, 2] + left_object_pos[:, 2])) * 50
 
     reward = 2 - right_hand_dist_rew - left_hand_dist_rew + up_rew - action_penalty * action_penalty_scale
 
     # No goal reset
     goal_resets = torch.zeros_like(reset_buf, dtype=torch.float32)
-    success_right = right_object_pos[:, 2] <= 0.693
-    success_left = left_object_pos[:, 2] <= 0.693
+    success_right = right_object_pos[:, 2] <= 0.698
+    success_left = left_object_pos[:, 2] <= 0.698
     success = success_right & success_left
     success_buf = torch.where(
         success_buf == 0,

@@ -25,14 +25,18 @@ class ObsSaver:
 
         self.image_idx = 0
 
-    def add(self, state: TensorState):
+    def add(self, state: TensorState, single_env: bool = False):
         """Add the observation to the list."""
         if self.image_dir is None and self.video_path is None:
             return
 
         try:
-            rgb_data = torch.concat([cam.rgb for cam in state.cameras.values()], dim=2)  # horizontal concat
-            image = make_grid(rgb_data.permute(0, 3, 1, 2) / 255, nrow=int(rgb_data.shape[0] ** 0.5))  # (C, H, W)
+            if not single_env:
+                rgb_data = next(iter(state.cameras.values())).rgb
+                image = make_grid(rgb_data.permute(0, 3, 1, 2) / 255, nrow=int(rgb_data.shape[0] ** 0.5))  # (C, H, W)
+            else:
+                rgb_data = next(iter(state.cameras.values())).rgb[0].unsqueeze(0)  # (1, C, H, W)
+                image = make_grid(rgb_data.permute(0, 3, 1, 2) / 255, nrow=int(rgb_data.shape[0] ** 0.5))  # (C, H, W)
         except Exception as e:
             log.error(f"Error adding observation: {e}")
             return

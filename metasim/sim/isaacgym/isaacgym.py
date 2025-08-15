@@ -217,9 +217,13 @@ class IsaacgymHandler(BaseSimHandler):
                 self.gym.set_camera_location(camera_handle, self._envs[i_env], camera_eye, camera_lookat)
                 if cam_cfg.mount_to is not None:
                     if isinstance(cam_cfg.mount_link, str):
-                        mount_handle = self._robot_link_dict_list[self._robot_names.index(cam_cfg.mount_to)][cam_cfg.mount_link]
+                        mount_handle = self._robot_link_dict_list[self._robot_names.index(cam_cfg.mount_to)][
+                            cam_cfg.mount_link
+                        ]
                     elif isinstance(cam_cfg.mount_link, tuple):
-                        mount_handle = self._robot_link_dict_list[self._robot_names.index(cam_cfg.mount_to)][cam_cfg.mount_link[1]]
+                        mount_handle = self._robot_link_dict_list[self._robot_names.index(cam_cfg.mount_to)][
+                            cam_cfg.mount_link[1]
+                        ]
                     camera_pose = gymapi.Transform(
                         gymapi.Vec3(*cam_cfg.mount_pos), gymapi.Quat(*cam_cfg.mount_quat[1:], cam_cfg.mount_quat[0])
                     )
@@ -499,7 +503,6 @@ class IsaacgymHandler(BaseSimHandler):
         env_upper = gymapi.Vec3(spacing, spacing, spacing)
         log.info("Creating %d environments" % self.num_envs)
 
-
         # add ground plane
         plane_params = gymapi.PlaneParams()
         plane_params.normal = gymapi.Vec3(0, 0, 1)
@@ -652,7 +655,9 @@ class IsaacgymHandler(BaseSimHandler):
                     if self.objects[obj_i].damping is not None:
                         for dof_prop in self._articulated_dof_prop_dict[self.objects[obj_i].name]:
                             dof_prop[5] = self.objects[obj_i].damping
-                    self.gym.set_actor_dof_properties(env, obj_handle, self._articulated_dof_prop_dict[self.objects[obj_i].name])
+                    self.gym.set_actor_dof_properties(
+                        env, obj_handle, self._articulated_dof_prop_dict[self.objects[obj_i].name]
+                    )
                 else:
                     log.error("Unknown object type")
                     raise NotImplementedError
@@ -669,15 +674,13 @@ class IsaacgymHandler(BaseSimHandler):
 
             # carefully set each robot
             env_robot_handles = []
-            for robot_idx, robot_info in enumerate(zip(
-                self.robots, robot_asset_list, robot_dof_props_list, self._robot_init_pos, self._robot_init_quat
-            )):
+            for robot_idx, robot_info in enumerate(
+                zip(self.robots, robot_asset_list, robot_dof_props_list, self._robot_init_pos, self._robot_init_quat)
+            ):
                 robot, robot_asset, robot_dof_props, robot_init_pos, robot_init_quat = robot_info
                 robot_pose = gymapi.Transform()
-                robot_pose.p = gymapi.Vec3(*self._robot_init_pos[self.robots[0].name])
-                robot_pose.r = gymapi.Quat(
-                    *self._robot_init_quat[self.robots[0].name][1:], self._robot_init_quat[self.robots[0].name][0]
-                )  # x, y, z, w order for gymapi.Quat
+                robot_pose.p = gymapi.Vec3(*robot_init_pos)
+                robot_pose.r = gymapi.Quat(*robot_init_quat[1:], robot_init_quat[0])  # x, y, z, w order for gymapi.Quat
                 robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 1)
                 self.gym.enable_actor_dof_force_sensors(env, robot_handle)
                 assert robot.scale[0] == 1.0 and robot.scale[1] == 1.0 and robot.scale[2] == 1.0
@@ -716,12 +719,12 @@ class IsaacgymHandler(BaseSimHandler):
 
         # GET initial state, copy for reset later
         self._initial_state = np.copy(self.gym.get_sim_rigid_body_states(self.sim, gymapi.STATE_ALL))
-        self.actor_indices = torch.zeros((self.num_envs, len(self.objects) + len(self.robots)), dtype=torch.int32, device=self.device)
+        self.actor_indices = torch.zeros(
+            (self.num_envs, len(self.objects) + len(self.robots)), dtype=torch.int32, device=self.device
+        )
         for env_id in range(self.num_envs):
             env_offset = env_id * (len(self.objects) + len(self.robots))
-            self.actor_indices[env_id, :] = torch.arange(
-                env_offset, env_offset + len(self.objects) + len(self.robots)
-            )
+            self.actor_indices[env_id, :] = torch.arange(env_offset, env_offset + len(self.objects) + len(self.robots))
 
         ###### set VIEWER camera ######
         # point camera at middle env
@@ -1103,18 +1106,32 @@ class IsaacgymHandler(BaseSimHandler):
                 if isinstance(obj, ArticulationObjCfg) and len(self._joint_info[obj.name]["names"]) > 0:
                     joint_pos = obj_state.joint_pos
                     joint_vel = obj_state.joint_vel
-                    global_dof_indices = torch.tensor(list(self._joint_info[obj.name]["global_indices"].values()), dtype=torch.int32, device=self.device)
-                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[env_ids, :].clone()
-                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[env_ids, :].clone()
+                    global_dof_indices = torch.tensor(
+                        list(self._joint_info[obj.name]["global_indices"].values()),
+                        dtype=torch.int32,
+                        device=self.device,
+                    )
+                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[
+                        env_ids, :
+                    ].clone()
+                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[
+                        env_ids, :
+                    ].clone()
             for robot_id, robot in enumerate(self.robots):
                 robot_state = states.robots[robot.name]
                 root_state = self._reorder_quat_wxyz_to_xyzw(robot_state.root_state)
                 new_root_states[env_ids, len(self.objects) + robot_id, :] = root_state[env_ids, :].clone()
                 joint_pos = robot_state.joint_pos
                 joint_vel = robot_state.joint_vel
-                global_dof_indices = torch.tensor(list(self._joint_info[robot.name]["global_indices"].values()), dtype=torch.int32, device=self.device)
-                new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[env_ids, :].clone()
-                new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[env_ids, :].clone()
+                global_dof_indices = torch.tensor(
+                    list(self._joint_info[robot.name]["global_indices"].values()), dtype=torch.int32, device=self.device
+                )
+                new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[
+                    env_ids, :
+                ].clone()
+                new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[
+                    env_ids, :
+                ].clone()
 
             new_root_states = new_root_states.view(-1, 13)
             new_dof_states = new_dof_states.view(-1, 2)

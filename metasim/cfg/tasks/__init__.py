@@ -12,27 +12,26 @@ from .base_task_cfg import BaseTaskCfg
 def __get_quick_ref():
     tic = time.time()
 
-    from .bidex.shadow_hand_catch_underarm_cfg import ShadowHandCatchUnderarmCfg
-    from .bidex.shadow_hand_over_cfg import ShadowHandOverCfg
-    from .bidex.shadow_hand_over2underarm_cfg import ShadowHandOver2UnderarmCfg
-    from .bidex.shadow_hand_push_block_cfg import ShadowHandPushBlockCfg
-    from .bidex.shadow_hand_catch_abreast_cfg import ShadowHandCatchAbreastCfg
-    from .bidex.shadow_hand_lift_underarm_cfg import ShadowHandLiftUnderarmCfg
-    from .bidex.shadow_hand_turn_button_cfg import ShadowHandTurnButtonCfg
-    from .bidex.shadow_hand_swing_cup_cfg import ShadowHandSwingCupCfg
-    from .bidex.shadow_hand_close_inward_cfg import ShadowHandCloseInwardCfg
-    from .bidex.shadow_hand_open_outward_cfg import ShadowHandOpenOutwardCfg
-    from .bidex.shadow_hand_close_outward_cfg import ShadowHandCloseOutwardCfg
-    from .bidex.shadow_hand_open_inward_cfg import ShadowHandOpenInwardCfg
-    from .bidex.shadow_hand_scissor_cfg import ShadowHandScissorCfg
-    from .bidex.shadow_hand_pen_cfg import ShadowHandPenCfg
-    from .bidex.shadow_hand_stack_block_cfg import ShadowHandStackBlockCfg
-    from .bidex.shadow_hand_re_orientation_cfg import ShadowHandReOrientationCfg
-    from .bidex.shadow_hand_two_catch_underarm_cfg import ShadowHandTwoCatchUnderarmCfg
     from .bidex.shadow_hand_bottle_cfg import ShadowHandBottleCfg
+    from .bidex.shadow_hand_catch_abreast_cfg import ShadowHandCatchAbreastCfg
+    from .bidex.shadow_hand_catch_underarm_cfg import ShadowHandCatchUnderarmCfg
+    from .bidex.shadow_hand_close_inward_cfg import ShadowHandCloseInwardCfg
+    from .bidex.shadow_hand_close_outward_cfg import ShadowHandCloseOutwardCfg
     from .bidex.shadow_hand_grasp_place_cfg import ShadowHandGraspPlaceCfg
     from .bidex.shadow_hand_kettle_cfg import ShadowHandKettleCfg
-
+    from .bidex.shadow_hand_lift_underarm_cfg import ShadowHandLiftUnderarmCfg
+    from .bidex.shadow_hand_open_inward_cfg import ShadowHandOpenInwardCfg
+    from .bidex.shadow_hand_open_outward_cfg import ShadowHandOpenOutwardCfg
+    from .bidex.shadow_hand_over2underarm_cfg import ShadowHandOver2UnderarmCfg
+    from .bidex.shadow_hand_over_cfg import ShadowHandOverCfg
+    from .bidex.shadow_hand_pen_cfg import ShadowHandPenCfg
+    from .bidex.shadow_hand_push_block_cfg import ShadowHandPushBlockCfg
+    from .bidex.shadow_hand_re_orientation_cfg import ShadowHandReOrientationCfg
+    from .bidex.shadow_hand_scissor_cfg import ShadowHandScissorCfg
+    from .bidex.shadow_hand_stack_block_cfg import ShadowHandStackBlockCfg
+    from .bidex.shadow_hand_swing_cup_cfg import ShadowHandSwingCupCfg
+    from .bidex.shadow_hand_turn_button_cfg import ShadowHandTurnButtonCfg
+    from .bidex.shadow_hand_two_catch_underarm_cfg import ShadowHandTwoCatchUnderarmCfg
     from .calvin.calvin import MoveSliderLeftACfg
     from .debug.reach_cfg import ReachOriginCfg
     from .dmcontrol.walker_walk_cfg import WalkerWalkCfg

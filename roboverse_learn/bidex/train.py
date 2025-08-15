@@ -30,7 +30,6 @@ from algorithms.ppo.ppo import PPO
 from rl_env_wrapper import BiDexEnvWrapper
 
 from metasim.cfg.scenario import ScenarioCfg
-from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.utils import configclass
 from metasim.utils.setup_util import get_task
 

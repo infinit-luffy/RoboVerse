@@ -401,19 +401,15 @@ def list_state_to_tensor(
                 [
                     es["sensors"][sensor]["torque"]
                     for es in env_states
-                    if (
-                        "sensors" in es and
-                        sensor in es["sensors"] and
-                        es["sensors"][sensor]["torque"] is not None
-                    )
+                    if ("sensors" in es and sensor in es["sensors"] and es["sensors"][sensor]["torque"] is not None)
                 ],
-                dim=0
+                dim=0,
             ).to(dev)
             if (
-                env_states and
-                "sensors" in env_states[0] and
-                sensor in env_states[0]["sensors"] and
-                "torque" in env_states[0]["sensors"][sensor]
+                env_states
+                and "sensors" in env_states[0]
+                and sensor in env_states[0]["sensors"]
+                and "torque" in env_states[0]["sensors"][sensor]
             )
             else None
         )

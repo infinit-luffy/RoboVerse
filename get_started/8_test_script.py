@@ -11,7 +11,6 @@ except ImportError:
 
 import os
 
-import numpy as np
 import rootutils
 import torch
 import tyro
@@ -21,17 +20,17 @@ from rich.logging import RichHandler
 rootutils.setup_root(__file__, pythonpath=True)
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
+import time
+
 from get_started.utils import ObsSaver
-from metasim.cfg.objects import RigidObjCfg, PrimitiveCubeCfg, ArticulationObjCfg
+from metasim.cfg.objects import RigidObjCfg
+from metasim.cfg.robots import ShadowHandCfg
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.cfg.sensors import PinholeCameraCfg
-from metasim.cfg.robots import ShadowHandCfg
 from metasim.cfg.simulator_params import SimParamCfg
 from metasim.constants import PhysicStateType, SimType
 from metasim.utils import configclass
 from metasim.utils.setup_util import get_sim_env_class
-from metasim.utils import math
-import time
 
 
 @configclass
@@ -212,7 +211,7 @@ init_states = [
             #         "joint_2": 0.0,  # Initial position of the switch
             #     }
             # },
-            "table":{
+            "table": {
                 "pos": torch.tensor([0.0, 0.0, 0.275]),
                 "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
             },
@@ -253,7 +252,7 @@ init_states = [
                     "robot0_THJ3": 0.0,
                     "robot0_THJ2": 0.0,
                     "robot0_THJ1": 0.0,
-                    "robot0_THJ0": 0.0
+                    "robot0_THJ0": 0.0,
                 },
             },
             "shadow_hand_left": {
@@ -283,7 +282,7 @@ init_states = [
                     "robot0_THJ3": 0.0,
                     "robot0_THJ2": 0.0,
                     "robot0_THJ1": 0.0,
-                    "robot0_THJ0": 0.0
+                    "robot0_THJ0": 0.0,
                 },
             },
         },

@@ -32,7 +32,9 @@ class BiDexEnvWrapper:
         self.env = env_class(scenario)
 
         self.init_states = [copy.deepcopy(scenario.task.init_states) for _ in range(self.num_envs)]
-        self.init_states_tensor = list_state_to_tensor(handler=self.env.handler, env_states=self.init_states, device=self.sim_device)
+        self.init_states_tensor = list_state_to_tensor(
+            handler=self.env.handler, env_states=self.init_states, device=self.sim_device
+        )
 
         # FIXME action limit differs with joint limit in locomotion configuration(desire pos = scale*action + default pos)
         # Set up action space based on robot joint limits

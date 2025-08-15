@@ -1,8 +1,9 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.distributions import MultivariateNormal
 import torchvision
+from torch.distributions import MultivariateNormal
+
 
 class ActorCritic(nn.Module):
     def __init__(self, obs_shape, actions_shape, initial_std, model_cfg):
@@ -101,6 +102,7 @@ class ActorCritic(nn.Module):
 
         return actions_log_prob, entropy, value, actions_mean, self.log_std.repeat(actions_mean.shape[0], 1)
 
+
 class ActorCritic_RGB(nn.Module):
     def __init__(self, obs_shape, actions_shape, initial_std, model_cfg, state_shape, img_h=None, img_w=None):
         super().__init__()
@@ -181,21 +183,16 @@ class ActorCritic_RGB(nn.Module):
         raise NotImplementedError
 
     def act(self, observations):
-        img = observations[:, self.state_shape:].view(-1, 3, self.img_h, self.img_w)
-        # import cv2
-        # import numpy as np
-        # img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
-        # img_uint8 = (img0 * 255).astype(np.uint8) if img0.dtype != np.uint8 else img0
-        # img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
-        # cv2.imwrite("camera0_image.png", img_bgr)
-        # exit(0)
+        img = observations[:, self.state_shape :].view(-1, 3, self.img_h, self.img_w)
         if self.fix_img_encoder:
             with torch.no_grad():
                 img_features = self.resnet(img)
         else:
-            img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
-        img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
-        state = observations[:, :self.state_shape] # (batch_size, state_shape)
+            img_features = self.resnet(img)  # (batch_size * num_img, visual_feature_dim)
+        img_features_flatten = img_features.view(
+            observations.shape[0], -1
+        )  # (batch_size, num_img * visual_feature_dim)
+        state = observations[:, : self.state_shape]  # (batch_size, state_shape)
         observations = torch.cat((img_features_flatten, state), dim=-1)
 
         actions_mean = self.actor(observations)
@@ -217,28 +214,32 @@ class ActorCritic_RGB(nn.Module):
         )
 
     def act_inference(self, observations):
-        img = observations[:, self.state_shape:].view(-1, 3, self.img_h, self.img_w)
+        img = observations[:, self.state_shape :].view(-1, 3, self.img_h, self.img_w)
         if self.fix_img_encoder:
             with torch.no_grad():
                 img_features = self.resnet(img)
         else:
-            img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
-        img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
-        state = observations[:, :self.state_shape] # (batch_size, state_shape)
+            img_features = self.resnet(img)  # (batch_size * num_img, visual_feature_dim)
+        img_features_flatten = img_features.view(
+            observations.shape[0], -1
+        )  # (batch_size, num_img * visual_feature_dim)
+        state = observations[:, : self.state_shape]  # (batch_size, state_shape)
         observations = torch.cat((img_features_flatten, state), dim=-1)
 
         actions_mean = self.actor(observations)
         return actions_mean
 
     def evaluate(self, observations, actions):
-        img = observations[:, self.state_shape:].view(-1, 3, self.img_h, self.img_w)
+        img = observations[:, self.state_shape :].view(-1, 3, self.img_h, self.img_w)
         if self.fix_img_encoder:
             with torch.no_grad():
                 img_features = self.resnet(img)
         else:
-            img_features = self.resnet(img) # (batch_size * num_img, visual_feature_dim)
-        img_features_flatten = img_features.view(observations.shape[0], -1) # (batch_size, num_img * visual_feature_dim)
-        state = observations[:, :self.state_shape] # (batch_size, state_shape)
+            img_features = self.resnet(img)  # (batch_size * num_img, visual_feature_dim)
+        img_features_flatten = img_features.view(
+            observations.shape[0], -1
+        )  # (batch_size, num_img * visual_feature_dim)
+        state = observations[:, : self.state_shape]  # (batch_size, state_shape)
         observations = torch.cat((img_features_flatten, state), dim=-1)
 
         actions_mean = self.actor(observations)

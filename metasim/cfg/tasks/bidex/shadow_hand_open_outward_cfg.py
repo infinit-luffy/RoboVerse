@@ -10,12 +10,12 @@ import torch
 from loguru import logger as log
 from rich.logging import RichHandler
 
-from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg
+from metasim.cfg.objects import ArticulationObjCfg
 from metasim.cfg.robots import ShadowHandCfg
 from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
-from metasim.constants import BenchmarkType, PhysicStateType, TaskType
+from metasim.constants import BenchmarkType, TaskType
 from metasim.types import EnvState
 from metasim.utils import configclass, math
 from metasim.utils.bidex_util import randomize_rotation
@@ -70,7 +70,7 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
-            dof_drive_mode='none',
+            dof_drive_mode="none",
             use_vhacd=False,
         ),
         ShadowHandCfg(
@@ -79,7 +79,7 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
-            dof_drive_mode='none',
+            dof_drive_mode="none",
             use_vhacd=False,
         ),
     ]
@@ -135,17 +135,26 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
     reset_dof_pos_noise = 0.0
 
     def set_objects(self) -> None:
+        """Set the objects for the shadow hand open outward task."""
         self.objects.append(self.objects_cfg[self.current_object_type])
 
     def set_init_states(self) -> None:
-        """Set the initial states for the shadow hand over task."""
+        """Set the initial states for the shadow hand open outward task."""
         if self.obs_type == "state":
             self.cameras = []
             self.obs_shape = 404
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
-            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(1.35, -0.2, 1.05), look_at=(0.0, -0.0, 0.5))] # TODO
+            self.cameras = [
+                PinholeCameraCfg(
+                    name="camera_0",
+                    width=self.img_w,
+                    height=self.img_h,
+                    pos=(1.35, -0.2, 1.05),
+                    look_at=(0.0, -0.0, 0.5),
+                )
+            ]  # TODO
             self.obs_shape = 404 + 3 * self.img_h * self.img_w
         self.init_goal_rot = torch.tensor(
             [-0.707, 0.0, 0.0, 0.707], dtype=torch.float32, device=self.device
@@ -244,79 +253,79 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
         self.shadow_hand_dof_lower_limits_cpu = self.shadow_hand_dof_lower_limits.cpu()
         self.shadow_hand_dof_upper_limits_cpu = self.shadow_hand_dof_upper_limits.cpu()
         self.init_states = {
-                "objects": {
-                    self.current_object_type: {
-                        "pos": torch.tensor([0, 0.0, 0.7]),
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                        "dof_pos": {
-                            "joint_1": 0.0,  # Initial position of the switch
-                            "joint_2": 0.0,  # Initial position of the switch
-                        }
+            "objects": {
+                self.current_object_type: {
+                    "pos": torch.tensor([0, 0.0, 0.7]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        "joint_1": 0.0,  # Initial position of the switch
+                        "joint_2": 0.0,  # Initial position of the switch
                     },
                 },
-                "robots": {
-                    "shadow_hand_right": {
-                        "pos": torch.tensor([0.55, 0.2, 0.6]),
-                        "rot": torch.tensor([0.707, 0.0, -0.707, 0.0]),
-                        "dof_pos": {
-                            "robot0_WRJ1": 0.0,
-                            "robot0_WRJ0": 0.0,
-                            "robot0_FFJ3": 0.0,
-                            "robot0_FFJ2": 0.0,
-                            "robot0_FFJ1": 0.0,
-                            "robot0_FFJ0": 0.0,
-                            "robot0_MFJ3": 0.0,
-                            "robot0_MFJ2": 0.0,
-                            "robot0_MFJ1": 0.0,
-                            "robot0_MFJ0": 0.0,
-                            "robot0_RFJ3": 0.0,
-                            "robot0_RFJ2": 0.0,
-                            "robot0_RFJ1": 0.0,
-                            "robot0_RFJ0": 0.0,
-                            "robot0_LFJ4": 0.0,
-                            "robot0_LFJ3": 0.0,
-                            "robot0_LFJ2": 0.0,
-                            "robot0_LFJ1": 0.0,
-                            "robot0_LFJ0": 0.0,
-                            "robot0_THJ4": 0.0,
-                            "robot0_THJ3": 0.0,
-                            "robot0_THJ2": 0.0,
-                            "robot0_THJ1": 0.0,
-                            "robot0_THJ0": 0.0,
-                        },
-                    },
-                    "shadow_hand_left": {
-                        "pos": torch.tensor([0.55, -0.2, 0.6]),
-                        "rot": torch.tensor([0.0, 0.707, 0.0, -0.707]),
-                        "dof_pos": {
-                            "robot0_WRJ1": 0.0,
-                            "robot0_WRJ0": 0.0,
-                            "robot0_FFJ3": 0.0,
-                            "robot0_FFJ2": 0.0,
-                            "robot0_FFJ1": 0.0,
-                            "robot0_FFJ0": 0.0,
-                            "robot0_MFJ3": 0.0,
-                            "robot0_MFJ2": 0.0,
-                            "robot0_MFJ1": 0.0,
-                            "robot0_MFJ0": 0.0,
-                            "robot0_RFJ3": 0.0,
-                            "robot0_RFJ2": 0.0,
-                            "robot0_RFJ1": 0.0,
-                            "robot0_RFJ0": 0.0,
-                            "robot0_LFJ4": 0.0,
-                            "robot0_LFJ3": 0.0,
-                            "robot0_LFJ2": 0.0,
-                            "robot0_LFJ1": 0.0,
-                            "robot0_LFJ0": 0.0,
-                            "robot0_THJ4": 0.0,
-                            "robot0_THJ3": 0.0,
-                            "robot0_THJ2": 0.0,
-                            "robot0_THJ1": 0.0,
-                            "robot0_THJ0": 0.0,
-                        },
+            },
+            "robots": {
+                "shadow_hand_right": {
+                    "pos": torch.tensor([0.55, 0.2, 0.6]),
+                    "rot": torch.tensor([0.707, 0.0, -0.707, 0.0]),
+                    "dof_pos": {
+                        "robot0_WRJ1": 0.0,
+                        "robot0_WRJ0": 0.0,
+                        "robot0_FFJ3": 0.0,
+                        "robot0_FFJ2": 0.0,
+                        "robot0_FFJ1": 0.0,
+                        "robot0_FFJ0": 0.0,
+                        "robot0_MFJ3": 0.0,
+                        "robot0_MFJ2": 0.0,
+                        "robot0_MFJ1": 0.0,
+                        "robot0_MFJ0": 0.0,
+                        "robot0_RFJ3": 0.0,
+                        "robot0_RFJ2": 0.0,
+                        "robot0_RFJ1": 0.0,
+                        "robot0_RFJ0": 0.0,
+                        "robot0_LFJ4": 0.0,
+                        "robot0_LFJ3": 0.0,
+                        "robot0_LFJ2": 0.0,
+                        "robot0_LFJ1": 0.0,
+                        "robot0_LFJ0": 0.0,
+                        "robot0_THJ4": 0.0,
+                        "robot0_THJ3": 0.0,
+                        "robot0_THJ2": 0.0,
+                        "robot0_THJ1": 0.0,
+                        "robot0_THJ0": 0.0,
                     },
                 },
-            }
+                "shadow_hand_left": {
+                    "pos": torch.tensor([0.55, -0.2, 0.6]),
+                    "rot": torch.tensor([0.0, 0.707, 0.0, -0.707]),
+                    "dof_pos": {
+                        "robot0_WRJ1": 0.0,
+                        "robot0_WRJ0": 0.0,
+                        "robot0_FFJ3": 0.0,
+                        "robot0_FFJ2": 0.0,
+                        "robot0_FFJ1": 0.0,
+                        "robot0_FFJ0": 0.0,
+                        "robot0_MFJ3": 0.0,
+                        "robot0_MFJ2": 0.0,
+                        "robot0_MFJ1": 0.0,
+                        "robot0_MFJ0": 0.0,
+                        "robot0_RFJ3": 0.0,
+                        "robot0_RFJ2": 0.0,
+                        "robot0_RFJ1": 0.0,
+                        "robot0_RFJ0": 0.0,
+                        "robot0_LFJ4": 0.0,
+                        "robot0_LFJ3": 0.0,
+                        "robot0_LFJ2": 0.0,
+                        "robot0_LFJ1": 0.0,
+                        "robot0_LFJ0": 0.0,
+                        "robot0_THJ4": 0.0,
+                        "robot0_THJ3": 0.0,
+                        "robot0_THJ2": 0.0,
+                        "robot0_THJ1": 0.0,
+                        "robot0_THJ0": 0.0,
+                    },
+                },
+            },
+        }
         self.robot_dof_default_pos = {}
         self.robot_dof_default_pos_cpu = {}
         for robot in self.robots:
@@ -398,7 +407,11 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
         if self.num_envs is None:
             self.num_envs = num_envs
         if self.goal_rot is None:
-            self.goal_rot = torch.tensor(self.init_goal_rot, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
+            self.goal_rot = (
+                torch.tensor(self.init_goal_rot, dtype=torch.float32, device=self.device)
+                .view(1, -1)
+                .repeat(num_envs, 1)
+            )
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
@@ -428,7 +441,7 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
         right_hand_rot = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, 3:7]
         right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.z_unit_tensor * 0.08)
         right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.y_unit_tensor * -0.02)
-        obs[:, 167:170] = right_hand_pos # right hand base position
+        obs[:, 167:170] = right_hand_pos  # right hand base position
         roll, pitch, yaw = math.euler_xyz_from_quat(envstates.robots["shadow_hand_right"].root_state[:, 3:7])
         obs[:, 170] = roll
         obs[:, 171] = pitch
@@ -473,9 +486,15 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
             self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
         door_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
         door_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(door_right_handle_rot, self.y_unit_tensor * -0.5)
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(door_right_handle_rot, self.x_unit_tensor * 0.39)
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(door_right_handle_rot, self.z_unit_tensor * -0.04)
+        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+            door_right_handle_rot, self.y_unit_tensor * -0.5
+        )
+        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+            door_right_handle_rot, self.x_unit_tensor * 0.39
+        )
+        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+            door_right_handle_rot, self.z_unit_tensor * -0.04
+        )
         if self.l_handle_idx is None:
             self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
         door_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
@@ -486,7 +505,9 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
         obs[:, 398:401] = door_right_handle_pos  # right handle position
         obs[:, 401:404] = door_left_handle_pos  # left handle position
         if self.obs_type == "rgb":
-            obs[:, 404:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+            obs[:, 404:] = (
+                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(
@@ -517,9 +538,15 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
         """
         door_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
         door_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(door_right_handle_rot, self.y_unit_tensor * -0.5)
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(door_right_handle_rot, self.x_unit_tensor * 0.39)
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(door_right_handle_rot, self.z_unit_tensor * -0.04)
+        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+            door_right_handle_rot, self.y_unit_tensor * -0.5
+        )
+        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+            door_right_handle_rot, self.x_unit_tensor * 0.39
+        )
+        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+            door_right_handle_rot, self.z_unit_tensor * -0.04
+        )
 
         door_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
         door_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
@@ -538,17 +565,17 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
         left_hand_pos = left_hand_pos + math.quat_apply(left_hand_rot, self.y_unit_tensor * -0.02)
 
         right_fingertip_pos_tensor = envstates.robots["shadow_hand_right"].body_state[:, self.r_fingertips_idx, :3]
-        right_hand_ff_pos =  right_fingertip_pos_tensor[:, 0, :]
-        right_hand_mf_pos =  right_fingertip_pos_tensor[:, 1, :]
-        right_hand_rf_pos =  right_fingertip_pos_tensor[:, 2, :]
-        right_hand_lf_pos =  right_fingertip_pos_tensor[:, 3, :]
-        right_hand_th_pos =  right_fingertip_pos_tensor[:, 4, :]
+        right_hand_ff_pos = right_fingertip_pos_tensor[:, 0, :]
+        right_hand_mf_pos = right_fingertip_pos_tensor[:, 1, :]
+        right_hand_rf_pos = right_fingertip_pos_tensor[:, 2, :]
+        right_hand_lf_pos = right_fingertip_pos_tensor[:, 3, :]
+        right_hand_th_pos = right_fingertip_pos_tensor[:, 4, :]
         right_fingertip_rot_tensor = envstates.robots["shadow_hand_right"].body_state[:, self.r_fingertips_idx, 3:7]
-        right_hand_ff_rot =  right_fingertip_rot_tensor[:, 0, :]
-        right_hand_mf_rot =  right_fingertip_rot_tensor[:, 1, :]
-        right_hand_rf_rot =  right_fingertip_rot_tensor[:, 2, :]
-        right_hand_lf_rot =  right_fingertip_rot_tensor[:, 3, :]
-        right_hand_th_rot =  right_fingertip_rot_tensor[:, 4, :]
+        right_hand_ff_rot = right_fingertip_rot_tensor[:, 0, :]
+        right_hand_mf_rot = right_fingertip_rot_tensor[:, 1, :]
+        right_hand_rf_rot = right_fingertip_rot_tensor[:, 2, :]
+        right_hand_lf_rot = right_fingertip_rot_tensor[:, 3, :]
+        right_hand_th_rot = right_fingertip_rot_tensor[:, 4, :]
 
         # Move the fingertips forward by 2 cm in local z direction
         right_hand_ff_pos = right_hand_ff_pos + math.quat_apply(right_hand_ff_rot, self.z_unit_tensor * 0.02)
@@ -559,17 +586,17 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
 
         # left hand fingertip positions and rotations
         left_fingertip_pos_tensor = envstates.robots["shadow_hand_left"].body_state[:, self.l_fingertips_idx, :3]
-        left_hand_ff_pos =  left_fingertip_pos_tensor[:, 0, :]
-        left_hand_mf_pos =  left_fingertip_pos_tensor[:, 1, :]
-        left_hand_rf_pos =  left_fingertip_pos_tensor[:, 2, :]
-        left_hand_lf_pos =  left_fingertip_pos_tensor[:, 3, :]
-        left_hand_th_pos =  left_fingertip_pos_tensor[:, 4, :]
+        left_hand_ff_pos = left_fingertip_pos_tensor[:, 0, :]
+        left_hand_mf_pos = left_fingertip_pos_tensor[:, 1, :]
+        left_hand_rf_pos = left_fingertip_pos_tensor[:, 2, :]
+        left_hand_lf_pos = left_fingertip_pos_tensor[:, 3, :]
+        left_hand_th_pos = left_fingertip_pos_tensor[:, 4, :]
         left_fingertip_rot_tensor = envstates.robots["shadow_hand_left"].body_state[:, self.l_fingertips_idx, 3:7]
-        left_hand_ff_rot =  left_fingertip_rot_tensor[:, 0, :]
-        left_hand_mf_rot =  left_fingertip_rot_tensor[:, 1, :]
-        left_hand_rf_rot =  left_fingertip_rot_tensor[:, 2, :]
-        left_hand_lf_rot =  left_fingertip_rot_tensor[:, 3, :]
-        left_hand_th_rot =  left_fingertip_rot_tensor[:, 4, :]
+        left_hand_ff_rot = left_fingertip_rot_tensor[:, 0, :]
+        left_hand_mf_rot = left_fingertip_rot_tensor[:, 1, :]
+        left_hand_rf_rot = left_fingertip_rot_tensor[:, 2, :]
+        left_hand_lf_rot = left_fingertip_rot_tensor[:, 3, :]
+        left_hand_th_rot = left_fingertip_rot_tensor[:, 4, :]
 
         # Move the fingertips forward by 2 cm in local z direction
         left_hand_ff_pos = left_hand_ff_pos + math.quat_apply(left_hand_ff_rot, self.z_unit_tensor * 0.02)
@@ -641,7 +668,9 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
             for i, env_id in enumerate(env_ids):
                 # reset object
                 for obj_name in reset_state[env_id]["objects"].keys():
-                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
+                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
+                        self.reset_position_noise * rand_floats[i, :3]
+                    )
 
                 # reset shadow hand
                 for robot_name in reset_state[env_id]["robots"].keys():
@@ -654,7 +683,7 @@ class ShadowHandOpenOutwardCfg(BaseRLTaskCfg):
 
             return reset_state
         elif isinstance(init_states, TensorState):
-            reset_state = deepcopy(init_states) # in sorted order
+            reset_state = deepcopy(init_states)  # in sorted order
             num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
             x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
             y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
@@ -766,17 +795,24 @@ def compute_hand_reward(
         reach_goal_bonus (float): The reward given when the object reaches the goal
 
     """
-
     # Distance from the hand to the object
     right_hand_dist = torch.norm(door_right_handle_pos - right_hand_pos, p=2, dim=-1)
     left_hand_dist = torch.norm(door_left_handle_pos - left_hand_pos, p=2, dim=-1)
 
-    right_hand_finger_dist = (torch.norm(door_right_handle_pos - right_hand_ff_pos, p=2, dim=-1) + torch.norm(door_right_handle_pos - right_hand_mf_pos, p=2, dim=-1)
-                            + torch.norm(door_right_handle_pos - right_hand_rf_pos, p=2, dim=-1) + torch.norm(door_right_handle_pos - right_hand_lf_pos, p=2, dim=-1)
-                            + torch.norm(door_right_handle_pos - right_hand_th_pos, p=2, dim=-1))
-    left_hand_finger_dist = (torch.norm(door_left_handle_pos - left_hand_ff_pos, p=2, dim=-1) + torch.norm(door_left_handle_pos - left_hand_mf_pos, p=2, dim=-1)
-                            + torch.norm(door_left_handle_pos - left_hand_rf_pos, p=2, dim=-1) + torch.norm(door_left_handle_pos - left_hand_lf_pos, p=2, dim=-1)
-                            + torch.norm(door_left_handle_pos - left_hand_th_pos, p=2, dim=-1))
+    right_hand_finger_dist = (
+        torch.norm(door_right_handle_pos - right_hand_ff_pos, p=2, dim=-1)
+        + torch.norm(door_right_handle_pos - right_hand_mf_pos, p=2, dim=-1)
+        + torch.norm(door_right_handle_pos - right_hand_rf_pos, p=2, dim=-1)
+        + torch.norm(door_right_handle_pos - right_hand_lf_pos, p=2, dim=-1)
+        + torch.norm(door_right_handle_pos - right_hand_th_pos, p=2, dim=-1)
+    )
+    left_hand_finger_dist = (
+        torch.norm(door_left_handle_pos - left_hand_ff_pos, p=2, dim=-1)
+        + torch.norm(door_left_handle_pos - left_hand_mf_pos, p=2, dim=-1)
+        + torch.norm(door_left_handle_pos - left_hand_rf_pos, p=2, dim=-1)
+        + torch.norm(door_left_handle_pos - left_hand_lf_pos, p=2, dim=-1)
+        + torch.norm(door_left_handle_pos - left_hand_th_pos, p=2, dim=-1)
+    )
 
     right_hand_dist_rew = right_hand_finger_dist
     left_hand_dist_rew = left_hand_finger_dist
@@ -784,10 +820,13 @@ def compute_hand_reward(
     action_penalty = torch.sum(actions**2, dim=-1)
 
     up_rew = torch.zeros_like(right_hand_dist_rew)
-    up_rew = torch.where(right_hand_finger_dist < 0.5,
-                    torch.where(left_hand_finger_dist < 0.5,
-                                    torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) * 2, up_rew), up_rew)
-
+    up_rew = torch.where(
+        right_hand_finger_dist < 0.5,
+        torch.where(
+            left_hand_finger_dist < 0.5, torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) * 2, up_rew
+        ),
+        up_rew,
+    )
 
     reward = 2 - right_hand_dist_rew - left_hand_dist_rew + up_rew
 

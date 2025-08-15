@@ -10,10 +10,10 @@ import torch
 from loguru import logger as log
 from rich.logging import RichHandler
 
-from metasim.cfg.objects import RigidObjCfg, ArticulationObjCfg
+from metasim.cfg.objects import ArticulationObjCfg, RigidObjCfg
 from metasim.cfg.robots import ShadowHandCfg
-from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.sensors import PinholeCameraCfg
+from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
 from metasim.constants import BenchmarkType, PhysicStateType, TaskType
 from metasim.types import EnvState
@@ -131,17 +131,26 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
     reset_dof_pos_noise = 0.0
 
     def set_objects(self) -> None:
+        """Set the objects for the shadow hand over2underarm task."""
         self.objects.append(self.objects_cfg[self.current_object_type])
 
     def set_init_states(self) -> None:
-        """Set the initial states for the shadow hand over task."""
+        """Set the initial states for the shadow hand over2underarm task."""
         if self.obs_type == "state":
             self.cameras = []
             self.obs_shape = 422
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
-            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(1.0, -1.0, 1.2), look_at=(0.0, -0.375, 0.6))]
+            self.cameras = [
+                PinholeCameraCfg(
+                    name="camera_0",
+                    width=self.img_w,
+                    height=self.img_h,
+                    pos=(1.0, -1.0, 1.2),
+                    look_at=(0.0, -0.375, 0.6),
+                )
+            ]
             self.obs_shape = 422 + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
@@ -243,75 +252,75 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
         self.shadow_hand_dof_lower_limits_cpu = self.shadow_hand_dof_lower_limits.cpu()
         self.shadow_hand_dof_upper_limits_cpu = self.shadow_hand_dof_upper_limits.cpu()
         self.init_states = {
-                "objects": {
-                    self.current_object_type: {
-                        "pos": torch.tensor([0.0, -0.05, 1.0]),
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+            "objects": {
+                self.current_object_type: {
+                    "pos": torch.tensor([0.0, -0.05, 1.0]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                },
+            },
+            "robots": {
+                "shadow_hand_right": {
+                    "pos": torch.tensor([0.0, 0.0, 0.5]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    "dof_pos": {
+                        "robot0_WRJ1": 0.0,
+                        "robot0_WRJ0": 0.0,
+                        "robot0_FFJ3": 0.0,
+                        "robot0_FFJ2": 0.0,
+                        "robot0_FFJ1": 0.0,
+                        "robot0_FFJ0": 0.0,
+                        "robot0_MFJ3": 0.0,
+                        "robot0_MFJ2": 0.0,
+                        "robot0_MFJ1": 0.0,
+                        "robot0_MFJ0": 0.0,
+                        "robot0_RFJ3": 0.0,
+                        "robot0_RFJ2": 0.0,
+                        "robot0_RFJ1": 0.0,
+                        "robot0_RFJ0": 0.0,
+                        "robot0_LFJ4": 0.0,
+                        "robot0_LFJ3": 0.0,
+                        "robot0_LFJ2": 0.0,
+                        "robot0_LFJ1": 0.0,
+                        "robot0_LFJ0": 0.0,
+                        "robot0_THJ4": 0.0,
+                        "robot0_THJ3": 0.0,
+                        "robot0_THJ2": 0.0,
+                        "robot0_THJ1": 0.0,
+                        "robot0_THJ0": 0.0,
                     },
                 },
-                "robots": {
-                    "shadow_hand_right": {
-                        "pos": torch.tensor([0.0, 0.0, 0.5]),
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                        "dof_pos": {
-                            "robot0_WRJ1": 0.0,
-                            "robot0_WRJ0": 0.0,
-                            "robot0_FFJ3": 0.0,
-                            "robot0_FFJ2": 0.0,
-                            "robot0_FFJ1": 0.0,
-                            "robot0_FFJ0": 0.0,
-                            "robot0_MFJ3": 0.0,
-                            "robot0_MFJ2": 0.0,
-                            "robot0_MFJ1": 0.0,
-                            "robot0_MFJ0": 0.0,
-                            "robot0_RFJ3": 0.0,
-                            "robot0_RFJ2": 0.0,
-                            "robot0_RFJ1": 0.0,
-                            "robot0_RFJ0": 0.0,
-                            "robot0_LFJ4": 0.0,
-                            "robot0_LFJ3": 0.0,
-                            "robot0_LFJ2": 0.0,
-                            "robot0_LFJ1": 0.0,
-                            "robot0_LFJ0": 0.0,
-                            "robot0_THJ4": 0.0,
-                            "robot0_THJ3": 0.0,
-                            "robot0_THJ2": 0.0,
-                            "robot0_THJ1": 0.0,
-                            "robot0_THJ0": 0.0,
-                        },
-                    },
-                    "shadow_hand_left": {
-                        "pos": torch.tensor([0.0, -0.8, 0.5]),
-                        "rot": torch.tensor([-0.707, 0.707, 0.0, 0.0]),
-                        "dof_pos": {
-                            "robot0_WRJ1": 0.0,
-                            "robot0_WRJ0": 0.0,
-                            "robot0_FFJ3": 0.0,
-                            "robot0_FFJ2": 0.0,
-                            "robot0_FFJ1": 0.0,
-                            "robot0_FFJ0": 0.0,
-                            "robot0_MFJ3": 0.0,
-                            "robot0_MFJ2": 0.0,
-                            "robot0_MFJ1": 0.0,
-                            "robot0_MFJ0": 0.0,
-                            "robot0_RFJ3": 0.0,
-                            "robot0_RFJ2": 0.0,
-                            "robot0_RFJ1": 0.0,
-                            "robot0_RFJ0": 0.0,
-                            "robot0_LFJ4": 0.0,
-                            "robot0_LFJ3": 0.0,
-                            "robot0_LFJ2": 0.0,
-                            "robot0_LFJ1": 0.0,
-                            "robot0_LFJ0": 0.0,
-                            "robot0_THJ4": 0.0,
-                            "robot0_THJ3": 0.0,
-                            "robot0_THJ2": 0.0,
-                            "robot0_THJ1": 0.0,
-                            "robot0_THJ0": 0.0,
-                        },
+                "shadow_hand_left": {
+                    "pos": torch.tensor([0.0, -0.8, 0.5]),
+                    "rot": torch.tensor([-0.707, 0.707, 0.0, 0.0]),
+                    "dof_pos": {
+                        "robot0_WRJ1": 0.0,
+                        "robot0_WRJ0": 0.0,
+                        "robot0_FFJ3": 0.0,
+                        "robot0_FFJ2": 0.0,
+                        "robot0_FFJ1": 0.0,
+                        "robot0_FFJ0": 0.0,
+                        "robot0_MFJ3": 0.0,
+                        "robot0_MFJ2": 0.0,
+                        "robot0_MFJ1": 0.0,
+                        "robot0_MFJ0": 0.0,
+                        "robot0_RFJ3": 0.0,
+                        "robot0_RFJ2": 0.0,
+                        "robot0_RFJ1": 0.0,
+                        "robot0_RFJ0": 0.0,
+                        "robot0_LFJ4": 0.0,
+                        "robot0_LFJ3": 0.0,
+                        "robot0_LFJ2": 0.0,
+                        "robot0_LFJ1": 0.0,
+                        "robot0_LFJ0": 0.0,
+                        "robot0_THJ4": 0.0,
+                        "robot0_THJ3": 0.0,
+                        "robot0_THJ2": 0.0,
+                        "robot0_THJ1": 0.0,
+                        "robot0_THJ0": 0.0,
                     },
                 },
-            }
+            },
+        }
         self.robot_dof_default_pos = {}
         self.robot_dof_default_pos_cpu = {}
         for robot in self.robots:
@@ -393,9 +402,17 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
         if self.num_envs is None:
             self.num_envs = num_envs
         if self.goal_pos is None:
-            self.goal_pos = torch.tensor(self.init_goal_pos, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
+            self.goal_pos = (
+                torch.tensor(self.init_goal_pos, dtype=torch.float32, device=self.device)
+                .view(1, -1)
+                .repeat(num_envs, 1)
+            )
         if self.goal_rot is None:
-            self.goal_rot = torch.tensor(self.init_goal_rot, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
+            self.goal_rot = (
+                torch.tensor(self.init_goal_rot, dtype=torch.float32, device=self.device)
+                .view(1, -1)
+                .repeat(num_envs, 1)
+            )
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
@@ -461,7 +478,9 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
             envstates.objects[self.current_object_type].root_state[:, 3:7], math.quat_inv(self.goal_rot)
         )  # goal rotation - object rotation
         if self.obs_type == "rgb":
-            obs[:, 422:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+            obs[:, 422:] = (
+                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(
@@ -562,7 +581,9 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
             for i, env_id in enumerate(env_ids):
                 # reset object
                 for obj_name in reset_state[env_id]["objects"].keys():
-                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
+                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
+                        self.reset_position_noise * rand_floats[i, :3]
+                    )
                     reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
 
                 # reset shadow hand
@@ -576,7 +597,7 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
 
             return reset_state
         elif isinstance(init_states, TensorState):
-            reset_state = deepcopy(init_states) # in sorted order
+            reset_state = deepcopy(init_states)  # in sorted order
             num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
             x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
             y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
@@ -712,9 +733,16 @@ def compute_hand_reward(
         success_buf,
     )
 
-    right_hand_base_dist = torch.norm(right_hand_base_pos - torch.tensor([0.0, 0.0, 0.5], dtype=torch.float, device=right_hand_base_pos.device), p=2, dim=-1)
-    left_hand_base_dist = torch.norm(left_hand_base_pos - torch.tensor([0.0, -0.8, 0.5], dtype=torch.float, device=left_hand_base_pos.device), p=2, dim=-1)
-
+    right_hand_base_dist = torch.norm(
+        right_hand_base_pos - torch.tensor([0.0, 0.0, 0.5], dtype=torch.float, device=right_hand_base_pos.device),
+        p=2,
+        dim=-1,
+    )
+    left_hand_base_dist = torch.norm(
+        left_hand_base_pos - torch.tensor([0.0, -0.8, 0.5], dtype=torch.float, device=left_hand_base_pos.device),
+        p=2,
+        dim=-1,
+    )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
     reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)

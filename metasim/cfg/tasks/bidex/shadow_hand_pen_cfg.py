@@ -61,7 +61,7 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
             flip_visual_attachments=True,
             physics=PhysicStateType.RIGIDBODY,
             color=[0.8, 0.8, 0.8],
-        )
+        ),
     }
     objects = []
     robots = [
@@ -71,7 +71,7 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
-            dof_drive_mode='none',
+            dof_drive_mode="none",
             use_vhacd=False,
         ),
         ShadowHandCfg(
@@ -80,7 +80,7 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
             actuated_root=True,
             angular_damping=100.0,
             linear_damping=100.0,
-            dof_drive_mode='none',
+            dof_drive_mode="none",
             use_vhacd=False,
         ),
     ]
@@ -138,18 +138,27 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
     rot_eps = 0.1
 
     def set_objects(self) -> None:
+        """Set the objects for the shadow hand pen task."""
         self.objects.append(self.objects_cfg["table"])
         self.objects.append(self.objects_cfg[self.current_object_type])
 
     def set_init_states(self) -> None:
-        """Set the initial states for the shadow hand over task."""
+        """Set the initial states for the shadow hand pen task."""
         if self.obs_type == "state":
             self.cameras = []
             self.obs_shape = 417
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
-            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(-1.35, -1.0, 1.05), look_at=(0.0, -0.75, 0.5))] # TODO
+            self.cameras = [
+                PinholeCameraCfg(
+                    name="camera_0",
+                    width=self.img_w,
+                    height=self.img_h,
+                    pos=(-1.35, -1.0, 1.05),
+                    look_at=(0.0, -0.75, 0.5),
+                )
+            ]  # TODO
             self.obs_shape = 417 + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
@@ -245,82 +254,82 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
         self.shadow_hand_dof_lower_limits_cpu = self.shadow_hand_dof_lower_limits.cpu()
         self.shadow_hand_dof_upper_limits_cpu = self.shadow_hand_dof_upper_limits.cpu()
         self.init_states = {
-                "objects": {
-                    "table": {
-                        "pos": torch.tensor([0, 0.0, 0.3]),
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                    },
-                    self.current_object_type: {
-                        "pos": torch.tensor([0, 0.0, 0.612]),
-                        "rot": torch.tensor([0.5, 0.5, 0.5, -0.5]),
-                        "dof_pos": {
-                            "joint_0": 0.0,  # Initial position of the switch
-                        }
+            "objects": {
+                "table": {
+                    "pos": torch.tensor([0, 0.0, 0.3]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                },
+                self.current_object_type: {
+                    "pos": torch.tensor([0, 0.0, 0.612]),
+                    "rot": torch.tensor([0.5, 0.5, 0.5, -0.5]),
+                    "dof_pos": {
+                        "joint_0": 0.0,  # Initial position of the switch
                     },
                 },
-                "robots": {
-                    "shadow_hand_right": {
-                        "pos": torch.tensor([0.55, 0.2, 0.8]),
-                        "rot": torch.tensor([0.5, 0.5, -0.5, -0.5]),
-                        "dof_pos": {
-                            "robot0_WRJ1": 0.0,
-                            "robot0_WRJ0": 0.0,
-                            "robot0_FFJ3": 0.0,
-                            "robot0_FFJ2": 0.0,
-                            "robot0_FFJ1": 0.0,
-                            "robot0_FFJ0": 0.0,
-                            "robot0_MFJ3": 0.0,
-                            "robot0_MFJ2": 0.0,
-                            "robot0_MFJ1": 0.0,
-                            "robot0_MFJ0": 0.0,
-                            "robot0_RFJ3": 0.0,
-                            "robot0_RFJ2": 0.0,
-                            "robot0_RFJ1": 0.0,
-                            "robot0_RFJ0": 0.0,
-                            "robot0_LFJ4": 0.0,
-                            "robot0_LFJ3": 0.0,
-                            "robot0_LFJ2": 0.0,
-                            "robot0_LFJ1": 0.0,
-                            "robot0_LFJ0": 0.0,
-                            "robot0_THJ4": 0.0,
-                            "robot0_THJ3": 0.0,
-                            "robot0_THJ2": 0.0,
-                            "robot0_THJ1": 0.0,
-                            "robot0_THJ0": 0.0,
-                        },
-                    },
-                    "shadow_hand_left": {
-                        "pos": torch.tensor([0.55, -0.2, 0.8]),
-                        "rot": torch.tensor([0.5, 0.5, -0.5, -0.5]),
-                        "dof_pos": {
-                            "robot0_WRJ1": 0.0,
-                            "robot0_WRJ0": 0.0,
-                            "robot0_FFJ3": 0.0,
-                            "robot0_FFJ2": 0.0,
-                            "robot0_FFJ1": 0.0,
-                            "robot0_FFJ0": 0.0,
-                            "robot0_MFJ3": 0.0,
-                            "robot0_MFJ2": 0.0,
-                            "robot0_MFJ1": 0.0,
-                            "robot0_MFJ0": 0.0,
-                            "robot0_RFJ3": 0.0,
-                            "robot0_RFJ2": 0.0,
-                            "robot0_RFJ1": 0.0,
-                            "robot0_RFJ0": 0.0,
-                            "robot0_LFJ4": 0.0,
-                            "robot0_LFJ3": 0.0,
-                            "robot0_LFJ2": 0.0,
-                            "robot0_LFJ1": 0.0,
-                            "robot0_LFJ0": 0.0,
-                            "robot0_THJ4": 0.0,
-                            "robot0_THJ3": 0.0,
-                            "robot0_THJ2": 0.0,
-                            "robot0_THJ1": 0.0,
-                            "robot0_THJ0": 0.0,
-                        },
+            },
+            "robots": {
+                "shadow_hand_right": {
+                    "pos": torch.tensor([0.55, 0.2, 0.8]),
+                    "rot": torch.tensor([0.5, 0.5, -0.5, -0.5]),
+                    "dof_pos": {
+                        "robot0_WRJ1": 0.0,
+                        "robot0_WRJ0": 0.0,
+                        "robot0_FFJ3": 0.0,
+                        "robot0_FFJ2": 0.0,
+                        "robot0_FFJ1": 0.0,
+                        "robot0_FFJ0": 0.0,
+                        "robot0_MFJ3": 0.0,
+                        "robot0_MFJ2": 0.0,
+                        "robot0_MFJ1": 0.0,
+                        "robot0_MFJ0": 0.0,
+                        "robot0_RFJ3": 0.0,
+                        "robot0_RFJ2": 0.0,
+                        "robot0_RFJ1": 0.0,
+                        "robot0_RFJ0": 0.0,
+                        "robot0_LFJ4": 0.0,
+                        "robot0_LFJ3": 0.0,
+                        "robot0_LFJ2": 0.0,
+                        "robot0_LFJ1": 0.0,
+                        "robot0_LFJ0": 0.0,
+                        "robot0_THJ4": 0.0,
+                        "robot0_THJ3": 0.0,
+                        "robot0_THJ2": 0.0,
+                        "robot0_THJ1": 0.0,
+                        "robot0_THJ0": 0.0,
                     },
                 },
-            }
+                "shadow_hand_left": {
+                    "pos": torch.tensor([0.55, -0.2, 0.8]),
+                    "rot": torch.tensor([0.5, 0.5, -0.5, -0.5]),
+                    "dof_pos": {
+                        "robot0_WRJ1": 0.0,
+                        "robot0_WRJ0": 0.0,
+                        "robot0_FFJ3": 0.0,
+                        "robot0_FFJ2": 0.0,
+                        "robot0_FFJ1": 0.0,
+                        "robot0_FFJ0": 0.0,
+                        "robot0_MFJ3": 0.0,
+                        "robot0_MFJ2": 0.0,
+                        "robot0_MFJ1": 0.0,
+                        "robot0_MFJ0": 0.0,
+                        "robot0_RFJ3": 0.0,
+                        "robot0_RFJ2": 0.0,
+                        "robot0_RFJ1": 0.0,
+                        "robot0_RFJ0": 0.0,
+                        "robot0_LFJ4": 0.0,
+                        "robot0_LFJ3": 0.0,
+                        "robot0_LFJ2": 0.0,
+                        "robot0_LFJ1": 0.0,
+                        "robot0_LFJ0": 0.0,
+                        "robot0_THJ4": 0.0,
+                        "robot0_THJ3": 0.0,
+                        "robot0_THJ2": 0.0,
+                        "robot0_THJ1": 0.0,
+                        "robot0_THJ0": 0.0,
+                    },
+                },
+            },
+        }
         self.robot_dof_default_pos = {}
         self.robot_dof_default_pos_cpu = {}
         for robot in self.robots:
@@ -433,7 +442,7 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
         right_hand_rot = envstates.robots["shadow_hand_right"].body_state[:, self.r_palm_idx, 3:7]
         right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.z_unit_tensor * 0.08)
         right_hand_pos = right_hand_pos + math.quat_apply(right_hand_rot, self.y_unit_tensor * -0.02)
-        obs[:, 167:170] = right_hand_pos # right hand base position
+        obs[:, 167:170] = right_hand_pos  # right hand base position
         roll, pitch, yaw = math.euler_xyz_from_quat(envstates.robots["shadow_hand_right"].root_state[:, 3:7])
         obs[:, 170] = roll
         obs[:, 171] = pitch
@@ -489,7 +498,9 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
         obs[:, 411:414] = pen_right_handle_pos
         obs[:, 414:417] = pen_left_handle_pos
         if self.obs_type == "rgb":
-            obs[:, 417:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+            obs[:, 417:] = (
+                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(
@@ -537,17 +548,17 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
         left_hand_pos = left_hand_pos + math.quat_apply(left_hand_rot, self.y_unit_tensor * -0.02)
 
         right_fingertip_pos_tensor = envstates.robots["shadow_hand_right"].body_state[:, self.r_fingertips_idx, :3]
-        right_hand_ff_pos =  right_fingertip_pos_tensor[:, 0, :]
-        right_hand_mf_pos =  right_fingertip_pos_tensor[:, 1, :]
-        right_hand_rf_pos =  right_fingertip_pos_tensor[:, 2, :]
-        right_hand_lf_pos =  right_fingertip_pos_tensor[:, 3, :]
-        right_hand_th_pos =  right_fingertip_pos_tensor[:, 4, :]
+        right_hand_ff_pos = right_fingertip_pos_tensor[:, 0, :]
+        right_hand_mf_pos = right_fingertip_pos_tensor[:, 1, :]
+        right_hand_rf_pos = right_fingertip_pos_tensor[:, 2, :]
+        right_hand_lf_pos = right_fingertip_pos_tensor[:, 3, :]
+        right_hand_th_pos = right_fingertip_pos_tensor[:, 4, :]
         right_fingertip_rot_tensor = envstates.robots["shadow_hand_right"].body_state[:, self.r_fingertips_idx, 3:7]
-        right_hand_ff_rot =  right_fingertip_rot_tensor[:, 0, :]
-        right_hand_mf_rot =  right_fingertip_rot_tensor[:, 1, :]
-        right_hand_rf_rot =  right_fingertip_rot_tensor[:, 2, :]
-        right_hand_lf_rot =  right_fingertip_rot_tensor[:, 3, :]
-        right_hand_th_rot =  right_fingertip_rot_tensor[:, 4, :]
+        right_hand_ff_rot = right_fingertip_rot_tensor[:, 0, :]
+        right_hand_mf_rot = right_fingertip_rot_tensor[:, 1, :]
+        right_hand_rf_rot = right_fingertip_rot_tensor[:, 2, :]
+        right_hand_lf_rot = right_fingertip_rot_tensor[:, 3, :]
+        right_hand_th_rot = right_fingertip_rot_tensor[:, 4, :]
 
         # Move the fingertips forward by 2 cm in local z direction
         right_hand_ff_pos = right_hand_ff_pos + math.quat_apply(right_hand_ff_rot, self.z_unit_tensor * 0.02)
@@ -558,17 +569,17 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
 
         # left hand fingertip positions and rotations
         left_fingertip_pos_tensor = envstates.robots["shadow_hand_left"].body_state[:, self.l_fingertips_idx, :3]
-        left_hand_ff_pos =  left_fingertip_pos_tensor[:, 0, :]
-        left_hand_mf_pos =  left_fingertip_pos_tensor[:, 1, :]
-        left_hand_rf_pos =  left_fingertip_pos_tensor[:, 2, :]
-        left_hand_lf_pos =  left_fingertip_pos_tensor[:, 3, :]
-        left_hand_th_pos =  left_fingertip_pos_tensor[:, 4, :]
+        left_hand_ff_pos = left_fingertip_pos_tensor[:, 0, :]
+        left_hand_mf_pos = left_fingertip_pos_tensor[:, 1, :]
+        left_hand_rf_pos = left_fingertip_pos_tensor[:, 2, :]
+        left_hand_lf_pos = left_fingertip_pos_tensor[:, 3, :]
+        left_hand_th_pos = left_fingertip_pos_tensor[:, 4, :]
         left_fingertip_rot_tensor = envstates.robots["shadow_hand_left"].body_state[:, self.l_fingertips_idx, 3:7]
-        left_hand_ff_rot =  left_fingertip_rot_tensor[:, 0, :]
-        left_hand_mf_rot =  left_fingertip_rot_tensor[:, 1, :]
-        left_hand_rf_rot =  left_fingertip_rot_tensor[:, 2, :]
-        left_hand_lf_rot =  left_fingertip_rot_tensor[:, 3, :]
-        left_hand_th_rot =  left_fingertip_rot_tensor[:, 4, :]
+        left_hand_ff_rot = left_fingertip_rot_tensor[:, 0, :]
+        left_hand_mf_rot = left_fingertip_rot_tensor[:, 1, :]
+        left_hand_rf_rot = left_fingertip_rot_tensor[:, 2, :]
+        left_hand_lf_rot = left_fingertip_rot_tensor[:, 3, :]
+        left_hand_th_rot = left_fingertip_rot_tensor[:, 4, :]
 
         # Move the fingertips forward by 2 cm in local z direction
         left_hand_ff_pos = left_hand_ff_pos + math.quat_apply(left_hand_ff_rot, self.z_unit_tensor * 0.02)
@@ -640,7 +651,9 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
             for i, env_id in enumerate(env_ids):
                 # reset object
                 for obj_name in reset_state[env_id]["objects"].keys():
-                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
+                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
+                        self.reset_position_noise * rand_floats[i, :3]
+                    )
 
                 # reset shadow hand
                 for robot_name in reset_state[env_id]["robots"].keys():
@@ -653,7 +666,7 @@ class ShadowHandPenCfg(BaseRLTaskCfg):
 
             return reset_state
         elif isinstance(init_states, TensorState):
-            reset_state = deepcopy(init_states) # in sorted order
+            reset_state = deepcopy(init_states)  # in sorted order
             num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
             x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
             y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
@@ -765,17 +778,24 @@ def compute_hand_reward(
         reach_goal_bonus (float): The reward given when the object reaches the goal
 
     """
-
     # Distance from the hand to the object
     right_hand_dist = torch.norm(pen_right_handle_pos - right_hand_pos, p=2, dim=-1)
     left_hand_dist = torch.norm(pen_left_handle_pos - left_hand_pos, p=2, dim=-1)
 
-    right_hand_finger_dist = (torch.norm(pen_right_handle_pos - right_hand_ff_pos, p=2, dim=-1) + torch.norm(pen_right_handle_pos - right_hand_mf_pos, p=2, dim=-1)
-                            + torch.norm(pen_right_handle_pos - right_hand_rf_pos, p=2, dim=-1) + torch.norm(pen_right_handle_pos - right_hand_lf_pos, p=2, dim=-1)
-                            + torch.norm(pen_right_handle_pos - right_hand_th_pos, p=2, dim=-1))
-    left_hand_finger_dist = (torch.norm(pen_left_handle_pos - left_hand_ff_pos, p=2, dim=-1) + torch.norm(pen_left_handle_pos - left_hand_mf_pos, p=2, dim=-1)
-                            + torch.norm(pen_left_handle_pos - left_hand_rf_pos, p=2, dim=-1) + torch.norm(pen_left_handle_pos - left_hand_lf_pos, p=2, dim=-1)
-                            + torch.norm(pen_left_handle_pos - left_hand_th_pos, p=2, dim=-1))
+    right_hand_finger_dist = (
+        torch.norm(pen_right_handle_pos - right_hand_ff_pos, p=2, dim=-1)
+        + torch.norm(pen_right_handle_pos - right_hand_mf_pos, p=2, dim=-1)
+        + torch.norm(pen_right_handle_pos - right_hand_rf_pos, p=2, dim=-1)
+        + torch.norm(pen_right_handle_pos - right_hand_lf_pos, p=2, dim=-1)
+        + torch.norm(pen_right_handle_pos - right_hand_th_pos, p=2, dim=-1)
+    )
+    left_hand_finger_dist = (
+        torch.norm(pen_left_handle_pos - left_hand_ff_pos, p=2, dim=-1)
+        + torch.norm(pen_left_handle_pos - left_hand_mf_pos, p=2, dim=-1)
+        + torch.norm(pen_left_handle_pos - left_hand_rf_pos, p=2, dim=-1)
+        + torch.norm(pen_left_handle_pos - left_hand_lf_pos, p=2, dim=-1)
+        + torch.norm(pen_left_handle_pos - left_hand_th_pos, p=2, dim=-1)
+    )
 
     right_hand_dist_rew = torch.exp(-10 * right_hand_finger_dist)
     left_hand_dist_rew = torch.exp(-10 * left_hand_finger_dist)
@@ -783,9 +803,15 @@ def compute_hand_reward(
     action_penalty = torch.sum(actions**2, dim=-1)
 
     up_rew = torch.zeros_like(right_hand_dist_rew)
-    up_rew = torch.where(right_hand_finger_dist < 0.75,
-                    torch.where(left_hand_finger_dist < 0.75,
-                        torch.norm(pen_right_handle_pos - pen_left_handle_pos, p=2, dim=-1) * 5 - 0.8, up_rew), up_rew)
+    up_rew = torch.where(
+        right_hand_finger_dist < 0.75,
+        torch.where(
+            left_hand_finger_dist < 0.75,
+            torch.norm(pen_right_handle_pos - pen_left_handle_pos, p=2, dim=-1) * 5 - 0.8,
+            up_rew,
+        ),
+        up_rew,
+    )
 
     reward = up_rew + right_hand_dist_rew + left_hand_dist_rew
 

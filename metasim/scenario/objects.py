@@ -101,7 +101,7 @@ class BaseObjCfg:
     flip_visual_attachments: bool = False
     """Whether to flip the visual attachments of the object, default is False"""
 
-    friction: float| None = None
+    friction: float | None = None
     """Friction of the object."""
 
     friction_idx: list[int] | None = None
@@ -153,6 +153,8 @@ class BaseArticulationObjCfg(BaseObjCfg):
 
 @configclass
 class RigidObjCfg(_FileBasedMixin, BaseRigidObjCfg):
+    """Rigid object cfg."""
+
     use_vhacd: bool = False
     override_com: bool = False
     override_inertia: bool = False
@@ -164,6 +166,8 @@ class RigidObjCfg(_FileBasedMixin, BaseRigidObjCfg):
 
 @configclass
 class ArticulationObjCfg(_FileBasedMixin, BaseArticulationObjCfg):
+    """Articulation object cfg."""
+
     fix_base_link: bool = True
     use_vhacd: bool = False
     override_com: bool = False

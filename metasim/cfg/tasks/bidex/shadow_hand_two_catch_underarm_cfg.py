@@ -10,7 +10,7 @@ import torch
 from loguru import logger as log
 from rich.logging import RichHandler
 
-from metasim.cfg.objects import RigidObjCfg, ArticulationObjCfg
+from metasim.cfg.objects import ArticulationObjCfg, RigidObjCfg
 from metasim.cfg.robots import ShadowHandCfg
 from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
@@ -137,18 +137,27 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
     fall_penalty = 0.0
 
     def set_objects(self) -> None:
+        """Set the objects for the shadow hand two catch underarm task."""
         self.objects.append(self.objects_cfg[self.current_object_type].replace(name=f"{self.current_object_type}_1"))
         self.objects.append(self.objects_cfg[self.current_object_type].replace(name=f"{self.current_object_type}_2"))
 
     def set_init_states(self) -> None:
-        """Set the initial states for the shadow hand over task."""
+        """Set the initial states for the shadow hand two catch underarm task."""
         if self.obs_type == "state":
             self.cameras = []
             self.obs_shape = 446
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
-            self.cameras = [PinholeCameraCfg(name="camera_0", width=self.img_w, height=self.img_h, pos=(1.0, -1.0, 1.2), look_at=(0.0, -0.59, 0.6))]
+            self.cameras = [
+                PinholeCameraCfg(
+                    name="camera_0",
+                    width=self.img_w,
+                    height=self.img_h,
+                    pos=(1.0, -1.0, 1.2),
+                    look_at=(0.0, -0.59, 0.6),
+                )
+            ]
             self.obs_shape = 446 + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
@@ -249,86 +258,82 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
         self.init_goal_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
         )  # Initial right goal rotation, shape (4,)
-        self.init_goal_another_pos = torch.tensor(
-            [0.0, -0.38, 0.54], dtype=torch.float, device=self.device
-        )
-        self.init_goal_another_rot = torch.tensor(
-            [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
-        )
+        self.init_goal_another_pos = torch.tensor([0.0, -0.38, 0.54], dtype=torch.float, device=self.device)
+        self.init_goal_another_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device)
         self.init_states = {
-                "objects": {
-                    f"{self.current_object_type}_1": {
-                        "pos": torch.tensor([0.0, -0.39, 0.54]),
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                    },
-                    f"{self.current_object_type}_2": {
-                        "pos": torch.tensor([0.0, -0.78, 0.54]),
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+            "objects": {
+                f"{self.current_object_type}_1": {
+                    "pos": torch.tensor([0.0, -0.39, 0.54]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                },
+                f"{self.current_object_type}_2": {
+                    "pos": torch.tensor([0.0, -0.78, 0.54]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                },
+            },
+            "robots": {
+                "shadow_hand_right": {
+                    "pos": torch.tensor([0.0, 0.0, 0.5]),
+                    "rot": torch.tensor([0.0, 0.0, -0.707, 0.707]),
+                    "dof_pos": {
+                        "robot0_WRJ1": 0.0,
+                        "robot0_WRJ0": 0.0,
+                        "robot0_FFJ3": 0.0,
+                        "robot0_FFJ2": 0.0,
+                        "robot0_FFJ1": 0.0,
+                        "robot0_FFJ0": 0.0,
+                        "robot0_MFJ3": 0.0,
+                        "robot0_MFJ2": 0.0,
+                        "robot0_MFJ1": 0.0,
+                        "robot0_MFJ0": 0.0,
+                        "robot0_RFJ3": 0.0,
+                        "robot0_RFJ2": 0.0,
+                        "robot0_RFJ1": 0.0,
+                        "robot0_RFJ0": 0.0,
+                        "robot0_LFJ4": 0.0,
+                        "robot0_LFJ3": 0.0,
+                        "robot0_LFJ2": 0.0,
+                        "robot0_LFJ1": 0.0,
+                        "robot0_LFJ0": 0.0,
+                        "robot0_THJ4": 0.0,
+                        "robot0_THJ3": 0.0,
+                        "robot0_THJ2": 0.0,
+                        "robot0_THJ1": 0.0,
+                        "robot0_THJ0": 0.0,
                     },
                 },
-                "robots": {
-                    "shadow_hand_right": {
-                        "pos": torch.tensor([0.0, 0.0, 0.5]),
-                        "rot": torch.tensor([0.0, 0.0, -0.707, 0.707]),
-                        "dof_pos": {
-                            "robot0_WRJ1": 0.0,
-                            "robot0_WRJ0": 0.0,
-                            "robot0_FFJ3": 0.0,
-                            "robot0_FFJ2": 0.0,
-                            "robot0_FFJ1": 0.0,
-                            "robot0_FFJ0": 0.0,
-                            "robot0_MFJ3": 0.0,
-                            "robot0_MFJ2": 0.0,
-                            "robot0_MFJ1": 0.0,
-                            "robot0_MFJ0": 0.0,
-                            "robot0_RFJ3": 0.0,
-                            "robot0_RFJ2": 0.0,
-                            "robot0_RFJ1": 0.0,
-                            "robot0_RFJ0": 0.0,
-                            "robot0_LFJ4": 0.0,
-                            "robot0_LFJ3": 0.0,
-                            "robot0_LFJ2": 0.0,
-                            "robot0_LFJ1": 0.0,
-                            "robot0_LFJ0": 0.0,
-                            "robot0_THJ4": 0.0,
-                            "robot0_THJ3": 0.0,
-                            "robot0_THJ2": 0.0,
-                            "robot0_THJ1": 0.0,
-                            "robot0_THJ0": 0.0,
-                        },
-                    },
-                    "shadow_hand_left": {
-                        "pos": torch.tensor([0.0, -1.15, 0.5]),
-                        "rot": torch.tensor([-0.707, 0.707, 0.0, 0.0]),
-                        "dof_pos": {
-                            "robot0_WRJ1": 0.0,
-                            "robot0_WRJ0": 0.0,
-                            "robot0_FFJ3": 0.0,
-                            "robot0_FFJ2": 0.0,
-                            "robot0_FFJ1": 0.0,
-                            "robot0_FFJ0": 0.0,
-                            "robot0_MFJ3": 0.0,
-                            "robot0_MFJ2": 0.0,
-                            "robot0_MFJ1": 0.0,
-                            "robot0_MFJ0": 0.0,
-                            "robot0_RFJ3": 0.0,
-                            "robot0_RFJ2": 0.0,
-                            "robot0_RFJ1": 0.0,
-                            "robot0_RFJ0": 0.0,
-                            "robot0_LFJ4": 0.0,
-                            "robot0_LFJ3": 0.0,
-                            "robot0_LFJ2": 0.0,
-                            "robot0_LFJ1": 0.0,
-                            "robot0_LFJ0": 0.0,
-                            "robot0_THJ4": 0.0,
-                            "robot0_THJ3": 0.0,
-                            "robot0_THJ2": 0.0,
-                            "robot0_THJ1": 0.0,
-                            "robot0_THJ0": 0.0,
-                        },
+                "shadow_hand_left": {
+                    "pos": torch.tensor([0.0, -1.15, 0.5]),
+                    "rot": torch.tensor([-0.707, 0.707, 0.0, 0.0]),
+                    "dof_pos": {
+                        "robot0_WRJ1": 0.0,
+                        "robot0_WRJ0": 0.0,
+                        "robot0_FFJ3": 0.0,
+                        "robot0_FFJ2": 0.0,
+                        "robot0_FFJ1": 0.0,
+                        "robot0_FFJ0": 0.0,
+                        "robot0_MFJ3": 0.0,
+                        "robot0_MFJ2": 0.0,
+                        "robot0_MFJ1": 0.0,
+                        "robot0_MFJ0": 0.0,
+                        "robot0_RFJ3": 0.0,
+                        "robot0_RFJ2": 0.0,
+                        "robot0_RFJ1": 0.0,
+                        "robot0_RFJ0": 0.0,
+                        "robot0_LFJ4": 0.0,
+                        "robot0_LFJ3": 0.0,
+                        "robot0_LFJ2": 0.0,
+                        "robot0_LFJ1": 0.0,
+                        "robot0_LFJ0": 0.0,
+                        "robot0_THJ4": 0.0,
+                        "robot0_THJ3": 0.0,
+                        "robot0_THJ2": 0.0,
+                        "robot0_THJ1": 0.0,
+                        "robot0_THJ0": 0.0,
                     },
                 },
-            }
+            },
+        }
 
         self.robot_dof_default_pos = {}
         self.robot_dof_default_pos_cpu = {}
@@ -418,13 +423,25 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
         if self.num_envs is None:
             self.num_envs = num_envs
         if self.goal_pos is None:
-            self.goal_pos = torch.tensor(self.init_goal_pos, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
+            self.goal_pos = (
+                torch.tensor(self.init_goal_pos, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
+            )
         if self.goal_rot is None:
-            self.goal_rot = torch.tensor(self.init_goal_rot, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
+            self.goal_rot = (
+                torch.tensor(self.init_goal_rot, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
+            )
         if self.goal_another_pos is None:
-            self.goal_another_pos = torch.tensor(self.init_goal_another_pos, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
+            self.goal_another_pos = (
+                torch.tensor(self.init_goal_another_pos, dtype=torch.float, device=self.device)
+                .view(1, -1)
+                .repeat(num_envs, 1)
+            )
         if self.goal_another_rot is None:
-            self.goal_another_rot = torch.tensor(self.init_goal_another_rot, dtype=torch.float32, device=self.device).view(1, -1).repeat(num_envs, 1)
+            self.goal_another_rot = (
+                torch.tensor(self.init_goal_another_rot, dtype=torch.float32, device=self.device)
+                .view(1, -1)
+                .repeat(num_envs, 1)
+            )
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
@@ -497,7 +514,9 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
         )
         if self.obs_type == "rgb":
             # Add RGB image observations if obs_type is rgb
-            obs[:, 446:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0 # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+            obs[:, 446:] = (
+                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(
@@ -526,7 +545,6 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
             reset_goal_buf (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
             success_buf (torch.Tensor): The success buffer of all environments at this time, shape (num_envs,)
         """
-
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_hand_reward(
             reset_buf=reset_buf,
             reset_goal_buf=reset_goal_buf,
@@ -560,7 +578,9 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
             env_ids (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs_to_reset,).
         """
         rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), 4), device=self.device)
-        new_rot = randomize_rotation(rand_floats[:, 0], rand_floats[:, 1], self.x_unit_tensor[env_ids], self.y_unit_tensor[env_ids])
+        new_rot = randomize_rotation(
+            rand_floats[:, 0], rand_floats[:, 1], self.x_unit_tensor[env_ids], self.y_unit_tensor[env_ids]
+        )
         self.goal_rot[env_ids] = new_rot
         self.goal_another_rot[env_ids] = new_rot
         return
@@ -596,7 +616,9 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
             for i, env_id in enumerate(env_ids):
                 # reset object
                 for obj_name in reset_state[env_id]["objects"].keys():
-                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += self.reset_position_noise * rand_floats[i, :3]
+                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
+                        self.reset_position_noise * rand_floats[i, :3]
+                    )
                     reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
 
                 # reset shadow hand
@@ -610,7 +632,7 @@ class ShadowHandTwoCatchUnderarmCfg(BaseRLTaskCfg):
 
             return reset_state
         elif isinstance(init_states, TensorState):
-            reset_state = deepcopy(init_states) # in sorted order
+            reset_state = deepcopy(init_states)  # in sorted order
             num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
             x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
             y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device=self.device).repeat((len(env_ids), 1))
@@ -704,6 +726,12 @@ def compute_hand_reward(
 
         left_goal_rot (tensor): The rotation of the left goal, shape (num_envs, 4)
 
+        dist_reward_scale (float): The scale of the distance reward
+
+        rot_reward_scale (float): The scale of the rotation reward
+
+        rot_eps (float): The epsilon value for the rotation reward, used to avoid division by zero
+
         action_penalty_scale (float): The scale of the action penalty
 
         actions (tensor): The action buffer of all environments at this time
@@ -711,6 +739,10 @@ def compute_hand_reward(
         reach_goal_bonus (float): The reward given when the object reaches the goal
 
         leave_penalty (float): The penalty for leaving the goal area
+
+        throw_bonus (float): The bonus for throwing the object into the goal area
+
+        fall_penalty (float): The penalty for falling below a certain height
 
     """
     diff_xy = right_goal_pos[:, :2] - right_object_pos[:, :2]
@@ -720,19 +752,17 @@ def compute_hand_reward(
     goal_another_dist = torch.norm(left_object_pos - left_goal_pos, p=2, dim=-1)
     reward_another_dist = goal_another_dist
 
-    quat_diff = math.quat_mul(
-        right_object_rot, math.quat_inv(right_goal_rot)
-    )  # (num_envs, 4)
+    quat_diff = math.quat_mul(right_object_rot, math.quat_inv(right_goal_rot))  # (num_envs, 4)
     rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 1:4], p=2, dim=-1), max=1.0))
 
-    quat_another_diff = math.quat_mul(
-        left_object_rot, math.quat_inv(left_goal_rot)
-    )  # (num_envs, 4)
+    quat_another_diff = math.quat_mul(left_object_rot, math.quat_inv(left_goal_rot))  # (num_envs, 4)
     rot_another_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_another_diff[:, 1:4], p=2, dim=-1), max=1.0))
 
     action_penalty = torch.sum(actions**2, dim=-1)
 
-    reward = torch.exp(-0.2*(reward_dist * dist_reward_scale)) + torch.exp(-0.2*(reward_another_dist * dist_reward_scale))
+    reward = torch.exp(-0.2 * (reward_dist * dist_reward_scale)) + torch.exp(
+        -0.2 * (reward_another_dist * dist_reward_scale)
+    )
 
     goal_resets = torch.zeros_like(reset_buf)
 

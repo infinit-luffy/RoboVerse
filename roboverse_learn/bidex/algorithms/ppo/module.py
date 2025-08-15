@@ -182,6 +182,13 @@ class ActorCritic_RGB(nn.Module):
 
     def act(self, observations):
         img = observations[:, self.state_shape:].view(-1, 3, self.img_h, self.img_w)
+        # import cv2
+        # import numpy as np
+        # img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
+        # img_uint8 = (img0 * 255).astype(np.uint8) if img0.dtype != np.uint8 else img0
+        # img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+        # cv2.imwrite("camera0_image.png", img_bgr)
+        # exit(0)
         if self.fix_img_encoder:
             with torch.no_grad():
                 img_features = self.resnet(img)

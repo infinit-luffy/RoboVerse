@@ -110,12 +110,13 @@
 # --use_wandb \
 
 python roboverse_learn/bidex/train.py \
---num_envs 2048 \
---task ShadowHandStackBlock \
+--num_envs 128 \
+--task ShadowHandOver \
 --headless \
---device cuda:2 \
+--device cuda:1 \
+--obs_type rgb \
 --use_wandb \
-# --obs_type rgb \
+--no_prio \
 
 # python roboverse_learn/bidex/train.py \
 # --num_envs 2048 \

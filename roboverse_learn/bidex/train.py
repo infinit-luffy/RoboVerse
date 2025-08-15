@@ -139,7 +139,8 @@ def train(args):
     print("Algorithm: ", args.algo)
     assert args.algo.upper() in ALGO_MAP.keys(), "Unrecognized algorithm!\nAlgorithm should be one of: [ppo]"
     algo = args.algo
-    task = get_task(args.task)
+    task_cls = get_task(args.task)
+    task = task_cls()
     if args.objects is not None:
         task.current_object_type = args.objects
     task.num_envs = args.num_envs

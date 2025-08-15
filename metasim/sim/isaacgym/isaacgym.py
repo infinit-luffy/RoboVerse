@@ -564,7 +564,7 @@ class IsaacgymHandler(BaseSimHandler):
             self._body_info[obj_name] = body_info_
             self._num_bodies += num_bodies
 
-        for robot_idx, robot, robot_asset in enumerate(zip(self.robots, robot_asset_list)):
+        for robot_idx, robot in enumerate(self.robots):
             robot_link_dict = self._robot_link_dict_list[robot_idx]
             num_bodies = len(robot_link_dict)
             rigid_body_names = []
@@ -669,9 +669,10 @@ class IsaacgymHandler(BaseSimHandler):
 
             # carefully set each robot
             env_robot_handles = []
-            for robot_idx, robot, robot_asset, robot_dof_props, robot_init_pos, robot_init_quat in enumerate(zip(
+            for robot_idx, robot_info in enumerate(zip(
                 self.robots, robot_asset_list, robot_dof_props_list, self._robot_init_pos, self._robot_init_quat
             )):
+                robot, robot_asset, robot_dof_props, robot_init_pos, robot_init_quat = robot_info
                 robot_pose = gymapi.Transform()
                 robot_pose.p = gymapi.Vec3(*self._robot_init_pos[self.robots[0].name])
                 robot_pose.r = gymapi.Quat(
@@ -919,16 +920,6 @@ class IsaacgymHandler(BaseSimHandler):
                 for i in range(self.num_envs)
                 for offset in range(chunk_size - robot_dim, chunk_size)
             ]
-        action_input[self._robot_dim_index] = action_array_all.float().to(self.device).reshape(-1)
-
-        if not hasattr(self, "_robot_dim_index"):
-            robot_dim = action_array_all.shape[1]
-            chunk_size = action_input.shape[0] // self._num_envs
-            self._robot_dim_index = [
-                i * chunk_size + offset
-                for i in range(self.num_envs)
-                for offset in range(chunk_size - robot_dim, chunk_size)
-            ]
 
         if self.actuated_root and not hasattr(self, "_force_body_index"):
             # create a list of robot root body indices for each env
@@ -1026,10 +1017,6 @@ class IsaacgymHandler(BaseSimHandler):
         else:
             if not self.headless:
                 self.gym.poll_viewer_events(self.viewer)
-        if self.headless and len(self.cameras) > 0:
-            # if headless, we still need to render the cameras
-            self.gym.step_graphics(self.sim)
-            self.gym.render_all_camera_sensors(self.sim)
 
     def _set_states(self, states: list[DictEnvState] | torch.Tensor, env_ids: list[int] | None = None):
         ## Support setting status only for specified env_ids
@@ -1079,27 +1066,27 @@ class IsaacgymHandler(BaseSimHandler):
                                 obj_joint_q[joint_idx] = 0.0
                         q_list_i.append(obj_joint_q)
 
-            for robot_idx, robot in enumerate(self.robots):
-                robot_joint_dict = self._robot_joint_dict_list[robot_idx]
-                pos_list_i.append(np.array(state[robot.name].get("pos", [0.0, 0.0, 0.0])))
-                rot = np.array(state[robot.name].get("rot", [1.0, 0.0, 0.0, 0.0]))
-                robot_quat = [rot[1], rot[2], rot[3], rot[0]]
-                rot_list_i.append(robot_quat)
+                for robot_idx, robot in enumerate(self.robots):
+                    robot_joint_dict = self._robot_joint_dict_list[robot_idx]
+                    pos_list_i.append(np.array(state[robot.name].get("pos", [0.0, 0.0, 0.0])))
+                    rot = np.array(state[robot.name].get("rot", [1.0, 0.0, 0.0, 0.0]))
+                    robot_quat = [rot[1], rot[2], rot[3], rot[0]]
+                    rot_list_i.append(robot_quat)
 
-                robot_dof_state_i = np.zeros(robot.num_joints)
-                if "dof_pos" in state[robot.name]:
-                    for joint_name, joint_idx in robot_joint_dict.items():
-                        robot_dof_state_i[joint_idx] = state[robot.name]["dof_pos"][joint_name]
-                else:
-                    for joint_name, joint_idx in robot_joint_dict.items():
-                        robot_dof_state_i[joint_idx] = (
-                            robot.joint_limits[joint_name][0] + robot.joint_limits[joint_name][1]
-                        ) / 2
-                q_list_i.append(robot_dof_state_i)
+                    robot_dof_state_i = np.zeros(robot.num_joints)
+                    if "dof_pos" in state[robot.name]:
+                        for joint_name, joint_idx in robot_joint_dict.items():
+                            robot_dof_state_i[joint_idx] = state[robot.name]["dof_pos"][joint_name]
+                    else:
+                        for joint_name, joint_idx in robot_joint_dict.items():
+                            robot_dof_state_i[joint_idx] = (
+                                robot.joint_limits[joint_name][0] + robot.joint_limits[joint_name][1]
+                            ) / 2
+                    q_list_i.append(robot_dof_state_i)
 
-            pos_list.append(pos_list_i)
-            rot_list.append(rot_list_i)
-            q_list.append(q_list_i)
+                pos_list.append(pos_list_i)
+                rot_list.append(rot_list_i)
+                q_list.append(q_list_i)
 
             self._set_actor_root_state(pos_list, rot_list, env_ids)
             self._set_actor_joint_state(q_list, env_ids)

@@ -42,6 +42,8 @@ class ShadowHandSwingCupCfg(BaseRLTaskCfg):
     num_envs = None
     obs_type = "state"  # "state" or "rgb"
     obs_shape = 421
+    proceptual_shape = 398
+    use_prio = True  # Use proprioception for state observation
     proprio_shape = 421
     action_shape = 52
     current_object_type = "cup"
@@ -148,7 +150,8 @@ class ShadowHandSwingCupCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand swing cup task."""
         if self.obs_type == "state":
             self.cameras = []
-            self.obs_shape = 421
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
@@ -161,7 +164,10 @@ class ShadowHandSwingCupCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape = 421 + 3 * self.img_h * self.img_w
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.init_goal_rot = torch.tensor(
             [-0.707, 0.0, 0.0, 0.707], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
@@ -495,25 +501,31 @@ class ShadowHandSwingCupCfg(BaseRLTaskCfg):
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left hand
-        obs[:, 398:411] = envstates.objects[self.current_object_type].root_state
-        obs[:, 408:411] *= self.vel_obs_scale  # object angvel
-        if self.r_handle_idx is None:
-            self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
-        cup_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
-        cup_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
-        cup_right_handle_pos = cup_right_handle_pos + math.quat_apply(cup_right_handle_rot, self.x_unit_tensor * 0.062)
-        if self.l_handle_idx is None:
-            self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
-        cup_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
-        cup_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
-        cup_left_handle_pos = cup_left_handle_pos + math.quat_apply(cup_left_handle_rot, self.z_unit_tensor * 0.06)
-        obs[:, 411:414] = cup_right_handle_pos
-        obs[:, 414:417] = cup_left_handle_pos
-        obs[:, 417:421] = self.goal_rot
-        if self.obs_type == "rgb":
-            obs[:, 421:] = (
-                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        if self.use_prio:
+            obs[:, 398:411] = envstates.objects[self.current_object_type].root_state
+            obs[:, 408:411] *= self.vel_obs_scale  # object angvel
+            if self.r_handle_idx is None:
+                self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
+            cup_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
+            cup_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
+            cup_right_handle_pos = cup_right_handle_pos + math.quat_apply(
+                cup_right_handle_rot, self.x_unit_tensor * 0.062
+            )
+            if self.l_handle_idx is None:
+                self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
+            cup_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
+            cup_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
+            cup_left_handle_pos = cup_left_handle_pos + math.quat_apply(cup_left_handle_rot, self.z_unit_tensor * 0.06)
+            obs[:, 411:414] = cup_right_handle_pos
+            obs[:, 414:417] = cup_left_handle_pos
+            obs[:, 417:421] = self.goal_rot
+            if self.obs_type == "rgb":
+                obs[:, 421:] = (
+                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        else:
+            if self.obs_type == "rgb":
+                obs[:, 398:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
         return obs
 
     def reward_fn(

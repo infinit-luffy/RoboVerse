@@ -42,6 +42,8 @@ class ShadowHandGraspPlaceCfg(BaseRLTaskCfg):
     num_envs = None
     obs_type = "state"  # "state" or "rgb"
     obs_shape = 431
+    proceptual_shape = 398
+    use_prio = True
     proprio_shape = 431
     action_shape = 52
     current_object_type = "cube"
@@ -156,7 +158,8 @@ class ShadowHandGraspPlaceCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand grasp and place task."""
         if self.obs_type == "state":
             self.cameras = []
-            self.obs_shape = 431
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
@@ -169,7 +172,10 @@ class ShadowHandGraspPlaceCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape = 431 + 3 * self.img_h * self.img_w
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,

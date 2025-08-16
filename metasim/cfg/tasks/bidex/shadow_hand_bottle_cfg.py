@@ -42,6 +42,8 @@ class ShadowHandBottleCfg(BaseRLTaskCfg):
     num_envs = None
     obs_type = "state"
     obs_shape = 420
+    proceptual_shape = 398
+    use_prio = True
     proprio_shape = 420
     action_shape = 52
     current_object_type = "bottle"
@@ -144,7 +146,8 @@ class ShadowHandBottleCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand bottle task."""
         if self.obs_type == "state":
             self.cameras = []
-            self.obs_shape = 420
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
@@ -157,7 +160,10 @@ class ShadowHandBottleCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape = 420 + 3 * self.img_h * self.img_w
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -483,21 +489,25 @@ class ShadowHandBottleCfg(BaseRLTaskCfg):
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left hand
-        obs[:, 398:411] = envstates.objects[self.current_object_type].root_state
-        obs[:, 408:411] *= self.vel_obs_scale  # object angvel
-        if self.cap_handle_idx is None:
-            self.cap_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.cap_handle_name)
-        bottle_pos = envstates.objects[self.current_object_type].root_state[:, :3]
-        bottle_rot = envstates.objects[self.current_object_type].root_state[:, 3:7]
-        bottle_cap_up = envstates.objects[self.current_object_type].body_state[:, self.cap_handle_idx, :3]
-        bottle_cap_pos = bottle_cap_up + math.quat_apply(bottle_rot, self.z_unit_tensor * 0.15)
-        obs[:, 411:414] = bottle_pos  # object handle position
-        obs[:, 414:417] = bottle_cap_up
-        obs[:, 417:420] = bottle_cap_pos  # object handle position
-        if self.obs_type == "rgb":
-            obs[:, 420:] = (
-                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        if self.use_prio:
+            obs[:, 398:411] = envstates.objects[self.current_object_type].root_state
+            obs[:, 408:411] *= self.vel_obs_scale  # object angvel
+            if self.cap_handle_idx is None:
+                self.cap_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.cap_handle_name)
+            bottle_pos = envstates.objects[self.current_object_type].root_state[:, :3]
+            bottle_rot = envstates.objects[self.current_object_type].root_state[:, 3:7]
+            bottle_cap_up = envstates.objects[self.current_object_type].body_state[:, self.cap_handle_idx, :3]
+            bottle_cap_pos = bottle_cap_up + math.quat_apply(bottle_rot, self.z_unit_tensor * 0.15)
+            obs[:, 411:414] = bottle_pos  # object handle position
+            obs[:, 414:417] = bottle_cap_up
+            obs[:, 417:420] = bottle_cap_pos  # object handle position
+            if self.obs_type == "rgb":
+                obs[:, 420:] = (
+                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        else:
+            if self.obs_type == "rgb":
+                obs[:, 398:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
         return obs
 
     def reward_fn(

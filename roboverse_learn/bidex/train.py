@@ -73,15 +73,25 @@ class Args:
     train_cfg = None
 
     train = not test  # if test is True, then train is False
-    use_prio = not no_prio  # Use priority sampling in training
 
 
 def get_config_path(args):
-    if args.task in ["ShadowHandOver", "ShadowHandCatchUnderarm", "ShadowHandOver2Underarm",
-                     "ShadowHandPushBlock", "ShadowHandCatchAbreast", "ShadowHandSwingCup",
-                     "ShadowHandCloseInward", "ShadowHandCloseOutward", "ShadowHandScissor",
-                     "ShadowHandPen", "ShadowHandTwoCatchUnderarm", "ShadowHandBottle",
-                     "ShadowHandGraspPlace", "ShadowHandKettle"]:
+    if args.task in [
+        "ShadowHandOver",
+        "ShadowHandCatchUnderarm",
+        "ShadowHandOver2Underarm",
+        "ShadowHandPushBlock",
+        "ShadowHandCatchAbreast",
+        "ShadowHandSwingCup",
+        "ShadowHandCloseInward",
+        "ShadowHandCloseOutward",
+        "ShadowHandScissor",
+        "ShadowHandPen",
+        "ShadowHandTwoCatchUnderarm",
+        "ShadowHandBottle",
+        "ShadowHandGraspPlace",
+        "ShadowHandKettle",
+    ]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/bidex/cfg/{args.algo}/{args.obs_type}/config.yaml",
@@ -147,7 +157,7 @@ def train(args):
     task.device = args.device
     task.is_testing = args.test
     task.obs_type = args.obs_type
-    task.use_prio = args.use_prio
+    task.use_prio = not args.no_prio  # Use proprioception in state observation
     task.set_objects()
     task.set_init_states()
     cameras = [] if not hasattr(task, "cameras") else task.cameras
@@ -193,7 +203,11 @@ def train(args):
 
     wandb_run = None
     if args.use_wandb and not is_testing:
-        wandb_name = f"{args.task}_{args.algo}_{args.name}_{task.current_object_type}_{time.strftime('%Y_%m_%d_%H_%M_%S')}" if args.experiment == "Base" else f"{args.task}_{args.algo}_{args.name}_{task.current_object_type}_{args.experiment}_{time.strftime('%Y_%m_%d_%H_%M_%S')}"
+        wandb_name = (
+            f"{args.task}_{args.algo}_{args.name}_{task.current_object_type}_{time.strftime('%Y_%m_%d_%H_%M_%S')}"
+            if args.experiment == "Base"
+            else f"{args.task}_{args.algo}_{args.name}_{task.current_object_type}_{args.experiment}_{time.strftime('%Y_%m_%d_%H_%M_%S')}"
+        )
         wandb_run = wandb.init(
             project=args.wandb_project,
             config=args.train_cfg,

@@ -42,6 +42,8 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
     num_envs = None
     obs_type = "state"
     obs_shape = 422
+    proceptual_shape = 398
+    use_prio = True
     proprio_shape = 422
     action_shape = 52
     current_object_type = "egg"
@@ -138,7 +140,8 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand over2underarm task."""
         if self.obs_type == "state":
             self.cameras = []
-            self.obs_shape = 422
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
@@ -151,7 +154,10 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.375, 0.6),
                 )
             ]
-            self.obs_shape = 422 + 3 * self.img_h * self.img_w
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -471,16 +477,22 @@ class ShadowHandOver2UnderarmCfg(BaseRLTaskCfg):
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left hand
-        obs[:, 398:411] = envstates.objects[self.current_object_type].root_state
-        obs[:, 408:411] *= self.vel_obs_scale  # object angvel
-        obs[:, 411:418] = torch.cat([self.goal_pos, self.goal_rot], dim=1)  # goal position and rotation (num_envs, 7)
-        obs[:, 418:422] = math.quat_mul(
-            envstates.objects[self.current_object_type].root_state[:, 3:7], math.quat_inv(self.goal_rot)
-        )  # goal rotation - object rotation
-        if self.obs_type == "rgb":
-            obs[:, 422:] = (
-                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        if self.use_prio:
+            obs[:, 398:411] = envstates.objects[self.current_object_type].root_state
+            obs[:, 408:411] *= self.vel_obs_scale  # object angvel
+            obs[:, 411:418] = torch.cat(
+                [self.goal_pos, self.goal_rot], dim=1
+            )  # goal position and rotation (num_envs, 7)
+            obs[:, 418:422] = math.quat_mul(
+                envstates.objects[self.current_object_type].root_state[:, 3:7], math.quat_inv(self.goal_rot)
+            )  # goal rotation - object rotation
+            if self.obs_type == "rgb":
+                obs[:, 422:] = (
+                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        else:
+            if self.obs_type == "rgb":
+                obs[:, 398:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
         return obs
 
     def reward_fn(

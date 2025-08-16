@@ -42,6 +42,8 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
     num_envs = None
     obs_type = "state"  # "state" or "rgb"
     obs_shape = 404
+    proceptual_shape = 398
+    use_prio = True  # Use proprioception for observations
     proprio_shape = 404
     action_shape = 52
     current_object_type = "button"
@@ -140,7 +142,8 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand turn button task."""
         if self.obs_type == "state":
             self.cameras = [PinholeCameraCfg(name="camera_0", pos=(-0.8, -0.5, 1.2), look_at=(0.0, 0.0, 0.5))]
-            self.obs_shape = 404
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
@@ -149,7 +152,10 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(-0.8, -0.5, 1.2), look_at=(0.0, 0.0, 0.5)
                 )
             ]  # TODO
-            self.obs_shape = 404 + 3 * self.img_h * self.img_w
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -476,24 +482,32 @@ class ShadowHandTurnButtonCfg(BaseRLTaskCfg):
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left han
-        if self.r_handle_idx is None:
-            self.r_handle_idx = envstates.objects[f"{self.current_object_type}_1"].body_names.index(self.handle_name)
-        if self.l_handle_idx is None:
-            self.l_handle_idx = envstates.objects[f"{self.current_object_type}_2"].body_names.index(self.handle_name)
-        right_object_pos = envstates.objects[f"{self.current_object_type}_1"].body_state[:, self.r_handle_idx, :3]
-        right_object_rot = envstates.objects[f"{self.current_object_type}_1"].body_state[:, self.r_handle_idx, 3:7]
-        right_object_pos = right_object_pos + math.quat_apply(right_object_rot, self.y_unit_tensor * -0.02)
-        right_object_pos = right_object_pos + math.quat_apply(right_object_rot, self.x_unit_tensor * -0.05)
-        left_object_pos = envstates.objects[f"{self.current_object_type}_2"].body_state[:, self.l_handle_idx, :3]
-        left_object_rot = envstates.objects[f"{self.current_object_type}_2"].body_state[:, self.l_handle_idx, 3:7]
-        left_object_pos = left_object_pos + math.quat_apply(left_object_rot, self.y_unit_tensor * -0.02)
-        left_object_pos = left_object_pos + math.quat_apply(left_object_rot, self.x_unit_tensor * -0.05)
-        obs[:, 398:401] = right_object_pos  # right button handle position
-        obs[:, 401:404] = left_object_pos  # left button handle position
-        if self.obs_type == "rgb":
-            obs[:, 404:] = (
-                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        if self.use_prio:
+            if self.r_handle_idx is None:
+                self.r_handle_idx = envstates.objects[f"{self.current_object_type}_1"].body_names.index(
+                    self.handle_name
+                )
+            if self.l_handle_idx is None:
+                self.l_handle_idx = envstates.objects[f"{self.current_object_type}_2"].body_names.index(
+                    self.handle_name
+                )
+            right_object_pos = envstates.objects[f"{self.current_object_type}_1"].body_state[:, self.r_handle_idx, :3]
+            right_object_rot = envstates.objects[f"{self.current_object_type}_1"].body_state[:, self.r_handle_idx, 3:7]
+            right_object_pos = right_object_pos + math.quat_apply(right_object_rot, self.y_unit_tensor * -0.02)
+            right_object_pos = right_object_pos + math.quat_apply(right_object_rot, self.x_unit_tensor * -0.05)
+            left_object_pos = envstates.objects[f"{self.current_object_type}_2"].body_state[:, self.l_handle_idx, :3]
+            left_object_rot = envstates.objects[f"{self.current_object_type}_2"].body_state[:, self.l_handle_idx, 3:7]
+            left_object_pos = left_object_pos + math.quat_apply(left_object_rot, self.y_unit_tensor * -0.02)
+            left_object_pos = left_object_pos + math.quat_apply(left_object_rot, self.x_unit_tensor * -0.05)
+            obs[:, 398:401] = right_object_pos  # right button handle position
+            obs[:, 401:404] = left_object_pos  # left button handle position
+            if self.obs_type == "rgb":
+                obs[:, 404:] = (
+                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        else:
+            if self.obs_type == "rgb":
+                obs[:, 398:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
         return obs
 
     def reward_fn(

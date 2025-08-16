@@ -42,6 +42,8 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
     num_envs = None
     obs_type = "state"  # "state" or "rgb"
     obs_shape = 430
+    proceptual_shape = 398
+    use_prio = True
     proprio_shape = 430
     action_shape = 52
     current_object_type = "kettle"
@@ -164,7 +166,8 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand kettle task."""
         if self.obs_type == "state":
             self.cameras = []
-            self.obs_shape = 430
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
@@ -177,7 +180,10 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape = 430 + 3 * self.img_h * self.img_w
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -515,26 +521,30 @@ class ShadowHandKettleCfg(BaseRLTaskCfg):
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left hand
-        obs[:, 398:411] = envstates.objects["kettle"].root_state
-        obs[:, 408:411] *= self.vel_obs_scale  # object1 angvel
-        obs[:, 411:424] = envstates.objects["bucket"].root_state
-        obs[:, 421:424] *= self.vel_obs_scale  # object2 angvel
-        if self.bucket_handle_idx is None:
-            self.bucket_handle_idx = envstates.objects["bucket"].body_names.index(self.bucket_handle_name)
-        if self.kettle_handle_idx is None:
-            self.kettle_handle_idx = envstates.objects["kettle"].body_names.index(self.kettle_handle_name)
-        kettle_handle_pos = envstates.objects["kettle"].body_state[:, self.kettle_handle_idx, :3]
-        kettle_handle_rot = envstates.objects["kettle"].body_state[:, self.kettle_handle_idx, 3:7]
-        kettle_handle_pos = kettle_handle_pos + math.quat_apply(kettle_handle_rot, self.x_unit_tensor * 0.15)
-        bucket_handle_pos = envstates.objects["bucket"].body_state[:, self.bucket_handle_idx, :3]
-        bucket_handle_rot = envstates.objects["bucket"].body_state[:, self.bucket_handle_idx, 3:7]
-        bucket_handle_pos = bucket_handle_pos + math.quat_apply(bucket_handle_rot, self.z_unit_tensor * -0.1)
-        obs[:, 424:427] = kettle_handle_pos
-        obs[:, 427:430] = bucket_handle_pos
-        if self.obs_type == "rgb":
-            obs[:, 430:] = (
-                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        if self.use_prio:
+            obs[:, 398:411] = envstates.objects["kettle"].root_state
+            obs[:, 408:411] *= self.vel_obs_scale  # object1 angvel
+            obs[:, 411:424] = envstates.objects["bucket"].root_state
+            obs[:, 421:424] *= self.vel_obs_scale  # object2 angvel
+            if self.bucket_handle_idx is None:
+                self.bucket_handle_idx = envstates.objects["bucket"].body_names.index(self.bucket_handle_name)
+            if self.kettle_handle_idx is None:
+                self.kettle_handle_idx = envstates.objects["kettle"].body_names.index(self.kettle_handle_name)
+            kettle_handle_pos = envstates.objects["kettle"].body_state[:, self.kettle_handle_idx, :3]
+            kettle_handle_rot = envstates.objects["kettle"].body_state[:, self.kettle_handle_idx, 3:7]
+            kettle_handle_pos = kettle_handle_pos + math.quat_apply(kettle_handle_rot, self.x_unit_tensor * 0.15)
+            bucket_handle_pos = envstates.objects["bucket"].body_state[:, self.bucket_handle_idx, :3]
+            bucket_handle_rot = envstates.objects["bucket"].body_state[:, self.bucket_handle_idx, 3:7]
+            bucket_handle_pos = bucket_handle_pos + math.quat_apply(bucket_handle_rot, self.z_unit_tensor * -0.1)
+            obs[:, 424:427] = kettle_handle_pos
+            obs[:, 427:430] = bucket_handle_pos
+            if self.obs_type == "rgb":
+                obs[:, 430:] = (
+                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        else:
+            if self.obs_type == "rgb":
+                obs[:, 398:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
         return obs
 
     def reward_fn(

@@ -121,9 +121,7 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand over task."""
         if self.obs_type == "state":
             self.cameras = []
-            if self.use_prio:
-                self.obs_shape = 398
-            else:
+            if not self.use_prio:
                 raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
@@ -134,9 +132,9 @@ class ShadowHandOverCfg(BaseRLTaskCfg):
                 )
             ]
             if self.use_prio:
-                self.obs_shape = 398 + 3 * self.img_h * self.img_w  # 398-dimensional state + RGB image
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w  # 398-dimensional state + RGB image
             else:
-                self.obs_shape = 374 + 3 * self.img_h * self.img_w
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.init_goal_pos = torch.tensor(
             [0.0, -0.64, 0.54], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)

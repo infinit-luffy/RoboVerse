@@ -42,6 +42,8 @@ class ShadowHandCloseOutwardCfg(BaseRLTaskCfg):
     num_envs = None
     obs_type = "state"
     obs_shape = 404
+    proceptual_shape = 398
+    use_prio = True
     proprio_shape = 404
     action_shape = 52
     current_object_type = "door"
@@ -142,7 +144,8 @@ class ShadowHandCloseOutwardCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand close outward task."""
         if self.obs_type == "state":
             self.cameras = []
-            self.obs_shape = 404
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
@@ -155,7 +158,10 @@ class ShadowHandCloseOutwardCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape = 404 + 3 * self.img_h * self.img_w
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.init_goal_rot = torch.tensor(
             [-0.707, 0.0, 0.0, 0.707], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
@@ -482,32 +488,42 @@ class ShadowHandCloseOutwardCfg(BaseRLTaskCfg):
         obs[:, 370] = pitch
         obs[:, 371] = yaw  # left hand base rotation (roll, pitch, yaw)
         obs[:, 372:398] = actions[:, 26:]  # actions for left hand
-        if self.r_handle_idx is None:
-            self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
-        door_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
-        door_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-            door_right_handle_rot, self.y_unit_tensor * -0.5
-        )
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-            door_right_handle_rot, self.x_unit_tensor * 0.39
-        )
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-            door_right_handle_rot, self.z_unit_tensor * -0.04
-        )
-        if self.l_handle_idx is None:
-            self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
-        door_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
-        door_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
-        door_left_handle_pos = door_left_handle_pos + math.quat_apply(door_left_handle_rot, self.y_unit_tensor * -0.5)
-        door_left_handle_pos = door_left_handle_pos + math.quat_apply(door_left_handle_rot, self.x_unit_tensor * -0.39)
-        door_left_handle_pos = door_left_handle_pos + math.quat_apply(door_left_handle_rot, self.z_unit_tensor * -0.04)
-        obs[:, 398:401] = door_right_handle_pos  # right handle position
-        obs[:, 401:404] = door_left_handle_pos  # left handle position
-        if self.obs_type == "rgb":
-            obs[:, 404:] = (
-                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        if self.use_prio:
+            if self.r_handle_idx is None:
+                self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
+            door_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
+            door_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
+            door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+                door_right_handle_rot, self.y_unit_tensor * -0.5
+            )
+            door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+                door_right_handle_rot, self.x_unit_tensor * 0.39
+            )
+            door_right_handle_pos = door_right_handle_pos + math.quat_apply(
+                door_right_handle_rot, self.z_unit_tensor * -0.04
+            )
+            if self.l_handle_idx is None:
+                self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
+            door_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
+            door_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
+            door_left_handle_pos = door_left_handle_pos + math.quat_apply(
+                door_left_handle_rot, self.y_unit_tensor * -0.5
+            )
+            door_left_handle_pos = door_left_handle_pos + math.quat_apply(
+                door_left_handle_rot, self.x_unit_tensor * -0.39
+            )
+            door_left_handle_pos = door_left_handle_pos + math.quat_apply(
+                door_left_handle_rot, self.z_unit_tensor * -0.04
+            )
+            obs[:, 398:401] = door_right_handle_pos  # right handle position
+            obs[:, 401:404] = door_left_handle_pos  # left handle position
+            if self.obs_type == "rgb":
+                obs[:, 404:] = (
+                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        else:
+            if self.obs_type == "rgb":
+                obs[:, 398:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
         return obs
 
     def reward_fn(

@@ -42,6 +42,8 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
     num_envs = None
     obs_type = "state"
     obs_shape = 422
+    proceptual_shape = 374
+    use_prio = True
     proprio_shape = 422
     action_shape = 40
     current_object_type = "cube"
@@ -124,7 +126,8 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
         """Set the initial states for the shadow hand reorientation task."""
         if self.obs_type == "state":
             self.cameras = []
-            self.obs_shape = 422
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
             self.img_h = 256
             self.img_w = 256
@@ -133,7 +136,10 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(1.0, -1.0, 1.2), look_at=(0.0, -0.5, 0.6)
                 )
             ]  # TODO
-            self.obs_shape = 422 + 3 * self.img_h * self.img_w  # 398-dimensional state + RGB image
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.joint_reindex = torch.tensor(
             [5, 4, 3, 2, 18, 17, 16, 15, 14, 9, 8, 7, 6, 13, 12, 11, 10, 23, 22, 21, 20, 19, 1, 0],
             dtype=torch.int32,
@@ -456,22 +462,29 @@ class ShadowHandReOrientationCfg(BaseRLTaskCfg):
             obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
         obs[:, 354:374] = actions[:, 20:]  # actions for left hand
-        obs[:, 374:387] = envstates.objects[f"{self.current_object_type}_1"].root_state  # object position
-        obs[:, 384:387] *= self.vel_obs_scale  # object angvel
-        obs[:, 387:394] = torch.cat([self.goal_pos, self.goal_rot], dim=1)  # goal position and rotation (num_envs, 7)
-        obs[:, 394:398] = math.quat_mul(
-            envstates.objects[f"{self.current_object_type}_1"].root_state[:, 3:7], math.quat_inv(self.goal_rot)
-        )  # goal rotation - object rotation
-        obs[:, 398:411] = envstates.objects[f"{self.current_object_type}_2"].root_state
-        obs[:, 408:411] *= self.vel_obs_scale  # object angvel
-        obs[:, 411:418] = torch.cat([self.goal_another_pos, self.goal_another_rot], dim=1)
-        obs[:, 418:422] = math.quat_mul(
-            envstates.objects[f"{self.current_object_type}_2"].root_state[:, 3:7], math.quat_inv(self.goal_another_rot)
-        )
-        if self.obs_type == "rgb":
-            obs[:, 422:] = (
-                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        if self.use_prio:
+            obs[:, 374:387] = envstates.objects[f"{self.current_object_type}_1"].root_state  # object position
+            obs[:, 384:387] *= self.vel_obs_scale  # object angvel
+            obs[:, 387:394] = torch.cat(
+                [self.goal_pos, self.goal_rot], dim=1
+            )  # goal position and rotation (num_envs, 7)
+            obs[:, 394:398] = math.quat_mul(
+                envstates.objects[f"{self.current_object_type}_1"].root_state[:, 3:7], math.quat_inv(self.goal_rot)
+            )  # goal rotation - object rotation
+            obs[:, 398:411] = envstates.objects[f"{self.current_object_type}_2"].root_state
+            obs[:, 408:411] *= self.vel_obs_scale  # object angvel
+            obs[:, 411:418] = torch.cat([self.goal_another_pos, self.goal_another_rot], dim=1)
+            obs[:, 418:422] = math.quat_mul(
+                envstates.objects[f"{self.current_object_type}_2"].root_state[:, 3:7],
+                math.quat_inv(self.goal_another_rot),
+            )
+            if self.obs_type == "rgb":
+                obs[:, 422:] = (
+                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        else:
+            if self.obs_type == "rgb":
+                obs[:, 374:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
         return obs
 
     def reward_fn(

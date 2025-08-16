@@ -10,10 +10,12 @@ import torch.nn as nn
 import torch.optim as optim
 from gymnasium.spaces import Space
 
+from get_started.utils import ObsSaver
+
 # from torch.utils.tensorboard import SummaryWriter
 from roboverse_learn.bidex.algorithms.ppo.module import ActorCritic, ActorCritic_RGB
 from roboverse_learn.bidex.algorithms.ppo.storage import RolloutStorage
-from get_started.utils import ObsSaver
+
 
 class PPO:
     def __init__(

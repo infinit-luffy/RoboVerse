@@ -687,6 +687,12 @@ def axis_angle_from_quat(quat: torch.Tensor, eps: float = 1.0e-6) -> torch.Tenso
     )
     return quat[..., 1:4] / sin_half_angles_over_angles.unsqueeze(-1)
 
+@torch.jit.script
+def orientation_error(desired, current):
+    """Computes the orientation error between two quaternions."""
+    cc = quat_inv(current)
+    q_r = quat_mul(desired, cc)
+    return q_r[:, 1:4] * torch.sign(q_r[:, 0]).unsqueeze(-1)
 
 @torch.jit.script
 def quat_error_magnitude(q1: torch.Tensor, q2: torch.Tensor) -> torch.Tensor:

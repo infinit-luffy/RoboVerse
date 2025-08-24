@@ -9,6 +9,8 @@ from .anymal_cfg import AnymalCfg
 from .cartpole_cfg import CartpoleCfg
 from .fetch_cfg import FetchCfg
 from .franka_cfg import FrankaCfg
+from .franka_shadow_left_cfg import FrankaShadowHandLeftCfg
+from .franka_shadow_right_cfg import FrankaShadowHandRightCfg
 from .franka_slide_urdf_cfg import FrankaSlideUrdfCfg
 from .franka_slide_urdf_sapien_cfg import FrankaSlideUrdfSapienCfg
 from .franka_urdf_cfg import FrankaUrdfCfg

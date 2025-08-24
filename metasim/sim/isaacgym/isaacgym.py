@@ -681,11 +681,10 @@ class IsaacgymHandler(BaseSimHandler):
                 robot_pose = gymapi.Transform()
                 robot_pose.p = gymapi.Vec3(*robot_init_pos)
                 robot_pose.r = gymapi.Quat(*robot_init_quat[1:], robot_init_quat[0])  # x, y, z, w order for gymapi.Quat
-                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, "robot", i, 1)
+                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, robot.name, i, 1)
                 self.gym.enable_actor_dof_force_sensors(env, robot_handle)
                 assert robot.scale[0] == 1.0 and robot.scale[1] == 1.0 and robot.scale[2] == 1.0
                 self.gym.set_actor_scale(env, robot_handle, robot.scale[0])
-                assert robot.scale[0] == 1.0 and self.robot.scale[1] == 1.0 and robot.scale[2] == 1.0
                 env_robot_handles.append(robot_handle)
                 self.gym.set_actor_dof_properties(env, robot_handle, robot_dof_props)
 
@@ -716,6 +715,9 @@ class IsaacgymHandler(BaseSimHandler):
             self._robot_handles.append(env_robot_handles)
             if hasattr(self, "max_agg_bodies") and hasattr(self, "max_agg_shapes"):
                 self.gym.end_aggregate(env)
+
+        for robot in self.robots:
+            robot.jacobian = gymtorch.wrap_tensor(self.gym.acquire_jacobian_tensor(self.sim, robot.name))
 
         # GET initial state, copy for reset later
         self._initial_state = np.copy(self.gym.get_sim_rigid_body_states(self.sim, gymapi.STATE_ALL))
@@ -896,7 +898,7 @@ class IsaacgymHandler(BaseSimHandler):
         if isinstance(actions, torch.Tensor):
             # reverse sorted joint indices
             action_array_all = torch.zeros([self.num_envs, self._robot_num_dof], device=self.device)
-            action_array_all = actions[:, : self._robot_num_dof]
+            action_array_all = actions[:, : self._robot_num_dof]  # isaacgym dof order
             if self.actuated_root:
                 root_action_dim = actions.shape[1] - self._robot_num_dof
                 root_force_array_all = actions[
@@ -1106,12 +1108,10 @@ class IsaacgymHandler(BaseSimHandler):
                 if isinstance(obj, ArticulationObjCfg) and len(self._joint_info[obj.name]["names"]) > 0:
                     joint_pos = obj_state.joint_pos
                     joint_vel = obj_state.joint_vel
-                    global_dof_indices = torch.tensor(
-                        list(self._joint_info[obj.name]["global_indices"].values()),
-                        dtype=torch.int32,
-                        device=self.device,
+                    joint_ids_reindex = torch.tensor(
+                        self._get_joint_ids_reindex(obj.name), dtype=torch.int32, device=self.device
                     )
-                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[
+                    new_dof_states[env_ids_tensor.unsqueeze(1), joint_ids_reindex.unsqueeze(0), 0] = joint_pos[
                         env_ids, :
                     ].clone()
                     new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[
@@ -1123,10 +1123,10 @@ class IsaacgymHandler(BaseSimHandler):
                 new_root_states[env_ids, len(self.objects) + robot_id, :] = root_state[env_ids, :].clone()
                 joint_pos = robot_state.joint_pos
                 joint_vel = robot_state.joint_vel
-                global_dof_indices = torch.tensor(
-                    list(self._joint_info[robot.name]["global_indices"].values()), dtype=torch.int32, device=self.device
+                joint_ids_reindex = torch.tensor(
+                    self._get_joint_ids_reindex(robot.name), dtype=torch.int32, device=self.device
                 )
-                new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 0] = joint_pos[
+                new_dof_states[env_ids_tensor.unsqueeze(1), joint_ids_reindex.unsqueeze(0), 0] = joint_pos[
                     env_ids, :
                 ].clone()
                 new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[
@@ -1267,10 +1267,22 @@ class IsaacgymHandler(BaseSimHandler):
             return []
 
     def _get_body_ids_reindex(self, obj_name: str) -> list[int]:
-        return [self._body_info[obj_name]["global_indices"][bn] for bn in self._get_body_names(obj_name)]
+        if not hasattr(self, "_body_ids_reindex_cache"):
+            self._body_ids_reindex_cache = {}
+        if obj_name not in self._body_ids_reindex_cache:
+            self._body_ids_reindex_cache[obj_name] = [
+                self._body_info[obj_name]["global_indices"][bn] for bn in self.get_body_names(obj_name)
+            ]
+        return self._body_ids_reindex_cache[obj_name]
 
     def _get_joint_ids_reindex(self, obj_name: str) -> list[int]:
-        return [self._joint_info[obj_name]["global_indices"][jn] for jn in self._get_joint_names(obj_name)]
+        if not hasattr(self, "_joint_ids_reindex_cache"):
+            self._joint_ids_reindex_cache = {}
+        if obj_name not in self._joint_ids_reindex_cache:
+            self._joint_ids_reindex_cache[obj_name] = [
+                self._joint_info[obj_name]["global_indices"][jn] for jn in self.get_joint_names(obj_name)
+            ]
+        return self._joint_ids_reindex_cache[obj_name]
 
     def rand_rigid_body_fric(self, cfg, env_id: int, props: list[gymapi.RigidShapeProperties]):
         """Randomize the friction of the rigid bodies."""

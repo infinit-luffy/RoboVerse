@@ -27,6 +27,7 @@ We are now actively collecting scenes from multiple sources and updating the exi
 | [RoboSuite](#robosuite) | `metasim/cfg/tasks/robosuite` | Manipulation (7) |
 | [SimplerEnv](#simplerenv) | `metasim/cfg/tasks/simpler_env` | Manipulation (1) |
 | [UH1](#uh1) | `metasim/cfg/tasks/uh1` | Humanoid (1) |
+| [Bidex](#bidex) | `metasim/cfg/tasks/bidex` | Dexterous (20) |
 
 ### ARNOLD
 
@@ -187,3 +188,9 @@ SimplerEnv provided some controller models trained with RT-1 and RT-X dataset. W
 [UH1](https://arxiv.org/abs/2412.14172) is a large-scale dataset of
 over 20 million humanoid robot poses with corresponding
 text-based motion descriptions. We currently included one set of trajectory into RoboVerse.
+
+### Bidex
+
+[Bidex](https://github.com/PKU-MARL/DexterousHands) provides a collection of bimanual dexterous manipulations tasks and reinforcement learning algorithms. This work provided a variety of dexterous manipulation tasks (e.g., handover, lift up, throw, place, put...) as well as enormous target objects from the YCB and SAPIEN dataset (>2,000 objects).
+
+In Roboverse, we have adapted all $20$ tasks. The task all use Shadow Hand.

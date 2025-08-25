@@ -23,6 +23,7 @@ GROUPS = [
     "Robosuite",
     "Metaworld",
     "Rlafford",
+    "Bidex",
 ]
 PLATFORMS = ["isaaclab", "mujoco", "isaacgym", "sapien3", "genesis"]
 

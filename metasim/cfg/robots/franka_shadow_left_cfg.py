@@ -44,8 +44,10 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
     observation_shape: int = num_joints * 2 + 7 + num_fingertips * 7
     wrist = "forearm"
     palm = "palm"
-    shadow_hand_stiffness: float = 30
-    shadow_hand_damping: float = 1
+    shadow_hand_wrist_stiffness: float = 5
+    shadow_hand_wrist_damping: float = 0.5
+    shadow_hand_finger_stiffness: float = 1.0
+    shadow_hand_finger_damping: float = 0.1
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
     actuators: dict[str, BaseActuatorCfg] = {
@@ -56,30 +58,30 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
         "panda_joint5": BaseActuatorCfg(stiffness=400, damping=50, velocity_limit=2.61),
         "panda_joint6": BaseActuatorCfg(stiffness=400, damping=50, velocity_limit=2.61),
         "panda_joint7": BaseActuatorCfg(stiffness=800, damping=50, velocity_limit=2.61),
-        "WRJ2": BaseActuatorCfg(stiffness=150, damping=10),
-        "WRJ1": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "FFJ4": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "FFJ3": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "FFJ2": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "FFJ1": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "LFJ5": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "LFJ4": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "LFJ3": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "LFJ2": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "LFJ1": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "MFJ4": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "MFJ3": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "MFJ2": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "MFJ1": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "RFJ4": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "RFJ3": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "RFJ2": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "RFJ1": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "THJ5": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "THJ4": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "THJ3": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "THJ2": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
-        "THJ1": BaseActuatorCfg(stiffness=shadow_hand_stiffness, damping=shadow_hand_damping),
+        "WRJ2": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
+        "WRJ1": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
+        "FFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "FFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "FFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "FFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "MFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "MFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "MFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "MFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "RFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "RFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "RFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "RFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
     }
 
     joint_limits: dict[str, tuple[float, float]] = {
@@ -113,7 +115,7 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
         "THJ4": (0, 1.222),
         "THJ3": (-0.209, 0.209),
         "THJ2": (-0.524, 0.524),
-        "THJ1": (-1.571, 0),
+        "THJ1": (0, 1.571),
     }
 
     # set False for visualization correction. Also see https://forums.developer.nvidia.com/t/how-to-flip-collision-meshes-in-isaac-gym/260779 for another example.

@@ -273,13 +273,13 @@ class HandOverCfg(BaseRLTaskCfg):
                     actions[:, actions_start : actions_start + 3 * robot.num_fingertips].view(
                         self.num_envs, robot.num_fingertips, 3
                     )
-                    * 0.02
+                    * 0.01
                 )
                 ft_rot = (
                     actions[
                         :, actions_start + 3 * robot.num_fingertips : actions_start + 6 * robot.num_fingertips
                     ].view(self.num_envs, robot.num_fingertips, 3)
-                    * 0.25
+                    * 0.2
                     * torch.pi
                 )
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)

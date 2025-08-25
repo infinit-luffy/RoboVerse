@@ -89,7 +89,7 @@ def _solve_ik_single_env(
         jaxls.LeastSquaresProblem(factors, [JointVar(0)])
         .analyze()
         .solve(
-            initial_vals=jaxls.VarValues.make([joint_var0]),  # 使用初始值
+            initial_vals=jaxls.VarValues.make([joint_var0]),
             verbose=False,
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=10.0),

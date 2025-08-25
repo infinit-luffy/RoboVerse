@@ -7,11 +7,10 @@
 
 
 import os
-
-os.environ["MESA_VK_DEVICE_SELECT"] = "10de:1e30"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from typing import Literal
 
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+import jax
 import rootutils
 from loguru import logger as log
 from rich.logging import RichHandler
@@ -150,6 +149,9 @@ def load_cfg(args, train_cfg_path, logdir):
 def train(args):
     print("Algorithm: ", args.algo)
     assert args.algo.upper() in ALGO_MAP.keys(), "Unrecognized algorithm!\nAlgorithm should be one of: [ppo]"
+    jax.config.update("jax_platform_name", "gpu")
+    device_num = int(args.device.split(":")[-1])
+    jax.config.update("jax_default_device", jax.devices()[device_num])
     algo = args.algo
     task_cls = get_task(args.task)
     task = task_cls()

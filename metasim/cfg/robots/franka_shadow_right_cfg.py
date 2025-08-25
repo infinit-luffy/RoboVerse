@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -160,6 +161,7 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
         self.sorted_dof_names: list[str] = sorted(self.dof_names)
         self.joint_reindex_inverse = [self.sorted_dof_names.index(name) for name in self.dof_names]
         self.joint_reindex = [self.dof_names.index(name) for name in self.sorted_dof_names]
+        self.hand_joint_sorted_idx = [self.sorted_dof_names.index(name) for name in sorted(self.hand_dof_names)]
         self.joint_limits_lower = [self.joint_limits[name][0] for name in self.dof_names]
         self.joint_limits_upper = [self.joint_limits[name][1] for name in self.dof_names]
         self.load_robot_for_ik()
@@ -180,7 +182,7 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
                 torch.tensor(self.fingertips_offset, device=self.ft_states.device)
                 .unsqueeze(0)
                 .unsqueeze(0)
-                .repeat(1, self.num_fingertips, 1)
+                .repeat(self.ft_states.shape[0], self.num_fingertips, 1)
             )
         self.wrist_state = envstates.robots[self.name].body_state[:, self.wrist_index, :]
         if self.robot_controller == "ik":
@@ -189,11 +191,12 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
             self.wrist_pos = self.wrist_state[:, :3]
             self.wrist_rot = self.wrist_state[:, 3:7]
             self.ft_relative_pos = math.quat_apply(
-                math.quat_inv(self.wrist_rot),
-                self.ft_pos - self.wrist_pos.unsqueeze(1).repeat(1, self.num_fingertips, 1),
+                math.quat_inv(self.wrist_rot).unsqueeze(1).repeat(1, self.num_fingertips, 1),
+                self.ft_pos - self.wrist_pos.unsqueeze(1),
             )
             self.ft_relative_rot = math.quat_mul(
-                self.ft_rot, math.quat_inv(self.wrist_rot).unsqueeze(1).repeat(1, self.num_fingertips, 1)
+                self.ft_rot,
+                math.quat_inv(self.wrist_rot).unsqueeze(1).repeat(1, self.num_fingertips, 1),
             )
         self.palm_state = envstates.robots[self.name].body_state[:, self.palm_index, :]
         self.dof_pos = envstates.robots[self.name].joint_pos
@@ -251,7 +254,7 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
     def control_hand_ik(self, target_pos, target_rot):
         if self.robot_controller != "ik":
             raise ValueError("robot_controller must be 'ik' to use control_hand_ik")
-        init_q = self.dof_pos[:, self.joint_reindex_inverse[self.num_arm_joints :]][:, self.ik_reindex]
+        init_q = torch_to_jax(self.dof_pos[:, self.joint_reindex_inverse[self.num_arm_joints :]][:, self.ik_reindex])
         target_wxyz = torch_to_jax(
             math.quat_mul(
                 self.ft_relative_rot,
@@ -266,7 +269,7 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
 
         solution = self.solver(
             self.hand,
-            torch_to_jax(init_q),
+            init_q,
             target_wxyz,
             target_position,
             self.target_link_indices,

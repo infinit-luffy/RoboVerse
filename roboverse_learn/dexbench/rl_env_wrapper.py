@@ -130,7 +130,7 @@ class BiDexEnvWrapper:
         Args:
             actions (torch.Tensor): Actions in the range of [-1, 1], shape (num_envs, num_actions).
         """
-        step_action = self.scale_action_tensor(actions)
+        step_action = self.scale_action(actions)
         return step_action
 
     def post_physics_step(self, envstates: list[EnvState], actions: torch.Tensor):

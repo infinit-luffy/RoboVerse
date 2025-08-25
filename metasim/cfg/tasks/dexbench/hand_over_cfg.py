@@ -93,10 +93,10 @@ class HandOverCfg(BaseRLTaskCfg):
     sensors = []
     for name in robots[0].fingertips:
         r_name = "right" + name
-        sensors.append(ContactForceSensorCfg(base_link=("shadow_hand_right", name), source_link=None, name=r_name))
+        sensors.append(ContactForceSensorCfg(base_link=("franka_shadow_right", name), source_link=None, name=r_name))
     for name in robots[1].fingertips:
         l_name = "left" + name
-        sensors.append(ContactForceSensorCfg(base_link=("shadow_hand_left", name), source_link=None, name=l_name))
+        sensors.append(ContactForceSensorCfg(base_link=("franka_shadow_left", name), source_link=None, name=l_name))
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
@@ -108,8 +108,8 @@ class HandOverCfg(BaseRLTaskCfg):
     reach_goal_bonus = 250.0
     throw_bonus = 15.0
     fall_penalty = 0.0
-    reset_position_noise = 0.01
-    reset_dof_pos_noise = 0.2
+    reset_position_noise = 0.0
+    reset_dof_pos_noise = 0.0
     w_throw_bonus = True
 
     def set_objects(self) -> None:
@@ -155,7 +155,7 @@ class HandOverCfg(BaseRLTaskCfg):
         self.init_states = {
             "objects": {
                 self.current_object_type: {
-                    "pos": torch.tensor([0.0, -0.39, 0.86]),
+                    "pos": torch.tensor([0.0, -0.37, 0.86]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
             },
@@ -330,7 +330,7 @@ class HandOverCfg(BaseRLTaskCfg):
         """
         if device is None:
             device = self.device
-        num_envs = envstates.robots["shadow_hand_right"].root_state.shape[0]
+        num_envs = envstates.robots["franka_shadow_right"].root_state.shape[0]
         if self.num_envs is None:
             self.num_envs = num_envs
         if self.goal_pos is None:
@@ -349,7 +349,7 @@ class HandOverCfg(BaseRLTaskCfg):
         t = 0
         obs[:, : self.robots[0].observation_shape] = self.robots[0].observation()
         t += self.robots[0].observation_shape
-        for name in self.robot[0].fingertips:
+        for name in self.robots[0].fingertips:
             # shape: (num_envs, 3) + (num_envs, 3) => (num_envs, 6)
             r_name = "right" + name
             force = envstates.sensors[r_name].force  # (num_envs, 3)
@@ -360,7 +360,7 @@ class HandOverCfg(BaseRLTaskCfg):
         t += self.action_shape // 2
         obs[:, t : t + self.robots[1].observation_shape] = self.robots[1].observation()
         t += self.robots[1].observation_shape
-        for name in self.robot[1].fingertips:
+        for name in self.robots[1].fingertips:
             # shape: (num_envs, 3) + (num_envs, 3) => (num_envs, 6)
             l_name = "left" + name
             force = envstates.sensors[l_name].force
@@ -532,7 +532,7 @@ class HandOverCfg(BaseRLTaskCfg):
 
             start_idx = 5
             for robot_id, robot in enumerate(self.robots):
-                robot_dof_default_pos = reset_state.robots[robot.name].joint_pos
+                robot_dof_default_pos = reset_state.robots[robot.name].joint_pos[env_ids]
                 delta_max = robot.joint_limits_upper[robot.joint_reindex] - robot_dof_default_pos
                 delta_min = robot.joint_limits_lower[robot.joint_reindex] - robot_dof_default_pos
                 rand_delta = (
@@ -540,7 +540,7 @@ class HandOverCfg(BaseRLTaskCfg):
                 )
                 dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
                 joint_pos = reset_state.robots[robot.name].joint_pos
-                joint_pos[env_ids, robot.num_arm_joints :] = dof_pos[:, robot.num_arm_joints :]
+                joint_pos[env_ids, robot.hand_joint_sorted_idx] = dof_pos[:, robot.hand_joint_sorted_idx]
                 robot_state = RobotState(
                     root_state=reset_state.robots[robot.name].root_state,
                     joint_pos=joint_pos,

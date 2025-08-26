@@ -64,7 +64,10 @@ class HandOverCfg(BaseRLTaskCfg):
         ),
     }
     objects = []
-    robots = [FrankaShadowHandRightCfg(), FrankaShadowHandLeftCfg()]
+    robots = [
+        FrankaShadowHandRightCfg(use_vhacd=False, robot_controller="dof_pos"),
+        FrankaShadowHandLeftCfg(use_vhacd=False, robot_controller="dof_pos"),
+    ]
     step_actions_shape = 0
     for robot in robots:
         step_actions_shape += robot.num_joints
@@ -75,6 +78,7 @@ class HandOverCfg(BaseRLTaskCfg):
         elif robot.robot_controller == "dof_pos":
             action_shape += robot.num_joints - robot.num_arm_joints
     decimation = 1
+    env_spacing = 2.0
     sim_params = SimParamCfg(
         dt=1.0 / 60.0,
         contact_offset=0.002,
@@ -146,7 +150,7 @@ class HandOverCfg(BaseRLTaskCfg):
             else:
                 self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.init_goal_pos = torch.tensor(
-            [0.0, -0.64, 0.86], dtype=torch.float32, device=self.device
+            [0.0, -0.64, 0.85], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
         self.init_goal_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
@@ -155,13 +159,13 @@ class HandOverCfg(BaseRLTaskCfg):
         self.init_states = {
             "objects": {
                 self.current_object_type: {
-                    "pos": torch.tensor([0.0, -0.37, 0.86]),
+                    "pos": torch.tensor([0.0, -0.39, 0.87]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
             },
             "robots": {
                 "franka_shadow_right": {
-                    "pos": torch.tensor([0.0, 0.336, 0.0]),
+                    "pos": torch.tensor([0.0, 0.316, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
                         "panda_joint1": 0.0,
@@ -198,7 +202,7 @@ class HandOverCfg(BaseRLTaskCfg):
                     },
                 },
                 "franka_shadow_left": {
-                    "pos": torch.tensor([0.0, -1.336, 0.0]),
+                    "pos": torch.tensor([0.0, -1.356, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "panda_joint1": 0.0,
@@ -273,13 +277,13 @@ class HandOverCfg(BaseRLTaskCfg):
                     actions[:, actions_start : actions_start + 3 * robot.num_fingertips].view(
                         self.num_envs, robot.num_fingertips, 3
                     )
-                    * 0.01
+                    * 0.05
                 )
                 ft_rot = (
                     actions[
                         :, actions_start + 3 * robot.num_fingertips : actions_start + 6 * robot.num_fingertips
                     ].view(self.num_envs, robot.num_fingertips, 3)
-                    * 0.2
+                    * 0.25
                     * torch.pi
                 )
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)
@@ -654,7 +658,7 @@ def compute_task_reward(
     )
 
     # Reward for throwing the object
-    thrown = (diff_xy[:, 1] >= -0.1) & (diff_xy[:, 1] <= -0.06) & (object_pos[:, 2] >= 0.4) & env_throw_bonus
+    thrown = (diff_xy[:, 1] >= -0.1) & (diff_xy[:, 1] <= -0.06) & (object_pos[:, 2] >= 0.7) & env_throw_bonus
     reward = torch.where(thrown, reward + throw_bonus, reward)
     false_tensor = torch.tensor([False] * reward.shape[0], dtype=torch.bool, device=object_pos.device)
     env_throw_bonus = torch.where(thrown, false_tensor, env_throw_bonus)
@@ -663,10 +667,10 @@ def compute_task_reward(
     reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
 
     # Fall penalty: distance to the goal is larger than a threashold
-    reward = torch.where(object_pos[:, 2] <= 0.2, reward - fall_penalty, reward)
+    reward = torch.where(object_pos[:, 2] <= 0.5, reward - fall_penalty, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(object_pos[:, 2] <= 0.2, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(object_pos[:, 2] <= 0.5, torch.ones_like(reset_buf), reset_buf)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

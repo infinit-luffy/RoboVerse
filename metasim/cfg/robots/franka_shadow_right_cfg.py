@@ -24,6 +24,7 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
     num_arm_joints: int = 7
     fix_base_link: bool = True
     urdf_path: str = "roboverse_data/robots/franka_shadow_hand/urdf/franka_shadow_right.urdf"
+    mjcf_path: str = "roboverse_data/robots/franka_shadow_hand/mjcf/franka_shadow_right.xml"
     project_root: Path = Path(__file__).resolve().parents[3]
     hand_urdf_path: Path = (
         project_root / "roboverse_data" / "robots" / "franka_shadow_hand" / "urdf" / "shadow_right.urdf"
@@ -35,14 +36,14 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
     dof_drive_mode: Literal["none", "position", "effort"] = "position"
     angular_damping: float = None
     linear_damping: float = None
-    tendon_limit_stiffness: float = None
-    tendon_damping: float = None
+    tendon_limit_stiffness: float = 30
+    tendon_damping: float = 1
     friction = None  # Use default friction from MJCF
     robot_controller: Literal["ik", "dof_pos", "dof_effort"] = "ik"
     fingertips = ["ffdistal", "mfdistal", "rfdistal", "lfdistal", "thdistal"]
     fingertips_offset = [0.0, 0.0, 0.02]
     num_fingertips: int = len(fingertips)
-    observation_shape: int = num_joints * 2 + 7 + num_fingertips * 7
+    observation_shape: int = num_joints * 3 + 7 + num_fingertips * 7
     wrist = "forearm"
     palm = "palm"
     shadow_hand_wrist_stiffness: float = 5
@@ -187,11 +188,11 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
                 .repeat(self.ft_states.shape[0], self.num_fingertips, 1)
             )
         self.wrist_state = envstates.robots[self.name].body_state[:, self.wrist_index, :]
+        self.ft_pos = self.ft_states[:, :, :3]
+        self.ft_rot = self.ft_states[:, :, 3:7]
+        self.wrist_pos = self.wrist_state[:, :3]
+        self.wrist_rot = self.wrist_state[:, 3:7]
         if self.robot_controller == "ik":
-            self.ft_pos = self.ft_states[:, :, :3]
-            self.ft_rot = self.ft_states[:, :, 3:7]
-            self.wrist_pos = self.wrist_state[:, :3]
-            self.wrist_rot = self.wrist_state[:, 3:7]
             self.ft_relative_pos = math.quat_apply(
                 math.quat_inv(self.wrist_rot).unsqueeze(1).repeat(1, self.num_fingertips, 1),
                 self.ft_pos - self.wrist_pos.unsqueeze(1),
@@ -291,11 +292,14 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
             - Fingertip positions and orientations
         """
         obs = torch.zeros((self.ft_states.shape[0], self.observation_shape), device=self.ft_states.device)
-        obs[:, : self.num_joints] = self.dof_pos
+        obs[:, : self.num_joints] = math.scale_transform(
+            self.dof_pos, self.joint_limits_lower[self.joint_reindex], self.joint_limits_upper[self.joint_reindex]
+        )
         obs[:, self.num_joints : 2 * self.num_joints] = self.dof_vel * self.vel_obs_scale
-        obs[:, 2 * self.num_joints : 2 * self.num_joints + 3] = self.wrist_pos
-        obs[:, 2 * self.num_joints + 3 : 2 * self.num_joints + 7] = self.wrist_rot
+        obs[:, 2 * self.num_joints : 3 * self.num_joints] = self.dof_force * self.force_torque_obs_scale
+        obs[:, 3 * self.num_joints : 3 * self.num_joints + 3] = self.wrist_pos
+        obs[:, 3 * self.num_joints + 3 : 3 * self.num_joints + 7] = self.wrist_rot
         ft_pos = self.ft_pos + math.quat_apply(self.ft_rot, self.fingertips_offset)  # (num_envs, num_fingertips, 3)
         ft_state = torch.cat([ft_pos, self.ft_rot], dim=-1).view(self.ft_states.shape[0], -1)
-        obs[:, 2 * self.num_joints + 7 :] = ft_state
+        obs[:, 3 * self.num_joints + 7 :] = ft_state
         return obs

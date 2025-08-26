@@ -379,7 +379,10 @@ class IsaacgymHandler(BaseSimHandler):
                 asset_options.linear_damping = robot.linear_damping
             # Defaults are set to free movement and will be updated based on the configuration in actuator_cfg below.
             asset_options.replace_cylinder_with_capsule = self.scenario.sim_params.replace_cylinder_with_capsule
-            robot_asset = self.gym.load_asset(self.sim, asset_root, robot_asset_file, asset_options)
+            if robot.isaacgym_read_mjcf:
+                robot_asset = self.gym.load_mjcf(self.sim, asset_root, robot_asset_file, asset_options)
+            else:
+                robot_asset = self.gym.load_asset(self.sim, asset_root, robot_asset_file, asset_options)
             # configure robot dofs
             robot_num_dofs = self.gym.get_asset_dof_count(robot_asset)
             self._robot_num_dof += robot_num_dofs

@@ -171,36 +171,12 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
             device=self.device,
         )
         self.actuated_dof_indices = torch.tensor(
-            [
-                0,
-                1,
-                2,
-                3,
-                4,
-                6,
-                7,
-                8,
-                10,
-                11,
-                12,
-                14,
-                15,
-                16,
-                17,
-                19,
-                20,
-                21,
-                22,
-                23,
-            ],
+            [1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
             dtype=torch.int32,
             device=self.device,
         )
         self.shadow_hand_dof_lower_limits: torch.Tensor = torch.tensor(
             [
-                -0.489,
-                -0.698,
-                -0.349,
                 0,
                 0,
                 0,
@@ -216,42 +192,45 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
                 -0.349,
                 0,
                 0,
+                0,
+                -0.349,
+                -1.571,
+                -0.524,
+                -0.209,
                 0,
                 -1.047,
-                0,
-                -0.209,
-                -0.524,
-                -1.571,
+                -0.698,
+                -0.489,
             ],
             dtype=torch.float32,
             device=self.device,
         )
         self.shadow_hand_dof_upper_limits: torch.Tensor = torch.tensor(
             [
-                0.14,
-                0.489,
-                0.349,
-                1.571,
-                1.571,
-                1.571,
-                0.349,
-                1.571,
-                1.571,
-                1.571,
-                0.349,
-                1.571,
-                1.571,
-                1.571,
-                0.785,
-                0.349,
-                1.571,
-                1.571,
-                1.571,
-                1.047,
-                1.222,
-                0.209,
-                0.524,
-                0,
+                1.5710,
+                1.5710,
+                1.5710,
+                0.3490,
+                1.5710,
+                1.5710,
+                1.5710,
+                0.3490,
+                0.7850,
+                1.5710,
+                1.5710,
+                1.5710,
+                0.3490,
+                1.5710,
+                1.5710,
+                1.5710,
+                0.3490,
+                0.0000,
+                0.5240,
+                0.2090,
+                1.2220,
+                1.0470,
+                0.4890,
+                0.1400,
             ],
             dtype=torch.float32,
             device=self.device,
@@ -423,8 +402,8 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
         obs[:, :24] = math.scale_transform(
             envstates.robots["shadow_hand_right"].joint_pos,
-            self.shadow_hand_dof_lower_limits[self.joint_reindex],
-            self.shadow_hand_dof_upper_limits[self.joint_reindex],
+            self.shadow_hand_dof_lower_limits,
+            self.shadow_hand_dof_upper_limits,
         )
         obs[:, 24:48] = envstates.robots["shadow_hand_right"].joint_vel * self.vel_obs_scale
         obs[:, 48:72] = envstates.robots["shadow_hand_right"].joint_force * self.force_torque_obs_scale
@@ -452,8 +431,8 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
         obs[:, 173:199] = actions[:, :26]  # actions for right hand
         obs[:, 199:223] = math.scale_transform(
             envstates.robots["shadow_hand_left"].joint_pos,
-            self.shadow_hand_dof_lower_limits[self.joint_reindex],
-            self.shadow_hand_dof_upper_limits[self.joint_reindex],
+            self.shadow_hand_dof_lower_limits,
+            self.shadow_hand_dof_upper_limits,
         )
         obs[:, 223:247] = envstates.robots["shadow_hand_left"].joint_vel * self.vel_obs_scale
         obs[:, 247:271] = envstates.robots["shadow_hand_left"].joint_force * self.force_torque_obs_scale
@@ -631,8 +610,8 @@ class ShadowHandCatchUnderarmCfg(BaseRLTaskCfg):
 
             for robot_id, robot in enumerate(self.robots):
                 robot_dof_default_pos = self.robot_dof_default_pos[robot.name][self.joint_reindex]
-                delta_max = self.shadow_hand_dof_upper_limits[self.joint_reindex] - robot_dof_default_pos
-                delta_min = self.shadow_hand_dof_lower_limits[self.joint_reindex] - robot_dof_default_pos
+                delta_max = self.shadow_hand_dof_upper_limits - robot_dof_default_pos
+                delta_min = self.shadow_hand_dof_lower_limits - robot_dof_default_pos
                 rand_delta = delta_min + (delta_max - delta_min) * rand_floats[:, 5 : 5 + num_shadow_hand_dofs]
                 dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
                 joint_pos = reset_state.robots[robot.name].joint_pos

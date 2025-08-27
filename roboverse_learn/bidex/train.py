@@ -10,6 +10,7 @@ import os
 
 os.environ["MESA_VK_DEVICE_SELECT"] = "10de:1e30"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 from typing import Literal
 
 import rootutils

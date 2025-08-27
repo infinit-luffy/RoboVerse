@@ -37,7 +37,7 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
     angular_damping: float = None
     linear_damping: float = None
     tendon_limit_stiffness: float = 30
-    tendon_damping: float = 1
+    tendon_damping: float = 0.1
     friction = None  # Use default friction from MJCF
     robot_controller: Literal["ik", "dof_pos", "dof_effort"] = "ik"
     fingertips = ["ffdistal", "mfdistal", "rfdistal", "lfdistal", "thdistal"]
@@ -46,6 +46,7 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
     observation_shape: int = num_joints * 3 + 7 + num_fingertips * 7
     wrist = "forearm"
     palm = "palm"
+    root_link = "panda_link0"
     shadow_hand_wrist_stiffness: float = 5
     shadow_hand_wrist_damping: float = 0.5
     shadow_hand_finger_stiffness: float = 1.0
@@ -53,6 +54,30 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
     actuators: dict[str, BaseActuatorCfg] = {
+        "FFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "FFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "FFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "FFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "LFJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "MFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "MFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "MFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "MFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "RFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "RFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "RFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "RFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "THJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
+        "WRJ1": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
+        "WRJ2": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
         "panda_joint1": BaseActuatorCfg(stiffness=1e5, damping=1e4, velocity_limit=2.175),
         "panda_joint2": BaseActuatorCfg(stiffness=1e4, damping=1e3, velocity_limit=2.175),
         "panda_joint3": BaseActuatorCfg(stiffness=1e5, damping=5e3, velocity_limit=2.175),
@@ -60,33 +85,33 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
         "panda_joint5": BaseActuatorCfg(stiffness=400, damping=50, velocity_limit=2.61),
         "panda_joint6": BaseActuatorCfg(stiffness=400, damping=50, velocity_limit=2.61),
         "panda_joint7": BaseActuatorCfg(stiffness=800, damping=50, velocity_limit=2.61),
-        "WRJ2": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
-        "WRJ1": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
-        "FFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
     }
 
     joint_limits: dict[str, tuple[float, float]] = {
+        "FFJ1": (0, 1.571),
+        "FFJ2": (0, 1.571),
+        "FFJ3": (0, 1.571),
+        "FFJ4": (-0.349, 0.349),
+        "LFJ1": (0, 1.571),
+        "LFJ2": (0, 1.571),
+        "LFJ3": (0, 1.571),
+        "LFJ4": (-0.349, 0.349),
+        "LFJ5": (0, 0.785),
+        "MFJ1": (0, 1.571),
+        "MFJ2": (0, 1.571),
+        "MFJ3": (0, 1.571),
+        "MFJ4": (-0.349, 0.349),
+        "RFJ1": (0, 1.571),
+        "RFJ2": (0, 1.571),
+        "RFJ3": (0, 1.571),
+        "RFJ4": (-0.349, 0.349),
+        "THJ1": (0, 1.571),
+        "THJ2": (-0.524, 0.524),
+        "THJ3": (-0.209, 0.209),
+        "THJ4": (0, 1.222),
+        "THJ5": (-1.047, 1.047),
+        "WRJ1": (-0.698, 0.489),
+        "WRJ2": (-0.489, 0.14),
         "panda_joint1": (-2.8973, 2.8973),
         "panda_joint2": (-1.7628, 1.7628),
         "panda_joint3": (-2.8973, 2.8973),
@@ -94,36 +119,45 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
         "panda_joint5": (-2.8973, 2.8973),
         "panda_joint6": (-0.0175, 3.7525),
         "panda_joint7": (-2.8973, 2.8973),
-        "WRJ2": (-0.489, 0.14),
-        "WRJ1": (-0.698, 0.489),
-        "FFJ4": (-0.349, 0.349),
-        "FFJ3": (0, 1.571),
-        "FFJ2": (0, 1.571),
-        "FFJ1": (0, 1.571),
-        "LFJ5": (0, 0.785),
-        "LFJ4": (-0.349, 0.349),
-        "LFJ3": (0, 1.571),
-        "LFJ2": (0, 1.571),
-        "LFJ1": (0, 1.571),
-        "MFJ4": (-0.349, 0.349),
-        "MFJ3": (0, 1.571),
-        "MFJ2": (0, 1.571),
-        "MFJ1": (0, 1.571),
-        "RFJ4": (-0.349, 0.349),
-        "RFJ3": (0, 1.571),
-        "RFJ2": (0, 1.571),
-        "RFJ1": (0, 1.571),
-        "THJ5": (-1.047, 1.047),
-        "THJ4": (0, 1.222),
-        "THJ3": (-0.209, 0.209),
-        "THJ2": (-0.524, 0.524),
-        "THJ1": (0, 1.571),
     }
 
+    arm_dof_names = [
+        "panda_joint1",
+        "panda_joint2",
+        "panda_joint3",
+        "panda_joint4",
+        "panda_joint5",
+        "panda_joint6",
+        "panda_joint7",
+    ]
     # set False for visualization correction. Also see https://forums.developer.nvidia.com/t/how-to-flip-collision-meshes-in-isaac-gym/260779 for another example.
     isaacgym_flip_visual_attachments = False
 
     default_joint_positions: dict[str, float] = {
+        "FFJ1": 0.0,
+        "FFJ2": 0.0,
+        "FFJ3": 0.0,
+        "FFJ4": 0.0,
+        "LFJ1": 0.0,
+        "LFJ2": 0.0,
+        "LFJ3": 0.0,
+        "LFJ4": 0.0,
+        "LFJ5": 0.0,
+        "MFJ1": 0.0,
+        "MFJ2": 0.0,
+        "MFJ3": 0.0,
+        "MFJ4": 0.0,
+        "RFJ1": 0.0,
+        "RFJ2": 0.0,
+        "RFJ3": 0.0,
+        "RFJ4": 0.0,
+        "THJ1": 0.0,
+        "THJ2": 0.0,
+        "THJ3": 0.0,
+        "THJ4": 0.0,
+        "THJ5": 0.0,
+        "WRJ1": 0.0,
+        "WRJ2": 0.0,
         "panda_joint1": 0.0,
         "panda_joint2": -0.785398,
         "panda_joint3": 0.0,
@@ -131,40 +165,22 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
         "panda_joint5": 0.0,
         "panda_joint6": 3.1415926,
         "panda_joint7": -2.356194,
-        "WRJ2": 0.0,
-        "WRJ1": 0.0,
-        "FFJ4": 0.0,
-        "FFJ3": 0.0,
-        "FFJ2": 0.0,
-        "FFJ1": 0.0,
-        "MFJ4": 0.0,
-        "MFJ3": 0.0,
-        "MFJ2": 0.0,
-        "MFJ1": 0.0,
-        "RFJ4": 0.0,
-        "RFJ3": 0.0,
-        "RFJ2": 0.0,
-        "RFJ1": 0.0,
-        "LFJ5": 0.0,
-        "LFJ4": 0.0,
-        "LFJ3": 0.0,
-        "LFJ2": 0.0,
-        "LFJ1": 0.0,
-        "THJ5": 0.0,
-        "THJ4": 0.0,
-        "THJ3": 0.0,
-        "THJ2": 0.0,
-        "THJ1": 0.0,
     }
 
     def __post_init__(self):
         super().__post_init__()
+        if self.isaacgym_read_mjcf:
+            self.actuators["LFJ1"].fully_actuated = False
+            self.actuators["RFJ1"].fully_actuated = False
+            self.actuators["MFJ1"].fully_actuated = False
+            self.actuators["FFJ1"].fully_actuated = False
         self.dof_names: list[str] = list(self.default_joint_positions.keys())
-        self.hand_dof_names: list[str] = self.dof_names[self.num_arm_joints :]
-        self.sorted_dof_names: list[str] = sorted(self.dof_names)
-        self.joint_reindex_inverse = [self.sorted_dof_names.index(name) for name in self.dof_names]
-        self.joint_reindex = [self.dof_names.index(name) for name in self.sorted_dof_names]
-        self.hand_joint_sorted_idx = [self.sorted_dof_names.index(name) for name in sorted(self.hand_dof_names)]
+        self.hand_dof_names: list[str] = [name for name in self.dof_names if name not in self.arm_dof_names]
+        self.hand_dof_idx = [self.dof_names.index(name) for name in self.hand_dof_names]
+        self.arm_dof_idx = [self.dof_names.index(name) for name in self.arm_dof_names]
+        self.hand_acutuated_idx = [
+            self.dof_names.index(name) for name in self.hand_dof_names if self.actuators[name].fully_actuated
+        ]
         self.joint_limits_lower = [self.joint_limits[name][0] for name in self.dof_names]
         self.joint_limits_upper = [self.joint_limits[name][1] for name in self.dof_names]
         self.load_robot_for_ik()
@@ -176,6 +192,8 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
             self.wrist_index = envstates.robots[self.name].body_names.index(self.wrist)
         if not hasattr(self, "palm_index"):
             self.palm_index = envstates.robots[self.name].body_names.index(self.palm)
+        if not hasattr(self, "root_link_index"):
+            self.root_link_index = envstates.robots[self.name].body_names.index(self.root_link)
         self.ft_states = envstates.robots[self.name].body_state[:, self.ft_index, :]
         if isinstance(self.joint_limits_lower, list):
             self.joint_limits_lower = torch.tensor(self.joint_limits_lower, device=self.ft_states.device)
@@ -209,27 +227,35 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
     def scale_hand_action(self, actions: torch.Tensor) -> torch.Tensor:
         if self.robot_controller != "dof_pos":
             raise ValueError("robot_controller must be 'dof_pos' to use scale_hand_action")
-        if actions.shape[1] != self.num_joints - self.num_arm_joints:
+        if actions.shape[1] != len(self.hand_acutuated_idx):
             raise ValueError(
                 f"action shape {actions.shape} does not match hand dof {self.num_joints - self.num_arm_joints}"
             )
-        return math.unscale_transform(
-            actions, self.joint_limits_lower[self.num_arm_joints :], self.joint_limits_upper[self.num_arm_joints :]
+        hand_dof = math.unscale_transform(
+            actions, self.joint_limits_lower[self.hand_acutuated_idx], self.joint_limits_upper[self.hand_acutuated_idx]
         )
+        control_actions = torch.zeros((self.dof_pos.shape[0], len(self.hand_dof_idx)), device=hand_dof.device)
+        control_actions[:, self.hand_acutuated_idx] = hand_dof
+        return control_actions
 
     def control_arm_ik(self, dpose, num_envs: int, device: str):
         # Set controller parameters
         # IK params
         damping = 0.05
+        jacobian_tensor = self.jacobian[:, self.jacobian_body_reindex, :, :][
+            ..., self.jacobian_joint_reindex
+        ]  # (num_envs, num_bodies, 6, num_dofs)
         # solve damped least squares
-        j_eef = self.jacobian[:, self.wrist_index - 1, :, : self.num_arm_joints]
+        if self.fix_base_link:
+            ik_idx = self.wrist_index - 1 if self.root_link_index < self.wrist_index else self.wrist_index
+            j_eef = jacobian_tensor[:, ik_idx, :, self.arm_dof_idx]
+        else:
+            j_eef = jacobian_tensor[:, self.wrist_index, :, self.arm_dof_idx]
         j_eef_T = torch.transpose(j_eef, 1, 2)
         lmbda = torch.eye(6, device=device) * (damping**2)
         u = (j_eef_T @ torch.inverse(j_eef @ j_eef_T + lmbda) @ dpose).view(num_envs, -1)
-        u += self.dof_pos[:, self.joint_reindex_inverse[: self.num_arm_joints]]
-        u = torch.clamp(
-            u, self.joint_limits_lower[: self.num_arm_joints], self.joint_limits_upper[: self.num_arm_joints]
-        )
+        u += self.dof_pos[:, self.arm_dof_idx]
+        u = torch.clamp(u, self.joint_limits_lower[self.arm_dof_idx], self.joint_limits_upper[self.arm_dof_idx])
         return u
 
     def load_robot_for_ik(self):
@@ -257,7 +283,7 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
     def control_hand_ik(self, target_pos, target_rot):
         if self.robot_controller != "ik":
             raise ValueError("robot_controller must be 'ik' to use control_hand_ik")
-        init_q = torch_to_jax(self.dof_pos[:, self.joint_reindex_inverse[self.num_arm_joints :]][:, self.ik_reindex])
+        init_q = torch_to_jax(self.dof_pos[:, self.hand_dof_idx][:, self.ik_reindex])
         target_wxyz = torch_to_jax(
             math.quat_mul(
                 self.ft_relative_rot,
@@ -279,9 +305,11 @@ class FrankaShadowHandRightCfg(BaseRobotCfg):
         )
         hand_dof = jax_to_torch(solution)[:, self.ik_reindex_inverse]
         hand_dof = torch.clamp(
-            hand_dof, self.joint_limits_lower[self.num_arm_joints :], self.joint_limits_upper[self.num_arm_joints :]
+            hand_dof, self.joint_limits_lower[self.hand_dof_idx], self.joint_limits_upper[self.hand_dof_idx]
         )
-        return hand_dof
+        action = torch.zeros((self.dof_pos.shape[0], len(self.hand_dof_idx)), device=hand_dof.device)
+        action[:, self.hand_acutuated_idx] = hand_dof[:, self.hand_acutuated_idx]
+        return action
 
     def observation(self):
         """

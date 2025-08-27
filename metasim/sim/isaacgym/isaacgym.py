@@ -289,7 +289,7 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options.disable_gravity = object.disable_gravity
             asset_options.flip_visual_attachments = object.flip_visual_attachments
             asset_options.collapse_fixed_joints = object.collapse_fixed_joints
-            asset_options.use_physx_armature = True
+            asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
             if object.override_com:
                 asset_options.override_com = True
             if object.override_inertia:
@@ -307,7 +307,8 @@ class IsaacgymHandler(BaseSimHandler):
                 asset_options.vhacd_enabled = True
                 if object.vhacd_resolution is not None:
                     asset_options.vhacd_params.resolution = object.vhacd_resolution
-            asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
+            asset_options.use_physx_armature = True
+            asset_options.replace_cylinder_with_capsule = self.scenario.sim_params.replace_cylinder_with_capsule
             if hasattr(object, "default_density") and object.default_density is not None:
                 asset_options.density = object.default_density
             asset = self.gym.load_asset(self.sim, asset_root, asset_path, asset_options)
@@ -720,8 +721,16 @@ class IsaacgymHandler(BaseSimHandler):
                 self.gym.end_aggregate(env)
 
         for robot in self.robots:
-            robot.jacobian = gymtorch.wrap_tensor(self.gym.acquire_jacobian_tensor(self.sim, robot.name))
-
+            jacobian_tensor = gymtorch.wrap_tensor(self.gym.acquire_jacobian_tensor(self.sim, robot.name))
+            body_reindex = self.get_body_reindex(robot.name)
+            joint_reindex = self.get_joint_reindex(robot.name)
+            if robot.fix_base_link:
+                body_reindex = [i - 1 for i in body_reindex if i > 0]  # reindex after removing the fixed base
+            else:
+                joint_reindex = [i + 6 for i in joint_reindex]  # reindex after adding the free root
+            robot.jacobian = jacobian_tensor
+            robot.jacobian_body_reindex = body_reindex
+            robot.jacobian_joint_reindex = joint_reindex
         # GET initial state, copy for reset later
         self._initial_state = np.copy(self.gym.get_sim_rigid_body_states(self.sim, gymapi.STATE_ALL))
         self.actor_indices = torch.zeros(
@@ -902,6 +911,14 @@ class IsaacgymHandler(BaseSimHandler):
             # reverse sorted joint indices
             action_array_all = torch.zeros([self.num_envs, self._robot_num_dof], device=self.device)
             action_array_all = actions[:, : self._robot_num_dof]  # isaacgym dof order
+            if not hasattr(self, "robot_action_reindex"):
+                self.robot_action_reindex = []
+                num_robot_joints = 0
+                for robot in self.robots:
+                    robot_joint_reindex_iv = self.get_joint_reindex(robot.name, inverse=True)
+                    self.robot_action_reindex.extend([idx + num_robot_joints for idx in robot_joint_reindex_iv])
+                    num_robot_joints += len(robot_joint_reindex_iv)
+            action_array_all = action_array_all[:, self.robot_action_reindex]
             if self.actuated_root:
                 root_action_dim = actions.shape[1] - self._robot_num_dof
                 root_force_array_all = actions[

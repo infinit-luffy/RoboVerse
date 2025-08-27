@@ -353,9 +353,9 @@ for _ in range(100):
     right_targets = scenario.robots[1].control_arm_ik(right_dpose, args.num_envs, "cuda:0")
 
     left_ft_pos_err = torch.zeros((args.num_envs, 5, 3), device="cuda:0")
-    left_ft_pos_err[..., 1] = 0.01
+    left_ft_pos_err[..., 1] = 0.03
     right_ft_pos_err = torch.zeros((args.num_envs, 5, 3), device="cuda:0")
-    right_ft_pos_err[..., 1] = -0.01
+    right_ft_pos_err[..., 1] = -0.03
     left_ft_rot_err = torch.zeros((args.num_envs, 5, 3), device="cuda:0")
     right_ft_rot_err = torch.zeros((args.num_envs, 5, 3), device="cuda:0")
     left_dof_pos = scenario.robots[0].control_hand_ik(left_ft_pos_err, left_ft_rot_err)
@@ -364,10 +364,10 @@ for _ in range(100):
     actions = torch.zeros((args.num_envs, dof_num), device="cuda:0")
     num_dof = 0
     for robot in scenario.robots:
-        actions[:, num_dof : num_dof + 7] = left_targets if robot.name == "franka_shadow_left" else right_targets
-        actions[:, num_dof + 7 : num_dof + num_robo_dof[robot.name]] = (
-            left_dof_pos if robot.name == "franka_shadow_left" else right_dof_pos
-        )
+        arm_dof_idx = [i + num_dof for i in robot.arm_dof_idx]
+        hand_dof_idx = [i + num_dof for i in robot.hand_dof_idx]
+        actions[:, arm_dof_idx] = left_targets if robot.name == "franka_shadow_left" else right_targets
+        actions[:, hand_dof_idx] = left_dof_pos if robot.name == "franka_shadow_left" else right_dof_pos
         num_dof += num_robo_dof[robot.name]
     obs, reward, success, time_out, extras = env.step(actions)
     for robot in scenario.robots:

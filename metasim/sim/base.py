@@ -7,6 +7,8 @@ import torch
 
 if TYPE_CHECKING:
     from metasim.scenario.scenario import ScenarioCfg
+from copy import deepcopy
+
 
 from metasim.queries.base import BaseQueryType
 from metasim.types import Action, DictEnvState, TensorState
@@ -192,8 +194,8 @@ class BaseSimHandler(ABC):
             self._joint_reindex_cache_inverse = {}
 
         if obj_name not in self._joint_reindex_cache:
-            origin_joint_names = self._get_joint_names(obj_name, sort=False)
-            sorted_joint_names = self._get_joint_names(obj_name, sort=True)
+            origin_joint_names = deepcopy(self.get_joint_names(obj_name, sort=False))
+            sorted_joint_names = deepcopy(self.get_joint_names(obj_name, sort=True))
             self._joint_reindex_cache[obj_name] = [origin_joint_names.index(jn) for jn in sorted_joint_names]
             self._joint_reindex_cache_inverse[obj_name] = [sorted_joint_names.index(jn) for jn in origin_joint_names]
 
@@ -244,8 +246,8 @@ class BaseSimHandler(ABC):
             self._body_reindex_cache = {}
 
         if obj_name not in self._body_reindex_cache:
-            origin_body_names = self._get_body_names(obj_name, sort=False)
-            sorted_body_names = self._get_body_names(obj_name, sort=True)
+            origin_body_names = deepcopy(self.get_body_names(obj_name, sort=False))
+            sorted_body_names = deepcopy(self.get_body_names(obj_name, sort=True))
             self._body_reindex_cache[obj_name] = [origin_body_names.index(bn) for bn in sorted_body_names]
 
         return self._body_reindex_cache[obj_name]

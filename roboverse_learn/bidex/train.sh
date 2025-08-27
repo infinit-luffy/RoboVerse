@@ -67,13 +67,13 @@
 # --use_wandb \
 
 python roboverse_learn/bidex/train.py \
---num_envs 1 \
---task ShadowHandOver \
+--num_envs 128 \
+--task ShadowHandCatchUnderarm \
 --headless \
 --device cuda:0 \
 --obs_type rgb \
 --no_prio \
-# --use_wandb \
+--use_wandb \
 
 
 # python roboverse_learn/bidex/train.py \

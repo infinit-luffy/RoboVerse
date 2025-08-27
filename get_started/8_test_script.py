@@ -67,8 +67,8 @@ sim_params.substeps = 2
 # initialize scenario
 scenario = ScenarioCfg(
     robots=[
-        ShadowHandCfg(name="shadow_hand_right", angular_damping=0.01, fix_base_link=True),
-        ShadowHandCfg(name="shadow_hand_left", angular_damping=0.01, fix_base_link=True),
+        ShadowHandCfg(name="shadow_hand_right", angular_damping=0.01, fix_base_link=False),
+        ShadowHandCfg(name="shadow_hand_left", angular_damping=0.01, fix_base_link=False),
     ],
     try_add_table=False,
     sim=args.sim,

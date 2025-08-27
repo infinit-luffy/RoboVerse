@@ -65,8 +65,8 @@ class HandOverCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False, robot_controller="dof_pos"),
-        FrankaShadowHandLeftCfg(use_vhacd=False, robot_controller="dof_pos"),
+        FrankaShadowHandRightCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
+        FrankaShadowHandLeftCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
     ]
     step_actions_shape = 0
     for robot in robots:
@@ -76,9 +76,9 @@ class HandOverCfg(BaseRLTaskCfg):
         if robot.robot_controller == "ik":
             action_shape += 6 * robot.num_fingertips
         elif robot.robot_controller == "dof_pos":
-            action_shape += robot.num_joints - robot.num_arm_joints
+            action_shape += robot.num_actuated_joints - robot.num_arm_joints
     decimation = 1
-    env_spacing = 2.0
+    env_spacing = 1.5
     sim_params = SimParamCfg(
         dt=1.0 / 60.0,
         contact_offset=0.002,
@@ -168,6 +168,30 @@ class HandOverCfg(BaseRLTaskCfg):
                     "pos": torch.tensor([0.0, 0.316, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
+                        "FFJ1": 0.0,
+                        "FFJ2": 0.0,
+                        "FFJ3": 0.0,
+                        "FFJ4": 0.0,
+                        "LFJ1": 0.0,
+                        "LFJ2": 0.0,
+                        "LFJ3": 0.0,
+                        "LFJ4": 0.0,
+                        "LFJ5": 0.0,
+                        "MFJ1": 0.0,
+                        "MFJ2": 0.0,
+                        "MFJ3": 0.0,
+                        "MFJ4": 0.0,
+                        "RFJ1": 0.0,
+                        "RFJ2": 0.0,
+                        "RFJ3": 0.0,
+                        "RFJ4": 0.0,
+                        "THJ1": 0.0,
+                        "THJ2": 0.0,
+                        "THJ3": 0.0,
+                        "THJ4": 0.0,
+                        "THJ5": 0.0,
+                        "WRJ1": 0.0,
+                        "WRJ2": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
                         "panda_joint3": 0.0,
@@ -175,67 +199,43 @@ class HandOverCfg(BaseRLTaskCfg):
                         "panda_joint5": 0.0,
                         "panda_joint6": 3.1415928,
                         "panda_joint7": -2.356194,
-                        "WRJ2": 0.0,
-                        "WRJ1": 0.0,
-                        "FFJ4": 0.0,
-                        "FFJ3": 0.0,
-                        "FFJ2": 0.0,
-                        "FFJ1": 0.0,
-                        "MFJ4": 0.0,
-                        "MFJ3": 0.0,
-                        "MFJ2": 0.0,
-                        "MFJ1": 0.0,
-                        "RFJ4": 0.0,
-                        "RFJ3": 0.0,
-                        "RFJ2": 0.0,
-                        "RFJ1": 0.0,
-                        "LFJ5": 0.0,
-                        "LFJ4": 0.0,
-                        "LFJ3": 0.0,
-                        "LFJ2": 0.0,
-                        "LFJ1": 0.0,
-                        "THJ5": 0.0,
-                        "THJ4": 0.0,
-                        "THJ3": 0.0,
-                        "THJ2": 0.0,
-                        "THJ1": 0.0,
                     },
                 },
                 "franka_shadow_left": {
                     "pos": torch.tensor([0.0, -1.356, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
+                        "FFJ1": 0.0,
+                        "FFJ2": 0.0,
+                        "FFJ3": 0.0,
+                        "FFJ4": 0.0,
+                        "LFJ1": 0.0,
+                        "LFJ2": 0.0,
+                        "LFJ3": 0.0,
+                        "LFJ4": 0.0,
+                        "LFJ5": 0.0,
+                        "MFJ1": 0.0,
+                        "MFJ2": 0.0,
+                        "MFJ3": 0.0,
+                        "MFJ4": 0.0,
+                        "RFJ1": 0.0,
+                        "RFJ2": 0.0,
+                        "RFJ3": 0.0,
+                        "RFJ4": 0.0,
+                        "THJ1": 0.0,
+                        "THJ2": 0.0,
+                        "THJ3": 0.0,
+                        "THJ4": 0.0,
+                        "THJ5": 0.0,
+                        "WRJ1": 0.0,
+                        "WRJ2": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
                         "panda_joint3": 0.0,
                         "panda_joint4": -2.356194,
                         "panda_joint5": 0.0,
-                        "panda_joint6": 3.1415926,
+                        "panda_joint6": 3.1415928,
                         "panda_joint7": -2.356194,
-                        "WRJ2": 0.0,
-                        "WRJ1": 0.0,
-                        "FFJ4": 0.0,
-                        "FFJ3": 0.0,
-                        "FFJ2": 0.0,
-                        "FFJ1": 0.0,
-                        "MFJ4": 0.0,
-                        "MFJ3": 0.0,
-                        "MFJ2": 0.0,
-                        "MFJ1": 0.0,
-                        "RFJ4": 0.0,
-                        "RFJ3": 0.0,
-                        "RFJ2": 0.0,
-                        "RFJ1": 0.0,
-                        "LFJ5": 0.0,
-                        "LFJ4": 0.0,
-                        "LFJ3": 0.0,
-                        "LFJ2": 0.0,
-                        "LFJ1": 0.0,
-                        "THJ5": 0.0,
-                        "THJ4": 0.0,
-                        "THJ3": 0.0,
-                        "THJ2": 0.0,
-                        "THJ1": 0.0,
                     },
                 },
             },
@@ -264,14 +264,12 @@ class HandOverCfg(BaseRLTaskCfg):
             self.arm_dof_pos = {}
             for robot in self.robots:
                 self.arm_dof_pos[robot.name] = torch.tensor(
-                    list(self.init_states["robots"][robot.name]["dof_pos"].values())[: robot.num_arm_joints],
+                    list(self.init_states["robots"][robot.name]["dof_pos"].values()),
                     dtype=torch.float32,
                     device=self.device,
-                )
+                )[robot.arm_dof_idx]
         for robot in self.robots:
-            step_actions[:, step_actions_start : step_actions_start + robot.num_arm_joints] = self.arm_dof_pos[
-                robot.name
-            ]
+            step_actions[:, step_actions_start + robot.arm_dof_idx] = self.arm_dof_pos[robot.name]
             if robot.robot_controller == "ik":
                 ft_pos = (
                     actions[:, actions_start : actions_start + 3 * robot.num_fingertips].view(
@@ -287,19 +285,15 @@ class HandOverCfg(BaseRLTaskCfg):
                     * torch.pi
                 )
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)
-                step_actions[:, step_actions_start + robot.num_arm_joints : step_actions_start + robot.num_joints] = (
-                    hand_dof_pos
-                )
+                step_actions[:, step_actions_start + robot.hand_dof_idx] = hand_dof_pos
                 actions_start += 6 * robot.num_fingertips
                 step_actions_start += robot.num_joints
             elif robot.robot_controller == "dof_pos":
                 hand_dof_pos = robot.scale_hand_action(
-                    actions[:, actions_start : actions_start + robot.num_joints - robot.num_arm_joints]
+                    actions[:, actions_start : actions_start + robot.num_actuated_joints - robot.num_arm_joints]
                 )
-                step_actions[:, step_actions_start + robot.num_arm_joints : step_actions_start + robot.num_joints] = (
-                    hand_dof_pos
-                )
-                actions_start += robot.num_joints - robot.num_arm_joints
+                step_actions[:, step_actions_start + robot.hand_dof_idx] = hand_dof_pos
+                actions_start += robot.num_actuated_joints - robot.num_arm_joints
                 step_actions_start += robot.num_joints
 
         return step_actions
@@ -486,11 +480,6 @@ class HandOverCfg(BaseRLTaskCfg):
 
             new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
 
-            # robot_dof_default_pos = torch.tensor(
-            #     list(self.init_states[0]["robots"][self.robots[0].name]["dof_pos"].values()),
-            #     dtype=torch.float32,
-            #     device="cpu",
-            # )
             robot_dof_default_pos = self.robot_dof_default_pos_cpu[self.robots[0].name]
             delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
             delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
@@ -537,8 +526,8 @@ class HandOverCfg(BaseRLTaskCfg):
             start_idx = 5
             for robot_id, robot in enumerate(self.robots):
                 robot_dof_default_pos = reset_state.robots[robot.name].joint_pos[env_ids]
-                delta_max = robot.joint_limits_upper[robot.joint_reindex] - robot_dof_default_pos
-                delta_min = robot.joint_limits_lower[robot.joint_reindex] - robot_dof_default_pos
+                delta_max = robot.joint_limits_upper - robot_dof_default_pos
+                delta_min = robot.joint_limits_lower - robot_dof_default_pos
                 rand_delta = (
                     delta_min + (delta_max - delta_min) * rand_floats[:, start_idx : start_idx + robot.num_joints]
                 )

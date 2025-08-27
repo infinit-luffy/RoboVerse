@@ -40,7 +40,7 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
     friction = None  # Use default friction from MJCF
     robot_controller: Literal["ik", "dof_pos", "dof_effort"] = "ik"
     fingertips = ["ffdistal", "mfdistal", "rfdistal", "lfdistal", "thdistal"]
-    fingertips_offset = [0.0, 0.0, 0.02]
+    fingertips_offset = [0.0, 0.005, 0.02]
     num_fingertips: int = len(fingertips)
     observation_shape: int = num_joints * 3 + 7 + num_fingertips * 7
     wrist = "forearm"
@@ -180,6 +180,7 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
         self.hand_acutuated_idx = [
             idx for idx, name in enumerate(self.hand_dof_names) if self.actuators[name].fully_actuated
         ]
+        self.num_actuated_joints = len(self.hand_acutuated_idx) + self.num_arm_joints
         self.joint_limits_lower = [self.joint_limits[name][0] for name in self.dof_names]
         self.joint_limits_upper = [self.joint_limits[name][1] for name in self.dof_names]
         self.load_robot_for_ik()
@@ -204,9 +205,16 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
                 .unsqueeze(0)
                 .repeat(self.ft_states.shape[0], self.num_fingertips, 1)
             )
+        if isinstance(self.hand_dof_idx, list):
+            self.hand_dof_idx = torch.tensor(self.hand_dof_idx, device=self.ft_states.device)
+            self.arm_dof_idx = torch.tensor(self.arm_dof_idx, device=self.ft_states.device)
+            self.hand_acutuated_idx = torch.tensor(self.hand_acutuated_idx, device=self.ft_states.device)
         self.wrist_state = envstates.robots[self.name].body_state[:, self.wrist_index, :]
         self.ft_pos = self.ft_states[:, :, :3]
         self.ft_rot = self.ft_states[:, :, 3:7]
+        self.ft_pos = self.ft_pos + math.quat_apply(
+            self.ft_rot, self.fingertips_offset
+        )  # (num_envs, num_fingertips, 3)
         self.wrist_pos = self.wrist_state[:, :3]
         self.wrist_rot = self.wrist_state[:, 3:7]
         if self.robot_controller == "ik":
@@ -321,14 +329,11 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
             - Fingertip positions and orientations
         """
         obs = torch.zeros((self.ft_states.shape[0], self.observation_shape), device=self.ft_states.device)
-        obs[:, : self.num_joints] = math.scale_transform(
-            self.dof_pos, self.joint_limits_lower[self.joint_reindex], self.joint_limits_upper[self.joint_reindex]
-        )
+        obs[:, : self.num_joints] = math.scale_transform(self.dof_pos, self.joint_limits_lower, self.joint_limits_upper)
         obs[:, self.num_joints : 2 * self.num_joints] = self.dof_vel * self.vel_obs_scale
         obs[:, 2 * self.num_joints : 3 * self.num_joints] = self.dof_force * self.force_torque_obs_scale
         obs[:, 3 * self.num_joints : 3 * self.num_joints + 3] = self.wrist_pos
         obs[:, 3 * self.num_joints + 3 : 3 * self.num_joints + 7] = self.wrist_rot
-        ft_pos = self.ft_pos + math.quat_apply(self.ft_rot, self.fingertips_offset)  # (num_envs, num_fingertips, 3)
-        ft_state = torch.cat([ft_pos, self.ft_rot], dim=-1).view(self.ft_states.shape[0], -1)
+        ft_state = torch.cat([self.ft_pos, self.ft_rot], dim=-1).view(self.ft_states.shape[0], -1)
         obs[:, 3 * self.num_joints + 7 :] = ft_state
         return obs

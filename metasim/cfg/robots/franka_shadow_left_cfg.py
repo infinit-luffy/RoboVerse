@@ -250,6 +250,7 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
     def control_arm_ik(self, dpose, num_envs: int, device: str):
         # Set controller parameters
         # IK params
+        dpose = dpose.unsqueeze(-1)
         damping = 0.05
         jacobian_tensor = self.jacobian[:, self.jacobian_body_reindex, :, :][
             ..., self.jacobian_joint_reindex
@@ -337,3 +338,17 @@ class FrankaShadowHandLeftCfg(BaseRobotCfg):
         ft_state = torch.cat([self.ft_pos, self.ft_rot], dim=-1).view(self.ft_states.shape[0], -1)
         obs[:, 3 * self.num_joints + 7 :] = ft_state
         return obs
+
+    def reward(self, target_pos):
+        """Reward based on the distance between the fingertips and the target position.
+
+        Args:
+            target_pos: (num_envs, 3) target position
+        Returns:
+            reward: (num_envs,) reward
+        """
+        dists = self.ft_pos - target_pos.unsqueeze(1)  # (num_envs, num_fingertips, 3)
+        dists = torch.norm(dists, p=2, dim=-1)  # (num_envs, num_fingertips)
+        dists = torch.sum(dists, dim=-1)  # (num_envs,)
+        reward = 1.2 - dists  # (num_envs,)
+        return reward

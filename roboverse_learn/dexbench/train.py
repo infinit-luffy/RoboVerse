@@ -79,19 +79,19 @@ class Args:
 def get_config_path(args):
     if args.task in [
         "HandOver",
-        "HandCatchUnderarm",
+        "CatchUnderarm",
         "HandOver2Underarm",
-        "HandPushBlock",
-        "HandCatchAbreast",
-        "HandSwingCup",
-        "HandCloseInward",
-        "HandCloseOutward",
-        "HandScissor",
-        "HandPen",
-        "HandTwoCatchUnderarm",
-        "HandBottle",
-        "HandGraspPlace",
-        "HandKettle",
+        "PushBlock",
+        "CatchAbreast",
+        "SwingCup",
+        "CloseInward",
+        "CloseOutward",
+        "Scissor",
+        "Pen",
+        "TwoCatchUnderarm",
+        "Bottle",
+        "GraspPlace",
+        "Kettle",
     ]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
@@ -169,6 +169,7 @@ def train(args):
     scenario = ScenarioCfg(
         task=task,
         robots=task.robots,
+        objects=task.objects,
         sensors=sensors,
         cameras=cameras,
         sim=args.sim,
@@ -176,6 +177,8 @@ def train(args):
         num_envs=args.num_envs,
         sim_params=task.sim_params,
     )
+    scenario.task.robots = scenario.robots
+    scenario.task.objects = scenario.objects
     env = BiDexEnvWrapper(
         scenario=scenario,
         seed=args.seed,

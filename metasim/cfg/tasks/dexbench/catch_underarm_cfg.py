@@ -30,14 +30,14 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
 @configclass
-class HandOverCfg(BaseRLTaskCfg):
-    """class for bidex hand over tasks."""
+class CatchUnderarmCfg(BaseRLTaskCfg):
+    """class for bidex catch underarm tasks."""
 
     source_benchmark = BenchmarkType.DEXBENCH
     task_type = TaskType.TABLETOP_MANIPULATION
     is_testing = False
     episode_length = 75
-    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandOver/v2/initial_state_v2.json"
+    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandCatchUnderarm/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
     obs_type = "state"
@@ -74,9 +74,9 @@ class HandOverCfg(BaseRLTaskCfg):
     action_shape = 0
     for robot in robots:
         if robot.robot_controller == "ik":
-            action_shape += 6 * robot.num_fingertips
+            action_shape += 6 + 6 * robot.num_fingertips
         elif robot.robot_controller == "dof_pos":
-            action_shape += robot.num_actuated_joints - robot.num_arm_joints
+            action_shape += 6 + robot.num_actuated_joints - robot.num_arm_joints
     decimation = 1
     env_spacing = 1.5
     sim_params = SimParamCfg(
@@ -106,8 +106,8 @@ class HandOverCfg(BaseRLTaskCfg):
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
-    arm_translation_scale: float = 0.02
-    arm_orientation_scale: float = 0.25 * torch.pi
+    arm_translation_scale: float = 0.01
+    arm_orientation_scale: float = 0.1 * torch.pi
     hand_translation_scale: float = 0.02
     hand_orientation_scale: float = 0.25 * torch.pi
     dist_reward_scale = 50.0
@@ -152,7 +152,7 @@ class HandOverCfg(BaseRLTaskCfg):
             else:
                 self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.init_goal_pos = torch.tensor(
-            [0.0, -0.64, 0.85], dtype=torch.float32, device=self.device
+            [0.0, -0.79, 0.85], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
         self.init_goal_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
@@ -204,7 +204,7 @@ class HandOverCfg(BaseRLTaskCfg):
                     },
                 },
                 "franka_shadow_left": {
-                    "pos": torch.tensor([0.0, -1.356, 0.0]),
+                    "pos": torch.tensor([0.0, -1.506, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "FFJ1": 0.0,
@@ -262,29 +262,19 @@ class HandOverCfg(BaseRLTaskCfg):
         step_actions = torch.zeros((self.num_envs, self.step_actions_shape), device=self.device)
         actions_start = 0
         step_actions_start = 0
-        if not hasattr(self, "arm_dof_pos"):
-            self.arm_dof_pos = {}
-            for robot in self.robots:
-                self.arm_dof_pos[robot.name] = torch.tensor(
-                    list(self.init_states["robots"][robot.name]["dof_pos"].values()),
-                    dtype=torch.float32,
-                    device=self.device,
-                )[robot.arm_dof_idx]
         for robot in self.robots:
-            step_actions[:, step_actions_start + robot.arm_dof_idx] = self.arm_dof_pos[robot.name]
+            dpose = actions[:, actions_start : actions_start + 6]
+            dpose[:, :3] = dpose[:, :3] * self.arm_translation_scale
+            dpose[:, 3:] = dpose[:, 3:] * self.arm_orientation_scale
+            arm_dof_targets = robot.control_arm_ik(dpose, dpose.shape[0], dpose.device)
+            step_actions[:, step_actions_start + robot.arm_dof_idx] = arm_dof_targets
+            actions_start += 6
             if robot.robot_controller == "ik":
-                ft_pos = (
-                    actions[:, actions_start : actions_start + 3 * robot.num_fingertips].view(
-                        self.num_envs, robot.num_fingertips, 3
-                    )
-                    * self.hand_translation_scale
+                ft_action = actions[:, actions_start : actions_start + 6 * robot.num_fingertips].view(
+                    self.num_envs, robot.num_fingertips, 6
                 )
-                ft_rot = (
-                    actions[
-                        :, actions_start + 3 * robot.num_fingertips : actions_start + 6 * robot.num_fingertips
-                    ].view(self.num_envs, robot.num_fingertips, 3)
-                    * self.hand_orientation_scale
-                )
+                ft_pos = ft_action[:, :, :3] * self.hand_translation_scale
+                ft_rot = ft_action[:, :, 3:] * self.hand_orientation_scale
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)
                 step_actions[:, step_actions_start + robot.hand_dof_idx] = hand_dof_pos
                 actions_start += 6 * robot.num_fingertips

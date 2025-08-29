@@ -12,8 +12,8 @@ from gymnasium.spaces import Space
 from get_started.utils import ObsSaver
 
 # from torch.utils.tensorboard import SummaryWriter
-from roboverse_learn.bidex.algorithms.ppo.module import ActorCritic, ActorCritic_RGB
-from roboverse_learn.bidex.algorithms.ppo.storage import RolloutStorage
+from roboverse_learn.dexbench.algorithms.ppo.module import ActorCritic, ActorCritic_RGB
+from roboverse_learn.dexbench.algorithms.ppo.storage import RolloutStorage
 
 
 class PPO:
@@ -57,6 +57,7 @@ class PPO:
         # PPO components
         self.vec_env = vec_env
         if self.obs_type == "state":
+            print("Using state observation")
             self.actor_critic = ActorCritic(
                 self.observation_space.shape,
                 self.action_space.shape,
@@ -64,6 +65,7 @@ class PPO:
                 self.model_cfg,
             )
         elif self.obs_type == "rgb":
+            print("Using RGB observation")
             self.actor_critic = ActorCritic_RGB(
                 self.observation_space.shape,
                 self.action_space.shape,

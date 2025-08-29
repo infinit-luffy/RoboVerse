@@ -50,8 +50,9 @@ class PushBlockCfg(BaseRLTaskCfg):
             scale=(1, 1, 1),
             physics=PhysicStateType.RIGIDBODY,
             urdf_path="roboverse_data/assets/bidex/objects/urdf/cube_multicolor.urdf",
-            default_density=500.0,
+            default_density=100.0,
             use_vhacd=True,
+            friction=0.25,
         ),
         "table": PrimitiveCubeCfg(
             name="table",
@@ -59,15 +60,15 @@ class PushBlockCfg(BaseRLTaskCfg):
             disable_gravity=True,
             fix_base_link=True,
             flip_visual_attachments=True,
-            friction=0.5,
+            friction=0.2,
             color=[0.8, 0.8, 0.8],
             physics=PhysicStateType.RIGIDBODY,
         ),
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False),
-        FrankaShadowHandLeftCfg(use_vhacd=False),
+        FrankaShadowHandRightCfg(use_vhacd=False, friction=0.5),
+        FrankaShadowHandLeftCfg(use_vhacd=False, friction=0.5),
     ]
     step_actions_shape = 0
     for robot in robots:
@@ -92,10 +93,10 @@ class PushBlockCfg(BaseRLTaskCfg):
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
     )
-    arm_transition_scale = 0.02
-    arm_orientation_scale = 0.25 * torch.pi
-    hand_transition_scale = 0.02
-    hand_orientation_scale = 0.25 * torch.pi
+    arm_translation_scale = 0.04
+    arm_orientation_scale = 0.25
+    hand_translation_scale = 0.02
+    hand_orientation_scale = 0.25
     right_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     left_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     sensors = []
@@ -152,23 +153,23 @@ class PushBlockCfg(BaseRLTaskCfg):
             else:
                 self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.init_right_goal_pos = torch.tensor(
-            [0.15, 0.2, 0.625], dtype=torch.float, device=self.device
+            [0.2, 0.2, 0.625], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)
         self.init_left_goal_pos = torch.tensor(
-            [0.15, -0.2, 0.625], dtype=torch.float, device=self.device
+            [0.2, -0.2, 0.625], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)
         self.init_states = {
             "objects": {
                 "table": {
-                    "pos": torch.tensor([0.0, 0.0, 0.3]),
+                    "pos": torch.tensor([0.2, 0.0, 0.3]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
                 f"{self.current_object_type}_1": {
-                    "pos": torch.tensor([-0.05, 0.2, 0.625]),
+                    "pos": torch.tensor([0.0, 0.2, 0.625]),
                     "rot": torch.tensor([0.5, 0.5, 0.5, -0.5]),
                 },
                 f"{self.current_object_type}_2": {
-                    "pos": torch.tensor([-0.05, -0.2, 0.625]),
+                    "pos": torch.tensor([0.0, -0.2, 0.625]),
                     "rot": torch.tensor([0.5, 0.5, 0.5, -0.5]),
                 },
             },
@@ -270,24 +271,17 @@ class PushBlockCfg(BaseRLTaskCfg):
         step_actions_start = 0
         for robot in self.robots:
             dpose = actions[:, actions_start : actions_start + 6]
-            dpose[:, :3] = dpose[:, :3] * self.arm_transition_scale
+            dpose[:, :3] = dpose[:, :3] * self.arm_translation_scale
             dpose[:, 3:] = dpose[:, 3:] * self.arm_orientation_scale
             arm_dof_targets = robot.control_arm_ik(dpose, dpose.shape[0], dpose.device)
             step_actions[:, step_actions_start + robot.arm_dof_idx] = arm_dof_targets
             actions_start += 6
             if robot.robot_controller == "ik":
-                ft_pos = (
-                    actions[:, actions_start : actions_start + 3 * robot.num_fingertips].view(
-                        self.num_envs, robot.num_fingertips, 3
-                    )
-                    * self.hand_transition_scale
+                ft_action = actions[:, actions_start : actions_start + 6 * robot.num_fingertips].view(
+                    self.num_envs, robot.num_fingertips, 6
                 )
-                ft_rot = (
-                    actions[
-                        :, actions_start + 3 * robot.num_fingertips : actions_start + 6 * robot.num_fingertips
-                    ].view(self.num_envs, robot.num_fingertips, 3)
-                    * self.hand_orientation_scale
-                )
+                ft_pos = ft_action[:, :, :3] * self.hand_translation_scale
+                ft_rot = ft_action[:, :, 3:] * self.hand_orientation_scale
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)
                 step_actions[:, step_actions_start + robot.hand_dof_idx] = hand_dof_pos
                 actions_start += 6 * robot.num_fingertips
@@ -623,8 +617,9 @@ def compute_hand_reward(
         success_buf,
     )
 
-    reward = torch.where(left_success == 1, reward + reach_goal_bonus // 2, reward)
-    reward = torch.where(right_success == 1, reward + reach_goal_bonus // 2, reward)
+    # reward = torch.where(left_success == 1, reward + reach_goal_bonus // 2, reward)
+    # reward = torch.where(right_success == 1, reward + reach_goal_bonus // 2, reward)
+    reward = torch.where(success, reward + reach_goal_bonus, reward)
     # Check env termination conditions, including maximum success number
     resets = torch.where(right_hand_reward <= 0.0, torch.ones_like(reset_buf), reset_buf)
     resets = torch.where(left_hand_reward <= 0.0, torch.ones_like(resets), resets)

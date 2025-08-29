@@ -6,6 +6,8 @@ from .allegrohand_cfg import AllegroHandCfg
 from .aloha import AlohaCfg
 from .ant_cfg import AntCfg
 from .anymal_cfg import AnymalCfg
+from .base_dex_cfg import BaseDexCfg
+from .base_robot_cfg import BaseRobotCfg
 from .cartpole_cfg import CartpoleCfg
 from .fetch_cfg import FetchCfg
 from .franka_cfg import FrankaCfg

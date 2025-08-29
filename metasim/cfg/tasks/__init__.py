@@ -34,6 +34,7 @@ def __get_quick_ref():
     from .bidex.shadow_hand_two_catch_underarm_cfg import ShadowHandTwoCatchUnderarmCfg
     from .calvin.calvin import MoveSliderLeftACfg
     from .debug.reach_cfg import ReachOriginCfg
+    from .dexbench.catch_underarm_cfg import CatchUnderarmCfg
     from .dexbench.hand_over_cfg import HandOverCfg
     from .dexbench.push_block_cfg import PushBlockCfg
     from .dmcontrol.walker_walk_cfg import WalkerWalkCfg

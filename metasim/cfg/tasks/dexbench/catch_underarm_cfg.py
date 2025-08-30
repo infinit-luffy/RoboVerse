@@ -106,8 +106,8 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
-    arm_translation_scale: float = 0.01
-    arm_orientation_scale: float = 0.1 * torch.pi
+    arm_translation_scale: float = 0.005
+    arm_orientation_scale: float = 0.05
     hand_translation_scale: float = 0.02
     hand_orientation_scale: float = 0.25 * torch.pi
     dist_reward_scale = 50.0
@@ -118,7 +118,6 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
     fall_penalty = 0.0
     reset_position_noise = 0.01
     reset_dof_pos_noise = 0.2
-    w_throw_bonus = True
 
     def set_objects(self) -> None:
         """Set the objects for the shadow hand over task."""
@@ -251,7 +250,6 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                 device=self.device,
             )
             self.robot_dof_default_pos_cpu[robot.name] = self.robot_dof_default_pos[robot.name].cpu()
-        self.env_throw_bonus = torch.tensor([True] * self.num_envs, dtype=torch.bool, device=self.device)
 
     def scale_action_fn(self, actions: torch.Tensor) -> torch.Tensor:
         """Scale actions to the range of the action space.
@@ -407,7 +405,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
             reset_goal_buf (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
             success_buf (torch.Tensor): The success buffer of all environments at this time, shape (num_envs,)
         """
-        (reward, reset_buf, reset_goal_buf, success_buf, self.env_throw_bonus) = compute_task_reward(
+        (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
             reset_goal_buf=reset_goal_buf,
             episode_length_buf=episode_length_buf,
@@ -424,7 +422,6 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
             reach_goal_bonus=self.reach_goal_bonus,
             throw_bonus=self.throw_bonus,
             fall_penalty=self.fall_penalty,
-            env_throw_bonus=self.env_throw_bonus,
             ignore_z_rot=False,  # Todo : set to True if the object is a pen or similar object that does not require z-rotation alignment
         )
         return reward, reset_buf, reset_goal_buf, success_buf
@@ -459,7 +456,6 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
         if self.reset_dof_pos_noise == 0.0 and self.reset_position_noise == 0.0:
             # If no noise is applied, return the initial states directly
             return deepcopy(init_states)
-        self.env_throw_bonus[env_ids] = True
         if isinstance(init_states, list):
             reset_state = deepcopy(init_states)
             num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
@@ -560,7 +556,6 @@ def compute_task_reward(
     reach_goal_bonus: float,
     throw_bonus: float,
     fall_penalty: float,
-    env_throw_bonus,
     ignore_z_rot: bool,
 ):
     """Compute the reward of all environment.
@@ -597,8 +592,6 @@ def compute_task_reward(
         throw_bonus (float): The reward given when the object is thrown
 
         fall_penalty (float): The reward given when the object is fell
-
-        env_throw_bonus (bool tensor): Whether to use the throw bonus, which is used to determine whether the object is thrown
 
         ignore_z_rot (bool): Is it necessary to ignore the rot of the z-axis, which is usually used
             for some specific objects (e.g. pen)
@@ -638,13 +631,11 @@ def compute_task_reward(
     )
 
     # Reward for throwing the object
-    thrown = (diff_xy[:, 1] >= -0.1) & (diff_xy[:, 1] <= -0.06) & (object_pos[:, 2] >= 0.7) & env_throw_bonus
+    thrown = (diff_xy[:, 1] >= -0.25) & (diff_xy[:, 1] <= -0.1) & (object_pos[:, 2] >= 0.75)
     reward = torch.where(thrown, reward + throw_bonus, reward)
-    false_tensor = torch.tensor([False] * reward.shape[0], dtype=torch.bool, device=object_pos.device)
-    env_throw_bonus = torch.where(thrown, false_tensor, env_throw_bonus)
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
+    reward = torch.where(success_buf >= 1, reward + reach_goal_bonus, reward)
 
     # Fall penalty: distance to the goal is larger than a threashold
     reward = torch.where(object_pos[:, 2] <= 0.5, reward - fall_penalty, reward)
@@ -656,4 +647,4 @@ def compute_task_reward(
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
     resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
-    return reward, resets, goal_resets, success_buf, env_throw_bonus
+    return reward, resets, goal_resets, success_buf

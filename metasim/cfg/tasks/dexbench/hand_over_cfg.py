@@ -106,8 +106,6 @@ class HandOverCfg(BaseRLTaskCfg):
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
-    arm_translation_scale: float = 0.02
-    arm_orientation_scale: float = 0.25 * torch.pi
     hand_translation_scale: float = 0.02
     hand_orientation_scale: float = 0.25 * torch.pi
     dist_reward_scale = 50.0

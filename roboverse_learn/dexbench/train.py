@@ -97,27 +97,27 @@ def get_config_path(args):
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/config.yaml",
         )
-    elif args.task in ["HandStackBlock"]:
+    elif args.task in ["StackBlock"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/stack_block_config.yaml",
         )
-    elif args.task in ["HandOpenInward", "HandOpenOutward"]:
+    elif args.task in ["OpenInward", "OpenOutward"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/open_config.yaml",
         )
-    elif args.task in ["HandLiftUnderarm"]:
+    elif args.task in ["LiftUnderarm"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/lift_config.yaml",
         )
-    elif args.task in ["HandReOrientation"]:
+    elif args.task in ["ReOrientation"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/re_orientation_config.yaml",
         )
-    elif args.task in ["HandTurnButton"]:
+    elif args.task in ["TurnButton"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/smooth_config.yaml",

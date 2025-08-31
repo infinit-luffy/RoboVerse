@@ -38,6 +38,9 @@ def __get_quick_ref():
     from .dexbench.catch_underarm_cfg import CatchUnderarmCfg
     from .dexbench.hand_over_cfg import HandOverCfg
     from .dexbench.push_block_cfg import PushBlockCfg
+    from .dexbench.re_orientation_cfg import ReOrientationCfg
+    from .dexbench.turn_button_cfg import TurnButtonCfg
+    from .dexbench.two_catch_underarm_cfg import TwoCatchUnderarmCfg
     from .dmcontrol.walker_walk_cfg import WalkerWalkCfg
     from .fetch import FetchCloseBoxCfg
     from .gapartnet import GapartnetOpenDrawerCfg

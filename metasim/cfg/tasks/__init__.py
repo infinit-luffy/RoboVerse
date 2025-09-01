@@ -36,6 +36,10 @@ def __get_quick_ref():
     from .debug.reach_cfg import ReachOriginCfg
     from .dexbench.catch_abreast_cfg import CatchAbreastCfg
     from .dexbench.catch_underarm_cfg import CatchUnderarmCfg
+    from .dexbench.door_close_inward_cfg import DoorCloseInwardCfg
+    from .dexbench.door_close_outward_cfg import DoorCloseOutwardCfg
+    from .dexbench.door_open_inward_cfg import DoorOpenInwardCfg
+    from .dexbench.door_open_outward_cfg import DoorOpenOutwardCfg
     from .dexbench.hand_over_cfg import HandOverCfg
     from .dexbench.over2underarm_cfg import Over2UnderarmCfg
     from .dexbench.push_block_cfg import PushBlockCfg

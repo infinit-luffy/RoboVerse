@@ -84,8 +84,8 @@ def get_config_path(args):
         "PushBlock",
         "CatchAbreast",
         "SwingCup",
-        "CloseInward",
-        "CloseOutward",
+        "DoorCloseInward",
+        "DoorCloseOutward",
         "Scissor",
         "Pen",
         "TwoCatchUnderarm",
@@ -102,7 +102,7 @@ def get_config_path(args):
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/stack_block_config.yaml",
         )
-    elif args.task in ["OpenInward", "OpenOutward"]:
+    elif args.task in ["DoorOpenInward", "DoorOpenOutward"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
             f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/open_config.yaml",

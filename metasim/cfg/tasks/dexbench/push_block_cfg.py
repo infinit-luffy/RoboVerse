@@ -31,7 +31,7 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 @configclass
 class PushBlockCfg(BaseRLTaskCfg):
-    """class for bidex shadow hand push block tasks."""
+    """class for push block tasks."""
 
     source_benchmark = BenchmarkType.DEXBENCH
     task_type = TaskType.TABLETOP_MANIPULATION
@@ -421,7 +421,7 @@ class PushBlockCfg(BaseRLTaskCfg):
         right_hand_reward = self.robots[0].reward(right_object_pos)
         left_hand_reward = self.robots[1].reward(left_object_pos)
         # right hand fingertip positions and rotations
-        (reward, reset_buf, reset_goal_buf, success_buf) = compute_hand_reward(
+        (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
             reset_goal_buf=reset_goal_buf,
             episode_length_buf=episode_length_buf,
@@ -539,7 +539,7 @@ class PushBlockCfg(BaseRLTaskCfg):
 
 
 @torch.jit.script
-def compute_hand_reward(
+def compute_task_reward(
     reset_buf,
     reset_goal_buf,
     episode_length_buf,

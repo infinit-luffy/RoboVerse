@@ -80,7 +80,7 @@ def get_config_path(args):
     if args.task in [
         "HandOver",
         "CatchUnderarm",
-        "HandOver2Underarm",
+        "Over2Underarm",
         "PushBlock",
         "CatchAbreast",
         "SwingCup",

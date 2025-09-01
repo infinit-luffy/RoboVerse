@@ -37,6 +37,7 @@ def __get_quick_ref():
     from .dexbench.catch_abreast_cfg import CatchAbreastCfg
     from .dexbench.catch_underarm_cfg import CatchUnderarmCfg
     from .dexbench.hand_over_cfg import HandOverCfg
+    from .dexbench.over2underarm_cfg import Over2UnderarmCfg
     from .dexbench.push_block_cfg import PushBlockCfg
     from .dexbench.re_orientation_cfg import ReOrientationCfg
     from .dexbench.stack_block_cfg import StackBlockCfg

@@ -56,8 +56,6 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
             mesh_normal_mode="vertex",
             friction=0.1,
             use_vhacd=True,
-            stiffness=100.0,
-            damping=100.0,
         ),
     }
     objects = []
@@ -89,9 +87,9 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
         friction_offset_threshold=0.04,
     )
     arm_translation_scale = 0.06
-    arm_orientation_scale = 0.25
-    hand_translation_scale = 0.02
-    hand_orientation_scale = 0.25
+    arm_orientation_scale = 0.1
+    hand_translation_scale = 0.04
+    hand_orientation_scale = 0.5
     right_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     left_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     sensors = []
@@ -158,8 +156,8 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
             },
             "robots": {
                 "franka_shadow_right": {
-                    "pos": torch.tensor([0.88, 0.2, 0.0]),
-                    "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
+                    "pos": torch.tensor([0.68, 0.65, 0.0]),
+                    "rot": torch.tensor([-0.3827, 0.0, 0.0, 0.9239]),
                     "dof_pos": {
                         "FFJ1": 0.0,
                         "FFJ2": 0.0,
@@ -195,8 +193,8 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
                     },
                 },
                 "franka_shadow_left": {
-                    "pos": torch.tensor([0.88, -0.2, 0.0]),
-                    "rot": torch.tensor([0, 0, 0, 1]),
+                    "pos": torch.tensor([0.68, -0.65, 0.0]),
+                    "rot": torch.tensor([0.3827, 0.0, 0.0, 0.9239]),
                     "dof_pos": {
                         "FFJ1": 0.0,
                         "FFJ2": 0.0,
@@ -420,6 +418,8 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
         door_left_handle_pos = door_left_handle_pos + math.quat_apply(door_left_handle_rot, self.x_unit_tensor * -0.39)
         door_left_handle_pos = door_left_handle_pos + math.quat_apply(door_left_handle_rot, self.z_unit_tensor * 0.04)
 
+        door_dof_pos = envstates.objects[self.current_object_type].joint_pos
+
         right_hand_reward = self.robots[0].reward(door_right_handle_pos)
         left_hand_reward = self.robots[1].reward(door_left_handle_pos)
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
@@ -430,6 +430,7 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
             max_episode_length=self.episode_length,
             door_right_handle_pos=door_right_handle_pos,
             door_left_handle_pos=door_left_handle_pos,
+            door_dof_pos=door_dof_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
             action_penalty_scale=self.action_penalty_scale,
@@ -543,6 +544,7 @@ def compute_task_reward(
     max_episode_length: float,
     door_right_handle_pos,
     door_left_handle_pos,
+    door_dof_pos,
     right_hand_reward,
     left_hand_reward,
     action_penalty_scale: float,
@@ -566,6 +568,8 @@ def compute_task_reward(
 
         door_left_handle_pos (tensor): The position of the left handle of the cup
 
+        door_dof_pos (tensor): The position of the door dof, shape (num_envs,)
+
         right_hand_reward (tensor): The reward from the right hand, shape (num_envs,)
 
         left_hand_reward (tensor): The reward from the left hand, shape (num_envs,)
@@ -578,13 +582,13 @@ def compute_task_reward(
 
     """
     action_penalty = torch.sum(actions**2, dim=-1)
-
+    dof_rew = torch.sum(door_dof_pos, dim=-1) * 5  # encourage opening the door
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
         right_hand_reward > 0.7,
         torch.where(
             left_hand_reward > 0.7,
-            torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) * 2,
+            torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) * 10 + dof_rew,
             up_rew,
         ),
         up_rew,

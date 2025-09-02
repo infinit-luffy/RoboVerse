@@ -610,7 +610,7 @@ def compute_task_reward(
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
+    # reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(right_hand_reward <= -0.3, torch.ones_like(reset_buf), reset_buf)
@@ -618,7 +618,7 @@ def compute_task_reward(
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     goal_resets = torch.zeros_like(resets)
 

@@ -47,6 +47,7 @@ class ScissorCfg(BaseRLTaskCfg):
         "scissor": ArticulationObjCfg(
             name="scissor",
             urdf_path="roboverse_data/assets/bidex/objects/urdf/scissor_mobility.urdf",
+            collapse_fixed_joints=True,
             default_density=500.0,
             friction=1.0,
             fix_base_link=False,

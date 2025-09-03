@@ -45,6 +45,7 @@ def __get_quick_ref():
     from .dexbench.over2underarm_cfg import Over2UnderarmCfg
     from .dexbench.push_block_cfg import PushBlockCfg
     from .dexbench.re_orientation_cfg import ReOrientationCfg
+    from .dexbench.scissor_cfg import ScissorCfg
     from .dexbench.stack_block_cfg import StackBlockCfg
     from .dexbench.swing_cup_cfg import SwingCupCfg
     from .dexbench.turn_button_cfg import TurnButtonCfg

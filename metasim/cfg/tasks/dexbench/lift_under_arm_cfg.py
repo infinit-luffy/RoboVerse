@@ -10,12 +10,12 @@ import torch
 from loguru import logger as log
 from rich.logging import RichHandler
 
-from metasim.cfg.objects import ArticulationObjCfg
+from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg
 from metasim.cfg.robots import FrankaShadowHandLeftCfg, FrankaShadowHandRightCfg
 from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
-from metasim.constants import BenchmarkType, TaskType
+from metasim.constants import BenchmarkType, PhysicStateType, TaskType
 from metasim.types import EnvState
 from metasim.utils import configclass, math
 from metasim.utils.bidex_util import randomize_rotation
@@ -30,34 +30,37 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
 @configclass
-class DoorCloseOutwardCfg(BaseRLTaskCfg):
-    """class for bidex door close outward tasks."""
+class LiftUnderarmCfg(BaseRLTaskCfg):
+    """class for lift underarm tasks."""
 
     source_benchmark = BenchmarkType.DEXBENCH
     task_type = TaskType.TABLETOP_MANIPULATION
     is_testing = False
-    episode_length = 250
-    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandCloseOutward/v2/initial_state_v2.json"
+    episode_length = 500
+    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandLiftUnderarm/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
-    obs_type = "state"
+    obs_type = "state"  # "state" or "rgb"
     use_prio = True
-    current_object_type = "door"
+    current_object_type = "pot"
     objects_cfg = {
-        "door": ArticulationObjCfg(
-            name="door",
-            urdf_path="roboverse_data/assets/bidex/objects/urdf/door_mobility.urdf",
+        "pot": ArticulationObjCfg(
+            name="pot",
+            urdf_path="roboverse_data/assets/bidex/objects/urdf/pot_mobility.urdf",
+            collapse_fixed_joints=True,
+            default_density=1000.0,
+            friction=3,
+            fix_base_link=False,
+        ),
+        "table": PrimitiveCubeCfg(
+            name="table",
+            size=(0.3, 0.3, 0.75),
             disable_gravity=True,
             fix_base_link=True,
-            default_density=500.0,
-            override_com=True,
-            override_inertia=True,
-            use_mesh_materials=True,
-            mesh_normal_mode="vertex",
-            friction=0.1,
-            use_vhacd=True,
-            stiffness=100.0,
-            damping=100.0,
+            flip_visual_attachments=True,
+            friction=3,
+            physics=PhysicStateType.RIGIDBODY,
+            color=[0.8, 0.8, 0.8],
         ),
     }
     objects = []
@@ -88,12 +91,7 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
     )
-    arm_translation_scale = 0.06
-    arm_orientation_scale = 0.1
-    hand_translation_scale = 0.04
-    hand_orientation_scale = 0.5
-    right_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
-    left_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
+    goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     sensors = []
     for name in robots[0].fingertips:
         r_name = "right" + name
@@ -101,33 +99,37 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
     for name in robots[1].fingertips:
         l_name = "left" + name
         sensors.append(ContactForceSensorCfg(base_link=("franka_shadow_left", name), source_link=None, name=l_name))
-    r_handle_name = "link_1"  # Name of the right hand handle in the body state
-    l_handle_name = "link_2"  # Name of the left hand handle in the body state
-    r_handle_idx = None  # Index of the right hand handle in the body state
-    l_handle_idx = None  # Index of the left hand handle in the body state
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
+    arm_translation_scale = 0.06
+    arm_orientation_scale = 0.25
+    hand_translation_scale = 0.02
+    hand_orientation_scale = 0.25
+    dist_reward_scale = 50.0
     action_penalty_scale = 0
     reach_goal_bonus = 250.0
+    fall_penalty = 0.0
     reset_position_noise = 0.0
     reset_dof_pos_noise = 0.0
-    leave_penalty = 5.0
 
     def set_objects(self) -> None:
-        """Set the objects for the door close inward task."""
+        """Set the objects for the lift underarm task."""
+        self.objects.append(self.objects_cfg["table"])
         self.objects.append(self.objects_cfg[self.current_object_type])
 
     def set_init_states(self) -> None:
-        """Set the initial states for the door close inward task."""
+        """Set the initial states for the shadow hand over task."""
         self.proceptual_shape = 0
         for robot in self.robots:
             self.proceptual_shape += robot.observation_shape
             self.proceptual_shape += robot.num_fingertips * 6  # fingertip forces
         self.proceptual_shape += self.action_shape
-        self.proprio_shape = self.proceptual_shape + 6
+        self.proprio_shape = (
+            self.proceptual_shape + 22
+        )  # object position(3), rotation(4), linear velocity(3), angular velocity(3), goal position(3), goal rotation(4)
         self.obs_shape = self.proprio_shape
         if self.obs_type == "state":
             self.cameras = []
@@ -138,28 +140,38 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
             self.img_w = 256
             self.cameras = [
                 PinholeCameraCfg(
-                    name="camera_0", width=self.img_w, height=self.img_h, pos=(2, -0.2, 1.05), look_at=(0.0, -0.0, 0.5)
+                    name="camera_0",
+                    width=self.img_w,
+                    height=self.img_h,
+                    pos=(-1.35, -1.0, 1.05),
+                    look_at=(0.0, -0.75, 0.5),
                 )
-            ]
+            ]  # TODO
             if self.use_prio:
                 self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
             else:
                 self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
+        self.init_goal_pos = torch.tensor(
+            [0, -0.6, 1.1], dtype=torch.float32, device=self.device
+        )  # Initial goal position, shape (3,)
         self.init_states = {
             "objects": {
+                "table": {
+                    "pos": torch.tensor([0, -0.6, 0.325]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                },
                 self.current_object_type: {
-                    "pos": torch.tensor([0, 0.0, 0.75]),
+                    "pos": torch.tensor([0, -0.6, 0.77]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     "dof_pos": {
-                        "joint_1": 1.57,  # Initial position of the switch
-                        "joint_2": 1.57,  # Initial position of the switch
+                        "joint_0": 0.0,  # Initial position of the switch
                     },
                 },
             },
             "robots": {
                 "franka_shadow_right": {
-                    "pos": torch.tensor([0.68, 0.3, 0.0]),
-                    "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
+                    "pos": torch.tensor([0.0, 0.382, 0.0]),
+                    "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
                         "FFJ1": 0.0,
                         "FFJ2": 0.0,
@@ -191,12 +203,12 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
                         "panda_joint4": -2.356194,
                         "panda_joint5": 0.0,
                         "panda_joint6": 3.1415928,
-                        "panda_joint7": 2.35619445,
+                        "panda_joint7": -2.356194,
                     },
                 },
                 "franka_shadow_left": {
-                    "pos": torch.tensor([0.68, -0.3, 0.0]),
-                    "rot": torch.tensor([0, 0, 0, 1]),
+                    "pos": torch.tensor([0.0, -1.586, 0.0]),
+                    "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "FFJ1": 0.0,
                         "FFJ2": 0.0,
@@ -228,7 +240,7 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
                         "panda_joint4": -2.356194,
                         "panda_joint5": 0.0,
                         "panda_joint6": 3.1415928,
-                        "panda_joint7": -0.785398,
+                        "panda_joint7": -2.356194,
                     },
                 },
             },
@@ -294,18 +306,21 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
             Compute the observations of all environment. The observation is composed of three parts:
             the state values of the left and right hands, and the information of objects and target.
             The state values of the left and right hands were the same for each task, including hand
-            joint and finger positions, velocity, and force information. The detail 422-dimensional
-            observational space as shown in below:
+            joint and finger positions, velocity, and force information. The detailobservational space as shown in below:
 
-            Index       Description
+            Description
             right robot proceptual observation
             right robot fingertip forces
             right robot actions
             left  robot proceptual observation
             left  robot fingertip forces
             left  robot actions
-            right handle position
-            left handle position
+            object pose
+            object linear velocity
+            object angle velocity
+            goal pose
+            pot right handle pos
+            pot left handle pos
             visual observation, currently RGB image (3 x 256 x 256)
         """
         if device is None:
@@ -313,6 +328,12 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
         num_envs = envstates.robots[self.robots[0].name].root_state.shape[0]
         if self.num_envs is None:
             self.num_envs = num_envs
+        if self.goal_pos is None:
+            self.goal_pos = (
+                torch.tensor(self.init_goal_pos, dtype=torch.float32, device=self.device)
+                .view(1, -1)
+                .repeat(num_envs, 1)
+            )
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
         t = 0
         obs[:, : self.robots[0].observation_shape] = self.robots[0].observation()
@@ -338,42 +359,30 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
         obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
         t += self.action_shape // 2
         if self.use_prio:
-            if self.r_handle_idx is None:
-                self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
-            door_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
-            door_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
-            door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-                door_right_handle_rot, self.y_unit_tensor * -0.5
-            )
-            door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-                door_right_handle_rot, self.x_unit_tensor * 0.39
-            )
-            door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-                door_right_handle_rot, self.z_unit_tensor * -0.04
-            )
-            if self.l_handle_idx is None:
-                self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
-            door_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
-            door_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
-            door_left_handle_pos = door_left_handle_pos + math.quat_apply(
-                door_left_handle_rot, self.y_unit_tensor * -0.5
-            )
-            door_left_handle_pos = door_left_handle_pos + math.quat_apply(
-                door_left_handle_rot, self.x_unit_tensor * -0.39
-            )
-            door_left_handle_pos = door_left_handle_pos + math.quat_apply(
-                door_left_handle_rot, self.z_unit_tensor * -0.04
-            )
-            obs[:, t : t + 3] = door_right_handle_pos  # right handle position
-            obs[:, t + 3 : t + 6] = door_left_handle_pos  # left handle position
-            t += 6
+            obs[:, t : t + 13] = envstates.objects[self.current_object_type].root_state
+            obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object angvel
+            t += 13
+            obs[:, t : t + 3] = self.goal_pos
+            t += 3
+            pot_pos = envstates.objects[self.current_object_type].root_state[:, :3]
+            pot_rot = envstates.objects[self.current_object_type].root_state[:, 3:7]
+            pot_right_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * 0.15)
+            pot_right_handle_pos = pot_right_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.11)
+            pot_left_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * -0.15)
+            pot_left_handle_pos = pot_left_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.11)
+            obs[:, t : t + 3] = pot_right_handle_pos
+            t += 3
+            obs[:, t : t + 3] = pot_left_handle_pos
+            t += 3
             if self.obs_type == "rgb":
                 obs[:, t:] = (
                     envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
                 )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         else:
             if self.obs_type == "rgb":
-                obs[:, t:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                obs[:, t:] = (
+                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         return obs
 
     def reward_fn(
@@ -402,42 +411,32 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
             reset_goal_buf (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
             success_buf (torch.Tensor): The success buffer of all environments at this time, shape (num_envs,)
         """
-        door_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
-        door_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-            door_right_handle_rot, self.y_unit_tensor * -0.5
-        )
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-            door_right_handle_rot, self.x_unit_tensor * 0.39
-        )
-        door_right_handle_pos = door_right_handle_pos + math.quat_apply(
-            door_right_handle_rot, self.z_unit_tensor * -0.04
-        )
+        pot_pos = envstates.objects[self.current_object_type].root_state[:, :3]
+        pot_rot = envstates.objects[self.current_object_type].root_state[:, 3:7]
+        pot_right_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * 0.15)
+        pot_right_handle_pos = pot_right_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.11)
+        pot_left_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * -0.15)
+        pot_left_handle_pos = pot_left_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.11)
 
-        door_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
-        door_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
-        door_left_handle_pos = door_left_handle_pos + math.quat_apply(door_left_handle_rot, self.y_unit_tensor * -0.5)
-        door_left_handle_pos = door_left_handle_pos + math.quat_apply(door_left_handle_rot, self.x_unit_tensor * -0.39)
-        door_left_handle_pos = door_left_handle_pos + math.quat_apply(door_left_handle_rot, self.z_unit_tensor * -0.04)
+        right_hand_reward = self.robots[0].reward(pot_right_handle_pos)
+        left_hand_reward = self.robots[1].reward(pot_left_handle_pos)
 
-        door_dof_pos = envstates.objects[self.current_object_type].joint_pos
-
-        right_hand_reward = self.robots[0].reward(door_right_handle_pos)
-        left_hand_reward = self.robots[1].reward(door_left_handle_pos)
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
             reset_goal_buf=reset_goal_buf,
             episode_length_buf=episode_length_buf,
             success_buf=success_buf,
             max_episode_length=self.episode_length,
-            door_right_handle_pos=door_right_handle_pos,
-            door_left_handle_pos=door_left_handle_pos,
-            door_dof_pos=door_dof_pos,
+            object_pos=envstates.objects[self.current_object_type].root_state[:, :3],
+            target_pos=self.goal_pos,
+            pot_right_handle_pos=pot_right_handle_pos,
+            pot_left_handle_pos=pot_left_handle_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
+            fall_penalty=self.fall_penalty,
         )
         return reward, reset_buf, reset_goal_buf, success_buf
 
@@ -470,6 +469,8 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
 
             # generate random values
             rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device="cpu")
+
+            new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
 
             robot_dof_default_pos = self.robot_dof_default_pos_cpu[self.robots[0].name]
             delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
@@ -544,14 +545,16 @@ def compute_task_reward(
     episode_length_buf,
     success_buf,
     max_episode_length: float,
-    door_right_handle_pos,
-    door_left_handle_pos,
-    door_dof_pos,
+    object_pos,
+    target_pos,
+    pot_right_handle_pos,
+    pot_left_handle_pos,
     right_hand_reward,
     left_hand_reward,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
+    fall_penalty: float,
 ):
     """Compute the reward of all environment.
 
@@ -566,15 +569,17 @@ def compute_task_reward(
 
         max_episode_length (float): The max episode length in this environment
 
-        door_right_handle_pos (tensor): The position of the right handle of the cup
+        object_pos (tensor): The position of the object
 
-        door_left_handle_pos (tensor): The position of the left handle of the cup
+        target_pos (tensor): The position of the target
 
-        door_dof_pos (tensor): The position of the door dof, shape (num_envs,)
+        pot_right_handle_pos (tensor): The position of the right handle of the pot
 
-        right_hand_reward (tensor): The reward from the right hand, shape (num_envs,)
+        pot_left_handle_pos (tensor): The position of the left handle of the pot
 
-        left_hand_reward (tensor): The reward from the left hand, shape (num_envs,)
+        right_hand_reward (tensor): The reward of the right hand
+
+        left_hand_reward (tensor): The reward of the left hand
 
         action_penalty_scale (float): The scale of the action penalty
 
@@ -582,33 +587,25 @@ def compute_task_reward(
 
         reach_goal_bonus (float): The reward given when the object reaches the goal
 
+        fall_penalty (float): The reward given when the object is fell
     """
+    # Distance from the object to the target position
+    goal_dist = torch.norm(target_pos - object_pos, p=2, dim=-1)
+
     action_penalty = torch.sum(actions**2, dim=-1)
-    dof_rew = (1.57 * 2 - torch.sum(door_dof_pos, dim=-1)) * 5  # encourage opening the door
+
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
-        right_hand_reward > 0.7,
-        torch.where(
-            left_hand_reward > 0.7,
-            5 - torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) * 10 + dof_rew,
-            up_rew,
-        ),
-        up_rew,
+        right_hand_reward >= 0.7, torch.where(left_hand_reward >= 0.7, 3 * (0.385 - goal_dist), up_rew), up_rew
     )
 
-    reward = left_hand_reward + right_hand_reward + up_rew + 2
-
-    success = (
-        (torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) < 0.5)
-        & (right_hand_reward >= 0.7)
-        & (left_hand_reward >= 0.7)
-    )
+    reward = right_hand_reward + left_hand_reward + up_rew
 
     # Find out which envs hit the goal and update successes count
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            success,
+            goal_dist < 0.05,
             torch.ones_like(success_buf),
             success_buf,
         ),
@@ -616,11 +613,15 @@ def compute_task_reward(
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    # reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
+    # reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
+
+    # Fall penalty: distance to the goal is larger than a threashold
+    reward = torch.where(object_pos[:, 2] <= 0.3, reward - fall_penalty, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_reward <= -1.0, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(left_hand_reward <= -1.0, torch.ones_like(resets), resets)
+    resets = torch.where(object_pos[:, 2] <= 0.3, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(right_hand_reward <= 0.2, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_reward <= 0.2, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

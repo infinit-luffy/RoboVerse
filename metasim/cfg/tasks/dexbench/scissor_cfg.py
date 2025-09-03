@@ -30,32 +30,30 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
 @configclass
-class SwingCupCfg(BaseRLTaskCfg):
-    """class for swing cup tasks."""
+class ScissorCfg(BaseRLTaskCfg):
+    """class for scissor tasks."""
 
     source_benchmark = BenchmarkType.DEXBENCH
     task_type = TaskType.TABLETOP_MANIPULATION
     is_testing = False
-    episode_length = 300
-    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandSwingCup/v2/initial_state_v2.json"
+    episode_length = 150
+    traj_filepath = "roboverse_data/trajs/bidex/ShadowHandScissor/v2/initial_state_v2.json"
     device = "cuda:0"
     num_envs = None
     obs_type = "state"  # "state" or "rgb"
-    use_prio = True  # Use proprioception for state observation
-    current_object_type = "cup"
+    use_prio = True  # Use proprioception in state observation
+    current_object_type = "scissor"
     objects_cfg = {
-        "cup": ArticulationObjCfg(
-            name="cup",
-            urdf_path="roboverse_data/assets/bidex/objects/urdf/cup_mobility.urdf",
+        "scissor": ArticulationObjCfg(
+            name="scissor",
+            urdf_path="roboverse_data/assets/bidex/objects/urdf/scissor_mobility.urdf",
             default_density=500.0,
-            collapse_fixed_joints=True,
-            friction=0.5,
-            use_vhacd=False,
+            friction=1.0,
             fix_base_link=False,
         ),
         "table": PrimitiveCubeCfg(
             name="table",
-            size=(0.3, 0.3, 0.6),
+            size=(0.5, 1.0, 0.6),
             disable_gravity=True,
             fix_base_link=True,
             flip_visual_attachments=True,
@@ -65,8 +63,8 @@ class SwingCupCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False),
-        FrankaShadowHandLeftCfg(use_vhacd=False),
+        FrankaShadowHandRightCfg(use_vhacd=False, friction=0.5),
+        FrankaShadowHandLeftCfg(use_vhacd=False, friction=0.5),
     ]
     step_actions_shape = 0
     for robot in robots:
@@ -91,7 +89,10 @@ class SwingCupCfg(BaseRLTaskCfg):
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
     )
-    goal_rot = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
+    arm_translation_scale = 0.04
+    arm_orientation_scale = 0.25
+    hand_translation_scale = 0.02
+    hand_orientation_scale = 0.25
     sensors = []
     for name in robots[0].fingertips:
         r_name = "right" + name
@@ -99,16 +100,15 @@ class SwingCupCfg(BaseRLTaskCfg):
     for name in robots[1].fingertips:
         l_name = "left" + name
         sensors.append(ContactForceSensorCfg(base_link=("franka_shadow_left", name), source_link=None, name=l_name))
+    r_handle_name = "link_0"  # Name of the right hand handle in the body state
+    l_handle_name = "base"  # Name of the left hand handle in the body states
+    l_handle_idx = None  # Index of the left hand handle in the body state
+    r_handle_idx = None  # Index of the right hand handle in the body state
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
-    arm_translation_scale = 0.06
-    arm_orientation_scale = 0.25
-    hand_translation_scale = 0.02
-    hand_orientation_scale = 0.25
-    dist_reward_scale = 50.0
     action_penalty_scale = 0
     reach_goal_bonus = 250.0
     fall_penalty = 0.0
@@ -118,20 +118,18 @@ class SwingCupCfg(BaseRLTaskCfg):
     rot_eps = 0.1
 
     def set_objects(self) -> None:
-        """Set the objects for the swing cup task."""
+        """Set the objects for the shadow hand scissor task."""
         self.objects.append(self.objects_cfg["table"])
         self.objects.append(self.objects_cfg[self.current_object_type])
 
     def set_init_states(self) -> None:
-        """Set the initial states for the shadow hand over task."""
+        """Set the initial states for the shadow hand push block task."""
         self.proceptual_shape = 0
         for robot in self.robots:
             self.proceptual_shape += robot.observation_shape
             self.proceptual_shape += robot.num_fingertips * 6  # fingertip forces
         self.proceptual_shape += self.action_shape
-        self.proprio_shape = (
-            self.proceptual_shape + 23
-        )  # object position(3), rotation(4), linear velocity(3), angular velocity(3), goal position(3), goal rotation(4)
+        self.proprio_shape = self.proceptual_shape + 19
         self.obs_shape = self.proprio_shape
         if self.obs_type == "state":
             self.cameras = []
@@ -153,9 +151,6 @@ class SwingCupCfg(BaseRLTaskCfg):
                 self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
             else:
                 self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
-        self.init_goal_rot = torch.tensor(
-            [-0.707, 0.0, 0.0, 0.707], dtype=torch.float32, device=self.device
-        )  # Initial goal position, shape (3,)
         self.init_states = {
             "objects": {
                 "table": {
@@ -163,53 +158,16 @@ class SwingCupCfg(BaseRLTaskCfg):
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
                 self.current_object_type: {
-                    "pos": torch.tensor([0, 0.0, 0.685]),
+                    "pos": torch.tensor([0, 0.0, 0.6075]),
                     "rot": torch.tensor([0.707, 0.0, 0.0, 0.707]),
                     "dof_pos": {
-                        "joint_0": 0.0,  # Initial position of the switch
+                        "joint_0": -0.59,  # Initial position of the switch
                     },
                 },
             },
             "robots": {
                 "franka_shadow_right": {
-                    "pos": torch.tensor([0.68, 0.2, 0.0]),
-                    "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
-                    "dof_pos": {
-                        "FFJ1": 0.0,
-                        "FFJ2": 0.0,
-                        "FFJ3": 0.0,
-                        "FFJ4": 0.0,
-                        "LFJ1": 0.0,
-                        "LFJ2": 0.0,
-                        "LFJ3": 0.0,
-                        "LFJ4": 0.0,
-                        "LFJ5": 0.0,
-                        "MFJ1": 0.0,
-                        "MFJ2": 0.0,
-                        "MFJ3": 0.0,
-                        "MFJ4": 0.0,
-                        "RFJ1": 0.0,
-                        "RFJ2": 0.0,
-                        "RFJ3": 0.0,
-                        "RFJ4": 0.0,
-                        "THJ1": 0.0,
-                        "THJ2": 0.0,
-                        "THJ3": 0.0,
-                        "THJ4": 0.0,
-                        "THJ5": 0.0,
-                        "WRJ1": 0.0,
-                        "WRJ2": 0.0,
-                        "panda_joint1": 0.0,
-                        "panda_joint2": -0.785398,
-                        "panda_joint3": 0.0,
-                        "panda_joint4": -2.356194,
-                        "panda_joint5": 0.0,
-                        "panda_joint6": 3.1415928,
-                        "panda_joint7": 2.35619445,
-                    },
-                },
-                "franka_shadow_left": {
-                    "pos": torch.tensor([0.68, -0.2, 0.0]),
+                    "pos": torch.tensor([1.0, 0.2, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "FFJ1": 0.0,
@@ -237,12 +195,49 @@ class SwingCupCfg(BaseRLTaskCfg):
                         "WRJ1": 0.0,
                         "WRJ2": 0.0,
                         "panda_joint1": 0.0,
-                        "panda_joint2": -0.785398,
+                        "panda_joint2": -0.4116,
                         "panda_joint3": 0.0,
-                        "panda_joint4": -2.356194,
-                        "panda_joint5": 0.0,
-                        "panda_joint6": 3.1415928,
-                        "panda_joint7": -0.785398,
+                        "panda_joint4": -2.0366,
+                        "panda_joint5": -0.02386,
+                        "panda_joint6": 3.1105,
+                        "panda_joint7": 0.76586,
+                    },
+                },
+                "franka_shadow_left": {
+                    "pos": torch.tensor([1.0, -0.2, 0.0]),
+                    "rot": torch.tensor([0, 0, 0, 1]),
+                    "dof_pos": {
+                        "FFJ1": 0.0,
+                        "FFJ2": 0.0,
+                        "FFJ3": 0.0,
+                        "FFJ4": 0.0,
+                        "LFJ1": 0.0,
+                        "LFJ2": 0.0,
+                        "LFJ3": 0.0,
+                        "LFJ4": 0.0,
+                        "LFJ5": 0.0,
+                        "MFJ1": 0.0,
+                        "MFJ2": 0.0,
+                        "MFJ3": 0.0,
+                        "MFJ4": 0.0,
+                        "RFJ1": 0.0,
+                        "RFJ2": 0.0,
+                        "RFJ3": 0.0,
+                        "RFJ4": 0.0,
+                        "THJ1": 0.0,
+                        "THJ2": 0.0,
+                        "THJ3": 0.0,
+                        "THJ4": 0.0,
+                        "THJ5": 0.0,
+                        "WRJ1": 0.0,
+                        "WRJ2": 0.0,
+                        "panda_joint1": 0.0,
+                        "panda_joint2": -0.4116,
+                        "panda_joint3": 0.0,
+                        "panda_joint4": -2.0366,
+                        "panda_joint5": -0.02386,
+                        "panda_joint6": 3.1105,
+                        "panda_joint7": 0.76586,
                     },
                 },
             },
@@ -308,9 +303,10 @@ class SwingCupCfg(BaseRLTaskCfg):
             Compute the observations of all environment. The observation is composed of three parts:
             the state values of the left and right hands, and the information of objects and target.
             The state values of the left and right hands were the same for each task, including hand
-            joint and finger positions, velocity, and force information. The detailobservational space as shown in below:
+            joint and finger positions, velocity, and force information. The detail 430-dimensional
+            observational space as shown in below:
 
-            Description
+            Index       Description
             right robot proceptual observation
             right robot fingertip forces
             right robot actions
@@ -320,23 +316,16 @@ class SwingCupCfg(BaseRLTaskCfg):
             object pose
             object linear velocity
             object angle velocity
-            cup right handle pos
-            cup left handle pos
-            goal rot
+            right scissor handle position
+            left scissor handle position
             visual observation, currently RGB image (3 x 256 x 256)
         """
         if device is None:
             device = self.device
-        num_envs = envstates.robots[self.robots[0].name].root_state.shape[0]
+        num_envs = envstates.robots["shadow_hand_right"].root_state.shape[0]
         if self.num_envs is None:
             self.num_envs = num_envs
-        if self.goal_rot is None:
-            self.goal_rot = (
-                torch.tensor(self.init_goal_rot, dtype=torch.float32, device=self.device)
-                .view(1, -1)
-                .repeat(num_envs, 1)
-            )
-        obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
+        obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float, device=device)
         t = 0
         obs[:, : self.robots[0].observation_shape] = self.robots[0].observation()
         t += self.robots[0].observation_shape
@@ -364,25 +353,37 @@ class SwingCupCfg(BaseRLTaskCfg):
             obs[:, t : t + 13] = envstates.objects[self.current_object_type].root_state
             obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object angvel
             t += 13
-            cup_pos = envstates.objects[self.current_object_type].root_state[:, :3]
-            cup_rot = envstates.objects[self.current_object_type].root_state[:, 3:7]
-            cup_right_handle_pos = cup_pos + math.quat_apply(cup_rot, self.x_unit_tensor * 0.06)
-            cup_left_handle_pos = cup_pos + math.quat_apply(cup_rot, self.x_unit_tensor * -0.06)
-            obs[:, t : t + 3] = cup_right_handle_pos
+            if self.r_handle_idx is None:
+                self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
+            scissor_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
+            scissor_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
+            scissor_right_handle_pos = scissor_right_handle_pos + math.quat_apply(
+                scissor_right_handle_rot, self.x_unit_tensor * 0.2
+            )
+            scissor_right_handle_pos = scissor_right_handle_pos + math.quat_apply(
+                scissor_right_handle_rot, self.z_unit_tensor * -0.1
+            )
+            if self.l_handle_idx is None:
+                self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
+            scissor_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
+            scissor_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
+            scissor_left_handle_pos = scissor_left_handle_pos + math.quat_apply(
+                scissor_left_handle_rot, self.x_unit_tensor * -0.1
+            )
+            scissor_left_handle_pos = scissor_left_handle_pos + math.quat_apply(
+                scissor_left_handle_rot, self.y_unit_tensor * -0.15
+            )
+            obs[:, t : t + 3] = scissor_right_handle_pos
             t += 3
-            obs[:, t : t + 3] = cup_left_handle_pos
+            obs[:, t : t + 3] = scissor_left_handle_pos
             t += 3
-            obs[:, t : t + 4] = self.goal_rot
-            t += 4
             if self.obs_type == "rgb":
                 obs[:, t:] = (
                     envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
                 )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
         else:
             if self.obs_type == "rgb":
-                obs[:, t:] = (
-                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+                obs[:, t:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
         return obs
 
     def reward_fn(
@@ -411,13 +412,26 @@ class SwingCupCfg(BaseRLTaskCfg):
             reset_goal_buf (torch.Tensor): The reset goal buffer of all environments at this time, shape (num_envs,)
             success_buf (torch.Tensor): The success buffer of all environments at this time, shape (num_envs,)
         """
-        cup_pos = envstates.objects[self.current_object_type].root_state[:, :3]
-        cup_rot = envstates.objects[self.current_object_type].root_state[:, 3:7]
-        cup_right_handle_pos = cup_pos + math.quat_apply(cup_rot, self.x_unit_tensor * 0.06)
-        cup_left_handle_pos = cup_pos + math.quat_apply(cup_rot, self.x_unit_tensor * -0.06)
+        scissor_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
+        scissor_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
+        scissor_right_handle_pos = scissor_right_handle_pos + math.quat_apply(
+            scissor_right_handle_rot, self.x_unit_tensor * 0.2
+        )
+        scissor_right_handle_pos = scissor_right_handle_pos + math.quat_apply(
+            scissor_right_handle_rot, self.z_unit_tensor * -0.1
+        )
 
-        right_hand_reward = self.robots[0].reward(cup_right_handle_pos)
-        left_hand_reward = self.robots[1].reward(cup_left_handle_pos)
+        scissor_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
+        scissor_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
+        scissor_left_handle_pos = scissor_left_handle_pos + math.quat_apply(
+            scissor_left_handle_rot, self.x_unit_tensor * -0.1
+        )
+        scissor_left_handle_pos = scissor_left_handle_pos + math.quat_apply(
+            scissor_left_handle_rot, self.y_unit_tensor * -0.15
+        )
+
+        right_hand_reward = self.robots[0].reward(scissor_right_handle_pos)
+        left_hand_reward = self.robots[1].reward(scissor_left_handle_pos)
 
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
@@ -425,19 +439,14 @@ class SwingCupCfg(BaseRLTaskCfg):
             episode_length_buf=episode_length_buf,
             success_buf=success_buf,
             max_episode_length=self.episode_length,
-            object_pos=envstates.objects[self.current_object_type].root_state[:, :3],
-            object_rot=envstates.objects[self.current_object_type].root_state[:, 3:7],
-            target_rot=self.goal_rot,
-            cup_right_handle_pos=cup_right_handle_pos,
-            cup_left_handle_pos=cup_left_handle_pos,
+            object_dof=envstates.objects[self.current_object_type].joint_pos,
+            scissor_right_handle_pos=scissor_right_handle_pos,
+            scissor_left_handle_pos=scissor_left_handle_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
-            rot_reward_scale=self.rot_reward_scale,
-            rot_eps=self.rot_eps,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
-            fall_penalty=self.fall_penalty,
         )
         return reward, reset_buf, reset_goal_buf, success_buf
 
@@ -544,19 +553,14 @@ def compute_task_reward(
     episode_length_buf,
     success_buf,
     max_episode_length: float,
-    object_pos,
-    object_rot,
-    target_rot,
-    cup_right_handle_pos,
-    cup_left_handle_pos,
+    object_dof,
+    scissor_right_handle_pos,
+    scissor_left_handle_pos,
     right_hand_reward,
     left_hand_reward,
-    rot_reward_scale: float,
-    rot_eps: float,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
-    fall_penalty: float,
 ):
     """Compute the reward of all environment.
 
@@ -571,23 +575,15 @@ def compute_task_reward(
 
         max_episode_length (float): The max episode length in this environment
 
-        object_pos (tensor): The position of the object
+        object_dof (tensor): The dof of the object, used to determine the success condition
 
-        object_rot (tensor): The rotation of the object
+        scissor_right_handle_pos (tensor): The position of the right handle of the object
 
-        target_rot (tensor): The target rotation of the object
+        scissor_left_handle_pos (tensor): The position of the left handle of the object
 
-        cup_right_handle_pos (tensor): The position of the right handle of the cup
+        right_hand_reward (tensor): The reward from the right hand
 
-        cup_left_handle_pos (tensor): The position of the left handle of the cup
-
-        right_hand_reward (tensor): The reward of the right hand
-
-        left_hand_reward (tensor): The reward of the left hand
-
-        rot_reward_scale (float): The scale of the rotation reward
-
-        rot_eps (float): The epsilon of the rotation reward, used to determine the success condition
+        left_hand_reward (tensor): The reward from the left hand
 
         action_penalty_scale (float): The scale of the action penalty
 
@@ -595,26 +591,24 @@ def compute_task_reward(
 
         reach_goal_bonus (float): The reward given when the object reaches the goal
 
-        fall_penalty (float): The reward given when the object is fell
-
     """
-    quat_diff = math.quat_mul(object_rot, math.quat_inv(target_rot))
-    rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 1:4], p=2, dim=-1), max=1.0))
-
-    rot_rew = 1.0 / (torch.abs(rot_dist) + rot_eps) * rot_reward_scale - 1
-
     action_penalty = torch.sum(actions**2, dim=-1)
 
-    up_rew = torch.zeros_like(rot_rew)
-    up_rew = torch.where(right_hand_reward >= 0.8, torch.where(left_hand_reward >= 0.8, rot_rew, up_rew), up_rew)
+    up_rew = torch.zeros_like(right_hand_reward)
+    up_rew = torch.where(
+        right_hand_reward >= 0.5,
+        torch.where(left_hand_reward >= 0.5, (0.59 + object_dof[:, 0]) * 5, up_rew),
+        up_rew,
+    )
 
     reward = right_hand_reward + left_hand_reward + up_rew
 
     # Find out which envs hit the goal and update successes count
+    success = object_dof[:, 0] > -0.3
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            rot_dist < 0.785,
+            success,
             torch.ones_like(success_buf),
             success_buf,
         ),
@@ -622,15 +616,11 @@ def compute_task_reward(
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    # reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
-
-    # Fall penalty: distance to the goal is larger than a threashold
-    reward = torch.where(object_pos[:, 2] <= 0.3, reward - fall_penalty, reward)
+    # reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(object_pos[:, 2] <= 0.3, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_reward <= 0.2, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_reward <= 0.2, torch.ones_like(resets), resets)
+    resets = torch.where(up_rew < -0.5, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(right_hand_reward <= -0.55, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

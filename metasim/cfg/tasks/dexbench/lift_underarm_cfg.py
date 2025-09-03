@@ -152,7 +152,7 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
             else:
                 self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
         self.init_goal_pos = torch.tensor(
-            [0, -0.6, 1.1], dtype=torch.float32, device=self.device
+            [0, -0.6, 1.02], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
         self.init_states = {
             "objects": {
@@ -367,9 +367,9 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
             pot_pos = envstates.objects[self.current_object_type].root_state[:, :3]
             pot_rot = envstates.objects[self.current_object_type].root_state[:, 3:7]
             pot_right_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * 0.15)
-            pot_right_handle_pos = pot_right_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.11)
+            pot_right_handle_pos = pot_right_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.06)
             pot_left_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * -0.15)
-            pot_left_handle_pos = pot_left_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.11)
+            pot_left_handle_pos = pot_left_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.06)
             obs[:, t : t + 3] = pot_right_handle_pos
             t += 3
             obs[:, t : t + 3] = pot_left_handle_pos
@@ -414,9 +414,9 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
         pot_pos = envstates.objects[self.current_object_type].root_state[:, :3]
         pot_rot = envstates.objects[self.current_object_type].root_state[:, 3:7]
         pot_right_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * 0.15)
-        pot_right_handle_pos = pot_right_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.11)
+        pot_right_handle_pos = pot_right_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.06)
         pot_left_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * -0.15)
-        pot_left_handle_pos = pot_left_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.11)
+        pot_left_handle_pos = pot_left_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.06)
 
         right_hand_reward = self.robots[0].reward(pot_right_handle_pos)
         left_hand_reward = self.robots[1].reward(pot_left_handle_pos)
@@ -469,8 +469,6 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
 
             # generate random values
             rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device="cpu")
-
-            new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
 
             robot_dof_default_pos = self.robot_dof_default_pos_cpu[self.robots[0].name]
             delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
@@ -596,16 +594,18 @@ def compute_task_reward(
 
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
-        right_hand_reward >= 0.7, torch.where(left_hand_reward >= 0.7, 3 * (0.385 - goal_dist), up_rew), up_rew
+        right_hand_reward >= 0.7, torch.where(left_hand_reward >= 0.7, 5 * (0.25 - goal_dist), up_rew), up_rew
     )
 
     reward = right_hand_reward + left_hand_reward + up_rew
+
+    success = goal_dist < 0.05
 
     # Find out which envs hit the goal and update successes count
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            goal_dist < 0.05,
+            success,
             torch.ones_like(success_buf),
             success_buf,
         ),
@@ -613,7 +613,7 @@ def compute_task_reward(
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    # reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
+    reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Fall penalty: distance to the goal is larger than a threashold
     reward = torch.where(object_pos[:, 2] <= 0.3, reward - fall_penalty, reward)
@@ -625,7 +625,7 @@ def compute_task_reward(
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     goal_resets = torch.zeros_like(resets)
 

@@ -41,11 +41,12 @@ def __get_quick_ref():
     from .dexbench.door_open_inward_cfg import DoorOpenInwardCfg
     from .dexbench.door_open_outward_cfg import DoorOpenOutwardCfg
     from .dexbench.hand_over_cfg import HandOverCfg
-    from .dexbench.lift_under_arm_cfg import LiftUnderarmCfg
+    from .dexbench.lift_underarm_cfg import LiftUnderarmCfg
     from .dexbench.over2underarm_cfg import Over2UnderarmCfg
     from .dexbench.push_block_cfg import PushBlockCfg
     from .dexbench.re_orientation_cfg import ReOrientationCfg
     from .dexbench.stack_block_cfg import StackBlockCfg
+    from .dexbench.swing_cup_cfg import SwingCupCfg
     from .dexbench.turn_button_cfg import TurnButtonCfg
     from .dexbench.two_catch_underarm_cfg import TwoCatchUnderarmCfg
     from .dmcontrol.walker_walk_cfg import WalkerWalkCfg

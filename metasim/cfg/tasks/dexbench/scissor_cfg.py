@@ -323,7 +323,7 @@ class ScissorCfg(BaseRLTaskCfg):
         """
         if device is None:
             device = self.device
-        num_envs = envstates.robots["shadow_hand_right"].root_state.shape[0]
+        num_envs = envstates.robots[self.robots[0].name].root_state.shape[0]
         if self.num_envs is None:
             self.num_envs = num_envs
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float, device=device)
@@ -617,7 +617,7 @@ def compute_task_reward(
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    # reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
+    reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(up_rew < -0.5, torch.ones_like(reset_buf), reset_buf)
@@ -625,7 +625,7 @@ def compute_task_reward(
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     goal_resets = torch.zeros_like(resets)
 

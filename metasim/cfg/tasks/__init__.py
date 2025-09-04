@@ -40,9 +40,12 @@ def __get_quick_ref():
     from .dexbench.door_close_outward_cfg import DoorCloseOutwardCfg
     from .dexbench.door_open_inward_cfg import DoorOpenInwardCfg
     from .dexbench.door_open_outward_cfg import DoorOpenOutwardCfg
+    from .dexbench.grasp_place_cfg import GraspPlaceCfg
     from .dexbench.hand_over_cfg import HandOverCfg
+    from .dexbench.kettle_cfg import KettleCfg
     from .dexbench.lift_underarm_cfg import LiftUnderarmCfg
     from .dexbench.over2underarm_cfg import Over2UnderarmCfg
+    from .dexbench.pen_cfg import PenCfg
     from .dexbench.push_block_cfg import PushBlockCfg
     from .dexbench.re_orientation_cfg import ReOrientationCfg
     from .dexbench.scissor_cfg import ScissorCfg

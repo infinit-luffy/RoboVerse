@@ -65,8 +65,8 @@ class SwingCupCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False),
-        FrankaShadowHandLeftCfg(use_vhacd=False),
+        FrankaShadowHandRightCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
+        FrankaShadowHandLeftCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
     ]
     step_actions_shape = 0
     for robot in robots:
@@ -106,7 +106,7 @@ class SwingCupCfg(BaseRLTaskCfg):
     )
     arm_translation_scale = 0.06
     arm_orientation_scale = 0.25
-    hand_translation_scale = 0.02
+    hand_translation_scale = 0.04
     hand_orientation_scale = 0.25
     dist_reward_scale = 50.0
     action_penalty_scale = 0
@@ -610,11 +610,13 @@ def compute_task_reward(
 
     reward = right_hand_reward + left_hand_reward + up_rew
 
+    success = rot_dist < 0.785
+
     # Find out which envs hit the goal and update successes count
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            rot_dist < 0.785,
+            success,
             torch.ones_like(success_buf),
             success_buf,
         ),
@@ -622,7 +624,7 @@ def compute_task_reward(
     )
 
     # Success bonus: orientation is within `success_tolerance` of goal orientation
-    # reward = torch.where(goal_resets == 1, reward + reach_goal_bonus, reward)
+    reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Fall penalty: distance to the goal is larger than a threashold
     reward = torch.where(object_pos[:, 2] <= 0.3, reward - fall_penalty, reward)
@@ -634,7 +636,7 @@ def compute_task_reward(
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     goal_resets = torch.zeros_like(resets)
 

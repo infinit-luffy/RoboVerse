@@ -239,13 +239,7 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
         init_q = torch_to_jax(self.dof_pos[:, self.hand_dof_idx][:, self.ik_reindex])
         target_wxyz = math.quat_mul(
             math.quat_from_euler_xyz(target_rot[..., 0], target_rot[..., 1], target_rot[..., 2]),
-            self.ft_rot,
-        )
-        target_wxyz = torch_to_jax(
-            math.quat_mul(
-                math.quat_inv(self.wrist_rot).unsqueeze(1).repeat(1, self.num_fingertips, 1),
-                target_wxyz,
-            )
+            self.ft_relative_rot,
         )
         target_position = target_pos + self.ft_pos
         target_position = torch_to_jax(

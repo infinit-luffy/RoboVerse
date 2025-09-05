@@ -75,8 +75,8 @@ class GraspPlaceCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False),
-        FrankaShadowHandLeftCfg(use_vhacd=False),
+        FrankaShadowHandRightCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
+        FrankaShadowHandLeftCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
     ]
     step_actions_shape = 0
     for robot in robots:
@@ -179,8 +179,8 @@ class GraspPlaceCfg(BaseRLTaskCfg):
             },
             "robots": {
                 "franka_shadow_right": {
-                    "pos": torch.tensor([-1.0, 0.2, 0.0]),
-                    "rot": torch.tensor([1, 0, 0, 0]),
+                    "pos": torch.tensor([0.88, 0.2, 0.0]),
+                    "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
                     "dof_pos": {
                         "FFJ1": 0.0,
                         "FFJ2": 0.0,
@@ -207,17 +207,17 @@ class GraspPlaceCfg(BaseRLTaskCfg):
                         "WRJ1": 0.0,
                         "WRJ2": 0.0,
                         "panda_joint1": 0.0,
-                        "panda_joint2": -0.4116,
+                        "panda_joint2": -0.785398,
                         "panda_joint3": 0.0,
-                        "panda_joint4": -2.0366,
-                        "panda_joint5": -0.02386,
-                        "panda_joint6": 3.1105,
-                        "panda_joint7": 0.76586,
+                        "panda_joint4": -2.356194,
+                        "panda_joint5": 0.0,
+                        "panda_joint6": 3.1415928,
+                        "panda_joint7": 2.35619445,
                     },
                 },
                 "franka_shadow_left": {
-                    "pos": torch.tensor([-1.0, -0.2, 0.0]),
-                    "rot": torch.tensor([1, 0, 0, 0]),
+                    "pos": torch.tensor([0.88, -0.2, 0.0]),
+                    "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "FFJ1": 0.0,
                         "FFJ2": 0.0,
@@ -244,12 +244,12 @@ class GraspPlaceCfg(BaseRLTaskCfg):
                         "WRJ1": 0.0,
                         "WRJ2": 0.0,
                         "panda_joint1": 0.0,
-                        "panda_joint2": -0.4116,
+                        "panda_joint2": -0.785398,
                         "panda_joint3": 0.0,
-                        "panda_joint4": -2.0366,
-                        "panda_joint5": -0.02386,
-                        "panda_joint6": 3.1105,
-                        "panda_joint7": 0.76586,
+                        "panda_joint4": -2.356194,
+                        "panda_joint5": 0.0,
+                        "panda_joint6": 3.1415928,
+                        "panda_joint7": -0.785398,
                     },
                 },
             },
@@ -602,8 +602,7 @@ def compute_task_reward(
     reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_reward <= 0, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_reward <= -0.3, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_reward <= -0.3, torch.ones_like(reset_buf), reset_buf)
     resets = torch.where(left_hand_reward <= -0.3, torch.ones_like(resets), resets)
 
     # penalty = (left_hand_finger_dist >= 1.2) | (right_hand_finger_dist >= 1.2)
@@ -611,6 +610,6 @@ def compute_task_reward(
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)
-    # resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
+    resets = torch.where(success_buf >= 1, torch.ones_like(resets), resets)
 
     return reward, resets, goal_resets, success_buf

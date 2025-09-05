@@ -65,8 +65,8 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False),
-        FrankaShadowHandLeftCfg(use_vhacd=False),
+        FrankaShadowHandRightCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
+        FrankaShadowHandLeftCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
     ]
     step_actions_shape = 0
     for robot in robots:

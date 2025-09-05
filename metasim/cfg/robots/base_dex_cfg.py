@@ -92,15 +92,10 @@ class BaseDexCfg(BaseRobotCfg):
         )  # (num_envs, num_fingertips, 3)
         self.wrist_pos = self.wrist_state[:, :3]
         self.wrist_rot = self.wrist_state[:, 3:7]
-        # if self.robot_controller == "ik":
-        #     self.ft_relative_pos = math.quat_apply(
-        #         math.quat_inv(self.wrist_rot).unsqueeze(1).repeat(1, self.num_fingertips, 1),
-        #         self.ft_pos - self.wrist_pos.unsqueeze(1),
-        #     )
-        #     self.ft_relative_rot = math.quat_mul(
-        #         math.quat_inv(self.wrist_rot).unsqueeze(1).repeat(1, self.num_fingertips, 1),
-        #         self.ft_rot,
-        #     )
+        self.ft_relative_rot = math.quat_mul(
+            math.quat_inv(self.wrist_rot).unsqueeze(1).repeat(1, self.num_fingertips, 1),
+            self.ft_rot,
+        )
         self.palm_state = envstates.robots[self.name].body_state[:, self.palm_index, :]
         self.dof_pos = envstates.robots[self.name].joint_pos
         self.dof_vel = envstates.robots[self.name].joint_vel

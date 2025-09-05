@@ -82,8 +82,8 @@ class KettleCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False, friction=1.0),
-        FrankaShadowHandLeftCfg(use_vhacd=False, friction=1.0),
+        FrankaShadowHandRightCfg(use_vhacd=False, friction=1.0, robot_controller="dof_pos", isaacgym_read_mjcf=True),
+        FrankaShadowHandLeftCfg(use_vhacd=False, friction=1.0, robot_controller="dof_pos", isaacgym_read_mjcf=True),
     ]
     step_actions_shape = 0
     for robot in robots:
@@ -190,8 +190,8 @@ class KettleCfg(BaseRLTaskCfg):
             },
             "robots": {
                 "franka_shadow_right": {
-                    "pos": torch.tensor([-1.0, 0.2, 0.0]),
-                    "rot": torch.tensor([1, 0, 0, 0]),
+                    "pos": torch.tensor([0.88, 0.2, 0.0]),
+                    "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
                     "dof_pos": {
                         "FFJ1": 0.0,
                         "FFJ2": 0.0,
@@ -218,17 +218,17 @@ class KettleCfg(BaseRLTaskCfg):
                         "WRJ1": 0.0,
                         "WRJ2": 0.0,
                         "panda_joint1": 0.0,
-                        "panda_joint2": -0.4116,
+                        "panda_joint2": -0.785398,
                         "panda_joint3": 0.0,
-                        "panda_joint4": -2.0366,
-                        "panda_joint5": -0.02386,
-                        "panda_joint6": 3.1105,
-                        "panda_joint7": 0.76586,
+                        "panda_joint4": -2.356194,
+                        "panda_joint5": 0.0,
+                        "panda_joint6": 3.1415928,
+                        "panda_joint7": 2.35619445,
                     },
                 },
                 "franka_shadow_left": {
-                    "pos": torch.tensor([-1.0, -0.2, 0.0]),
-                    "rot": torch.tensor([1, 0, 0, 0]),
+                    "pos": torch.tensor([0.88, -0.2, 0.0]),
+                    "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "FFJ1": 0.0,
                         "FFJ2": 0.0,
@@ -255,12 +255,12 @@ class KettleCfg(BaseRLTaskCfg):
                         "WRJ1": 0.0,
                         "WRJ2": 0.0,
                         "panda_joint1": 0.0,
-                        "panda_joint2": -0.4116,
+                        "panda_joint2": -0.785398,
                         "panda_joint3": 0.0,
-                        "panda_joint4": -2.0366,
-                        "panda_joint5": -0.02386,
-                        "panda_joint6": 3.1105,
-                        "panda_joint7": 0.76586,
+                        "panda_joint4": -2.356194,
+                        "panda_joint5": 0.0,
+                        "panda_joint6": 3.1415928,
+                        "panda_joint7": -0.785398,
                     },
                 },
             },
@@ -351,10 +351,6 @@ class KettleCfg(BaseRLTaskCfg):
         num_envs = envstates.robots[self.robots[0].name].root_state.shape[0]
         if self.num_envs is None:
             self.num_envs = num_envs
-        if self.goal_pos is None:
-            self.goal_pos = (
-                torch.tensor(self.init_goal_pos, dtype=torch.float, device=self.device).view(1, -1).repeat(num_envs, 1)
-            )
         obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float, device=device)
         t = 0
         obs[:, : self.robots[0].observation_shape] = self.robots[0].observation()
@@ -389,7 +385,7 @@ class KettleCfg(BaseRLTaskCfg):
             kettle_handle_pos = envstates.objects["kettle"].root_state[:, :3]
             kettle_handle_rot = envstates.objects["kettle"].root_state[:, 3:7]
             kettle_handle_pos = kettle_handle_pos + math.quat_apply(kettle_handle_rot, self.x_unit_tensor * 0.15)
-            bucket_handle_pos = envstates.objects["bucket"].root_state[:, self.bucket_handle_idx, :3]
+            bucket_handle_pos = envstates.objects["bucket"].root_state[:, :3]
             bucket_handle_rot = envstates.objects["bucket"].root_state[:, 3:7]
             bucket_handle_pos = bucket_handle_pos + math.quat_apply(bucket_handle_rot, self.z_unit_tensor * -0.1)
             obs[:, t : t + 3] = kettle_handle_pos

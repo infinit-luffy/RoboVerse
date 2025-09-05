@@ -68,8 +68,8 @@ class PushBlockCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False, friction=0.5),
-        FrankaShadowHandLeftCfg(use_vhacd=False, friction=0.5),
+        FrankaShadowHandRightCfg(use_vhacd=False, friction=0.5, robot_controller="dof_pos", isaacgym_read_mjcf=True),
+        FrankaShadowHandLeftCfg(use_vhacd=False, friction=0.5, robot_controller="dof_pos", isaacgym_read_mjcf=True),
     ]
     step_actions_shape = 0
     for robot in robots:

@@ -64,8 +64,8 @@ class PenCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False, friction=1.0),
-        FrankaShadowHandLeftCfg(use_vhacd=False, friction=1.0),
+        FrankaShadowHandRightCfg(use_vhacd=False, friction=1.0, robot_controller="dof_pos", isaacgym_read_mjcf=True),
+        FrankaShadowHandLeftCfg(use_vhacd=False, friction=1.0, robot_controller="dof_pos", isaacgym_read_mjcf=True),
     ]
     step_actions_shape = 0
     for robot in robots:
@@ -359,13 +359,13 @@ class PenCfg(BaseRLTaskCfg):
             pen_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
             pen_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
             pen_right_handle_pos = pen_right_handle_pos + math.quat_apply(
-                pen_right_handle_rot, self.z_unit_tensor * -0.1
+                pen_right_handle_rot, self.y_unit_tensor * -0.1
             )
             if self.l_handle_idx is None:
                 self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
             pen_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
             pen_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
-            pen_left_handle_pos = pen_left_handle_pos + math.quat_apply(pen_left_handle_rot, self.z_unit_tensor * 0.07)
+            pen_left_handle_pos = pen_left_handle_pos + math.quat_apply(pen_left_handle_rot, self.z_unit_tensor * 0.1)
             obs[:, t : t + 3] = pen_right_handle_pos
             t += 3
             obs[:, t : t + 3] = pen_left_handle_pos
@@ -407,11 +407,11 @@ class PenCfg(BaseRLTaskCfg):
         """
         pen_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
         pen_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
-        pen_right_handle_pos = pen_right_handle_pos + math.quat_apply(pen_right_handle_rot, self.z_unit_tensor * -0.1)
+        pen_right_handle_pos = pen_right_handle_pos + math.quat_apply(pen_right_handle_rot, self.y_unit_tensor * -0.1)
 
         pen_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
         pen_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
-        pen_left_handle_pos = pen_left_handle_pos + math.quat_apply(pen_left_handle_rot, self.z_unit_tensor * 0.07)
+        pen_left_handle_pos = pen_left_handle_pos + math.quat_apply(pen_left_handle_rot, self.z_unit_tensor * 0.1)
 
         right_hand_reward = self.robots[0].reward(pen_right_handle_pos)
         left_hand_reward = self.robots[1].reward(pen_left_handle_pos)
@@ -602,9 +602,9 @@ def compute_task_reward(
     reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_reward <= 0, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_reward <= -0.3, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_reward <= -0.3, torch.ones_like(resets), resets)
+    reset_buf = torch.zeros_like(reset_buf)
+    resets = torch.where(right_hand_reward <= -0.7, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(left_hand_reward <= -0.7, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

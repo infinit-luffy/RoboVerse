@@ -685,7 +685,7 @@ class IsaacgymHandler(BaseSimHandler):
                 robot_pose = gymapi.Transform()
                 robot_pose.p = gymapi.Vec3(*robot_init_pos)
                 robot_pose.r = gymapi.Quat(*robot_init_quat[1:], robot_init_quat[0])  # x, y, z, w order for gymapi.Quat
-                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, robot.name, i, 1)
+                robot_handle = self.gym.create_actor(env, robot_asset, robot_pose, robot.name, i, 0)
                 self.gym.enable_actor_dof_force_sensors(env, robot_handle)
                 assert robot.scale[0] == 1.0 and robot.scale[1] == 1.0 and robot.scale[2] == 1.0
                 self.gym.set_actor_scale(env, robot_handle, robot.scale[0])

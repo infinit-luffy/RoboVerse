@@ -91,7 +91,7 @@ class ScissorCfg(BaseRLTaskCfg):
         friction_offset_threshold=0.04,
     )
     arm_translation_scale = 0.04
-    arm_orientation_scale = 0.25
+    arm_orientation_scale = 0.05
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
     sensors = []
@@ -605,7 +605,7 @@ def compute_task_reward(
     reward = right_hand_reward + left_hand_reward + up_rew
 
     # Find out which envs hit the goal and update successes count
-    success = object_dof[:, 0] > -0.3
+    success = (object_dof[:, 0] > -0.3) & (right_hand_reward >= 0.8) & (left_hand_reward >= 0.8)
     success_buf = torch.where(
         success_buf == 0,
         torch.where(

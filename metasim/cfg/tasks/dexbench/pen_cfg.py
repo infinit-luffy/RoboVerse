@@ -91,7 +91,7 @@ class PenCfg(BaseRLTaskCfg):
         friction_offset_threshold=0.04,
     )
     arm_translation_scale = 0.04
-    arm_orientation_scale = 0.25
+    arm_orientation_scale = 0.05
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
     sensors = []
@@ -111,7 +111,7 @@ class PenCfg(BaseRLTaskCfg):
         "isaacgym"
     )
     action_penalty_scale = 0
-    reach_goal_bonus = 250.0
+    reach_goal_bonus = 50.0
     fall_penalty = 0.0
     reset_position_noise = 0.0
     reset_dof_pos_noise = 0.0

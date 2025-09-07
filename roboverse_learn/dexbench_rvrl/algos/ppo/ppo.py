@@ -23,6 +23,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from roboverse_learn.dexbench_rvrl.algos.ppo.module import ActorCritic, ActorCritic_RGB
+from roboverse_learn.dexbench_rvrl.algos.ppo.storage import RolloutStorage
 
 
 ########################################################
@@ -83,6 +84,7 @@ class PPO:
         learn_cfg = self.train_cfg["learn"]
         self.desired_kl = learn_cfg.get("desired_kl", None)
         self.schedule = learn_cfg.get("schedule", "fixed")
+        self.sampler = learn_cfg.get("sampler", "sequential")
         self.step_size = learn_cfg["optim_stepsize"]
         self.init_noise_std = learn_cfg.get("init_noise_std", 0.3)
         self.nsteps = learn_cfg["nsteps"]
@@ -120,16 +122,9 @@ class PPO:
 
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.step_size, eps=1e-5)
 
-        self.obss = torch.zeros((self.nsteps + 1, self.num_envs, self.obs_dim), device=device)
-        self.actions = torch.zeros((self.nsteps + 1, self.num_envs, self.action_dim), device=device)
-        self.log_probs = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
-        self.mu = torch.zeros((self.nsteps + 1, self.num_envs, self.action_dim), device=device)
-        self.sigma = torch.zeros((self.nsteps + 1, self.num_envs, self.action_dim), device=device)
-        self.values = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
-        self.rewards = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
-        self.advantages = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
-        self.returns = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
-        self.dones = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
+        self.buffer = RolloutStorage(
+            self.num_envs, self.nsteps, self.obs_dim, self.action_dim, device=self.device, sampler=self.sampler
+        )
 
         self.episode_rewards = RollingMeter(learn_cfg.get("window_size", 100))
         self.episode_lengths = RollingMeter(learn_cfg.get("window_size", 100))
@@ -137,8 +132,7 @@ class PPO:
         self.cur_episode_length = torch.zeros(self.num_envs, device=device)
 
         ## PPO params
-        self.batch_size = self.num_envs * self.nsteps
-        self.mini_batch_size = self.batch_size // learn_cfg.get("num_minibatches", 32)
+        self.num_mini_batches = learn_cfg.get("num_minibatches", 32)
         self.clip_param = learn_cfg.get("clip_param", 0.2)
         self.value_loss_coef = learn_cfg.get("value_loss_coef", 2.0)
         self.entropy_coef = learn_cfg.get("entropy_coef", 0.0)
@@ -179,9 +173,7 @@ class PPO:
         elif self.model_dir is not None:
             self.load(self.model_dir)
             print(f"Loaded model from {self.model_dir}")
-        obs = self.env.reset()
-        self.obss[0] = obs
-        self.dones[0] = torch.zeros(self.num_envs).to(self.device)
+        obs = self.env.reset().clone()
         if not self.is_testing:
             for iteration in range(self.current_learning_iteration, self.max_iterations):
                 ## collect rollout
@@ -190,43 +182,33 @@ class PPO:
                 for t in range(self.nsteps):
                     self.global_step += self.num_envs
 
-                    with torch.no_grad():
-                        action, log_prob, value, mu, sigma = self.actor_critic.act(self.obss[t])
-
+                    action, log_prob, value, mu, sigma = self.actor_critic.act(obs)
                     next_obs, reward, terminated, truncated, infos = self.env.step(action)
-
-                    next_done = torch.logical_or(terminated, truncated)
-                    self.actions[t].copy_(action)
-                    self.log_probs[t].copy_(log_prob)
-                    self.mu[t].copy_(mu)
-                    self.sigma[t].copy_(sigma)
-                    self.values[t].copy_(value.view(-1))
-                    self.rewards[t].copy_(reward.view(-1))
-                    self.obss[t + 1].copy_(next_obs)
-                    self.dones[t + 1].copy_(next_done)
+                    dones = torch.logical_or(terminated, truncated)
+                    self.buffer.add_transitions(obs, action, reward, dones, value.view(-1), log_prob, mu, sigma)
 
                     obs.copy_(next_obs)
 
                     self.cur_rewards_sum += reward
                     self.cur_episode_length += 1
-                    self.episode_rewards.update(self.cur_rewards_sum[next_done])
-                    self.episode_lengths.update(self.cur_episode_length[next_done])
-                    self.cur_rewards_sum[next_done] = 0
-                    self.cur_episode_length[next_done] = 0
+                    self.episode_rewards.update(self.cur_rewards_sum[dones])
+                    self.episode_lengths.update(self.cur_episode_length[dones])
+                    self.cur_rewards_sum[dones] = 0
+                    self.cur_episode_length[dones] = 0
                     ep_infos.append(infos)
 
-                _, _, last_values, _, _ = self.actor_critic.act(self.obss[self.nsteps])
-                self.values[self.nsteps].copy_(last_values.view(-1))
+                _, _, last_values, _, _ = self.actor_critic.act(obs)
                 collection_time = time.time() - start_time
                 self.tot_time += collection_time
 
                 mean_episode_length = self.episode_lengths.mean if self.episode_lengths.len > 0 else 0
                 mean_episode_reward = self.episode_rewards.mean if self.episode_rewards.len > 0 else 0
-                mean_reward = self.rewards[:-1].mean().item()
+                mean_reward = self.buffer.mean_reward()
 
                 compute_start_time = time.time()
-                self.compute_returns()
+                self.buffer.compute_returns(last_values.view(-1), self.gamma, self.lam)
                 mean_value_loss, mean_surrogate_loss = self.update()
+                self.buffer.clear()
                 learn_time = time.time() - compute_start_time
                 self.tot_time += learn_time
                 if self.print_log:
@@ -237,50 +219,36 @@ class PPO:
         else:
             raise NotImplementedError
 
-    def compute_returns(self):
-        with torch.no_grad():
-            self.advantages[self.nsteps] = 0
-            for t in reversed(range(self.nsteps)):
-                delta = self.rewards[t] + self.gamma * self.values[t + 1] * (1 - self.dones[t + 1]) - self.values[t]
-                self.advantages[t] = delta + self.gamma * self.lam * self.advantages[t + 1] * (1 - self.dones[t + 1])
-            self.returns = self.advantages + self.values
-            self.advantages = (self.advantages - self.advantages.mean()) / (self.advantages.std() + 1e-8)
-
     def update(self):
         ## log
         mean_value_loss = 0
         mean_surrogate_loss = 0
 
         ## flatten and shuffle
-        random_indices = torch.randperm(self.batch_size)
-        b_obs = self.obss[:-1].view(-1, self.obs_dim)[random_indices]
-        b_log_probs = self.log_probs[:-1].view(-1)[random_indices]
-        b_mu = self.mu[:-1].view(-1, self.action_dim)[random_indices]
-        b_sigma = self.sigma[:-1].view(-1, self.action_dim)[random_indices]
-        b_actions = self.actions[:-1].view(-1, self.action_dim)[random_indices]
-        b_returns = self.returns[:-1].view(-1)[random_indices]
-        b_advantages = self.advantages[:-1].view(-1)[random_indices]
-        b_values = self.values[:-1].view(-1)[random_indices]
+        batch = self.buffer.mini_batch_generator(self.num_mini_batches)
 
         ## optimize
         for epoch in range(self.num_learning_epochs):
-            for start in range(0, self.batch_size, self.mini_batch_size):
-                end = start + self.mini_batch_size
+            for indices in batch:
+                obs_batch = self.buffer.observations.view(-1, self.obs_dim)[indices]
+                actions_batch = self.buffer.actions.view(-1, self.action_dim)[indices]
+                returns_batch = self.buffer.returns.view(-1)[indices]
+                old_log_probs_batch = self.buffer.actions_log_prob.view(-1)[indices]
+                advantages_batch = self.buffer.advantages.view(-1)[indices]
+                old_mu_batch = self.buffer.mu.view(-1, self.action_dim)[indices]
+                old_sigma_batch = self.buffer.sigma.view(-1, self.action_dim)[indices]
 
-                new_log_probs, entropy, new_value, new_mu, new_sigma = self.actor_critic.evaluate(
-                    b_obs[start:end], b_actions[start:end]
+                new_log_probs_batch, entropy_batch, values_batch, new_mu_batch, new_sigma_batch = (
+                    self.actor_critic.evaluate(obs_batch, actions_batch)
                 )
-
-                mb_sigma = b_sigma[start:end]
-                mb_mu = b_mu[start:end]
 
                 # KL
                 if self.desired_kl is not None and self.schedule == "adaptive":
                     kl = torch.sum(
-                        new_sigma
-                        - mb_sigma
-                        + (torch.square(mb_sigma.exp()) + torch.square(mb_mu - new_mu))
-                        / (2.0 * new_sigma.exp().square())
+                        new_sigma_batch
+                        - old_sigma_batch
+                        + (torch.square(old_sigma_batch.exp()) + torch.square(old_mu_batch - new_mu_batch))
+                        / (2.0 * torch.square(new_sigma_batch.exp()))
                         - 0.5,
                         axis=-1,
                     )
@@ -293,20 +261,17 @@ class PPO:
                         param_group["lr"] = self.step_size
 
                 # surrogate loss
-                logratio = new_log_probs - b_log_probs[start:end]
-                ratio = logratio.exp()
+                ratio = torch.exp(new_log_probs_batch - old_log_probs_batch)
 
-                mb_advantages = b_advantages[start:end]
-
-                surr_loss1 = mb_advantages * ratio
-                surr_loss2 = mb_advantages * torch.clamp(ratio, 1 - self.clip_param, 1 + self.clip_param)
-                surr_loss = -torch.min(surr_loss1, surr_loss2).mean()
+                surr_loss1 = -advantages_batch * ratio
+                surr_loss2 = -advantages_batch * torch.clamp(ratio, 1 - self.clip_param, 1 + self.clip_param)
+                surr_loss = torch.max(surr_loss1, surr_loss2).mean()
 
                 # value loss
-                value_loss = 0.5 * (new_value - b_returns[start:end]).pow(2).mean()
+                value_loss = (returns_batch - values_batch.view(-1)).pow(2).mean()
 
                 # total loss
-                loss = surr_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy.mean()
+                loss = surr_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -316,7 +281,7 @@ class PPO:
                 mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surr_loss.item()
 
-        num_updates = self.batch_size * self.num_learning_epochs / self.mini_batch_size
+        num_updates = self.num_mini_batches * self.num_learning_epochs
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
 

@@ -24,8 +24,9 @@ import torch
 import tyro
 import wandb
 import yaml
-from dexbench_rvrl.algos.agent_factory import create_agent
-from dexbench_rvrl.envs import create_vector_env
+
+from roboverse_learn.dexbench_rvrl.algos.agent_factory import create_agent
+from roboverse_learn.dexbench_rvrl.envs import create_vector_env
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import jax
@@ -76,18 +77,20 @@ class Args:
     experiment: str = "Base"
     algo: str = "ppo"
     seed: int = 0
-    model_dir: str = ""
+    model_dir: str = None
     use_wandb: bool = False
     wandb_project: str = "roboverse_dexbench_rl"
     objects: str = None
     obs_type: str = "state"  # "state" or "rgb"
-    no_prior: bool = False
+    no_prio: bool = False
 
 
 ################################################
 ## Load train cfg
 ################################################
 def get_config_path(args):
+    task = args.env_id.split("/")[-1]
+    args.task = task
     if args.task in [
         "HandOver",
         "CatchUnderarm",
@@ -103,32 +106,32 @@ def get_config_path(args):
     ]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/config.yaml",
+            f"roboverse_learn/dexbench_rvrl/cfg/{args.algo}/{args.obs_type}/config.yaml",
         )
     elif args.task in ["StackBlock"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/stack_block_config.yaml",
+            f"roboverse_learn/dexbench_rvrl/cfg/{args.algo}/{args.obs_type}/stack_block_config.yaml",
         )
     elif args.task in ["DoorOpenInward", "DoorOpenOutward"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/open_config.yaml",
+            f"roboverse_learn/dexbench_rvrl/cfg/{args.algo}/{args.obs_type}/open_config.yaml",
         )
     elif args.task in ["LiftUnderarm"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/lift_config.yaml",
+            f"roboverse_learn/dexbench_rvrl/cfg/{args.algo}/{args.obs_type}/lift_config.yaml",
         )
     elif args.task in ["ReOrientation"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/re_orientation_config.yaml",
+            f"roboverse_learn/dexbench_rvrl/cfg/{args.algo}/{args.obs_type}/re_orientation_config.yaml",
         )
     elif args.task in ["TurnButton", "Scissor", "Pen"]:
         return (
             os.path.join(args.logdir, f"{args.task}/{args.algo}"),
-            f"roboverse_learn/dexbench/cfg/{args.algo}/{args.obs_type}/smooth_config.yaml",
+            f"roboverse_learn/dexbench_rvrl/cfg/{args.algo}/{args.obs_type}/smooth_config.yaml",
         )
     else:
         raise ValueError(f"Unrecognized task: {args.task}. Please specify a valid task.")
@@ -206,6 +209,10 @@ def main():
 
     log.info(f"{envs.single_action_space.shape=}")
     log.info(f"{envs.single_observation_space.shape=}")
+
+    log.info(f"Algorithm: {args.algo}")
+    log.info(f"Number of environments: {args.num_envs}")
+    agent.run()
 
 
 if __name__ == "__main__":

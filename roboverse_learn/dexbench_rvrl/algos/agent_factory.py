@@ -1,4 +1,5 @@
-from ppo import PPO
+from roboverse_learn.dexbench_rvrl.algos.ppo.ppo import PPO
+from roboverse_learn.dexbench_rvrl.algos.sac.sac import SAC
 
 
 def create_agent(
@@ -29,13 +30,14 @@ def create_agent(
     """
     ALGO_MAP = {
         "PPO": PPO,
+        "SAC": SAC,
     }
 
     assert algo.upper() in ALGO_MAP, f"Algorithm {algo} not supported. Supported algorithms: {list(ALGO_MAP.keys())}"
 
     agent = ALGO_MAP[algo.upper()](
-        vec_env=env,
-        cfg_train=train_cfg,
+        env=env,
+        train_cfg=train_cfg,
         device=device,
         log_dir=log_dir,
         model_dir=model_dir,

@@ -9,7 +9,6 @@ import copy
 import os
 import time
 from collections import deque
-from datetime import datetime
 
 import rootutils
 from loguru import logger as log
@@ -22,13 +21,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import tyro
-from dexbench_rvrl.algos.module import ActorCritic, ActorCritic_RGB
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-import jax
+from roboverse_learn.dexbench_rvrl.algos.ppo.module import ActorCritic, ActorCritic_RGB
 
 
 ########################################################
@@ -92,8 +86,7 @@ class PPO:
         self.step_size = learn_cfg["optim_stepsize"]
         self.init_noise_std = learn_cfg.get("init_noise_std", 0.3)
         self.nsteps = learn_cfg["nsteps"]
-        self.learning_rate = learn_cfg["optim_stepsize"]
-        self.num_envs = learn_cfg["num_envs"]
+        self.num_envs = env.num_envs
         self.num_learning_epochs = learn_cfg.get("num_learning_epochs", 8)
         self.max_iterations = learn_cfg.get("max_iterations", 100000)
         self.log_interval = learn_cfg.get("log_interval", 1)
@@ -125,13 +118,13 @@ class PPO:
         else:
             raise ValueError(f"Unsupported observation type: {self.obs_type}")
 
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.learning_rate, eps=1e-5)
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.step_size, eps=1e-5)
 
-        self.obss = torch.zeros((self.nsteps + 1, self.num_envs) + self.obs_dim, device=device)
-        self.actions = torch.zeros((self.nsteps + 1, self.num_envs) + self.action_dim, device=device)
+        self.obss = torch.zeros((self.nsteps + 1, self.num_envs, self.obs_dim), device=device)
+        self.actions = torch.zeros((self.nsteps + 1, self.num_envs, self.action_dim), device=device)
         self.log_probs = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
-        self.mu = torch.zeros((self.nsteps + 1, self.num_envs) + self.action_dim, device=device)
-        self.sigma = torch.zeros((self.nsteps + 1, self.num_envs) + self.action_dim, device=device)
+        self.mu = torch.zeros((self.nsteps + 1, self.num_envs, self.action_dim), device=device)
+        self.sigma = torch.zeros((self.nsteps + 1, self.num_envs, self.action_dim), device=device)
         self.values = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
         self.rewards = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
         self.advantages = torch.zeros((self.nsteps + 1, self.num_envs), device=device)
@@ -146,7 +139,6 @@ class PPO:
         ## PPO params
         self.batch_size = self.num_envs * self.nsteps
         self.mini_batch_size = self.batch_size // learn_cfg.get("num_minibatches", 32)
-        self.num_iterations = self.total_timesteps // self.batch_size
         self.clip_param = learn_cfg.get("clip_param", 0.2)
         self.value_loss_coef = learn_cfg.get("value_loss_coef", 2.0)
         self.entropy_coef = learn_cfg.get("entropy_coef", 0.0)
@@ -161,6 +153,7 @@ class PPO:
         self.wandb_run = wandb_run
         self.is_testing = is_testing
         self.current_learning_epoch = 0
+        self.current_learning_iteration = 0
         self.global_step = 0
         self.tot_time = 0
 
@@ -190,7 +183,7 @@ class PPO:
         self.obss[0] = obs
         self.dones[0] = torch.zeros(self.num_envs).to(self.device)
         if not self.is_testing:
-            for iteration in tqdm(range(self.current_learning_iteration, self.max_iterations)):
+            for iteration in range(self.current_learning_iteration, self.max_iterations):
                 ## collect rollout
                 start_time = time.time()
                 ep_infos = []
@@ -220,25 +213,29 @@ class PPO:
                     self.episode_lengths.update(self.cur_episode_length[next_done])
                     self.cur_rewards_sum[next_done] = 0
                     self.cur_episode_length[next_done] = 0
+                    ep_infos.append(infos)
 
                 _, _, last_values, _, _ = self.actor_critic.act(self.obss[self.nsteps])
-                self.values[self.nsteps].copy_(last_values)
+                self.values[self.nsteps].copy_(last_values.view(-1))
                 collection_time = time.time() - start_time
                 self.tot_time += collection_time
 
                 mean_episode_length = self.episode_lengths.mean if self.episode_lengths.len > 0 else 0
                 mean_episode_reward = self.episode_rewards.mean if self.episode_rewards.len > 0 else 0
+                mean_reward = self.rewards[:-1].mean().item()
 
                 compute_start_time = time.time()
                 self.compute_returns()
                 mean_value_loss, mean_surrogate_loss = self.update()
-                compute_time = time.time() - compute_start_time
-                self.tot_time += compute_time
+                learn_time = time.time() - compute_start_time
+                self.tot_time += learn_time
                 if self.print_log:
                     self.log(locals())
                 if (iteration + 1) % self.log_interval == 0 or iteration == self.max_iterations - 1:
                     self.save(os.path.join(self.log_dir, f"model_{iteration + 1}.pt"))
                 ep_infos.clear()
+        else:
+            raise NotImplementedError
 
     def compute_returns(self):
         with torch.no_grad():
@@ -274,12 +271,16 @@ class PPO:
                     b_obs[start:end], b_actions[start:end]
                 )
 
+                mb_sigma = b_sigma[start:end]
+                mb_mu = b_mu[start:end]
+
                 # KL
                 if self.desired_kl is not None and self.schedule == "adaptive":
                     kl = torch.sum(
                         new_sigma
-                        - b_sigma
-                        + (torch.square(b_sigma.exp()) + torch.square(b_mu - new_mu)) / (2.0 * new_sigma.exp().square())
+                        - mb_sigma
+                        + (torch.square(mb_sigma.exp()) + torch.square(mb_mu - new_mu))
+                        / (2.0 * new_sigma.exp().square())
                         - 0.5,
                         axis=-1,
                     )
@@ -322,7 +323,7 @@ class PPO:
         return mean_value_loss, mean_surrogate_loss
 
     def log(self, locs, width=80, pad=35):
-        iteration_time = locs["collection_time"] + locs["compute_time"]
+        iteration_time = locs["collection_time"] + locs["learn_time"]
         ep_string = ""
         if locs["ep_infos"]:
             for key in locs["ep_infos"][0]:
@@ -336,9 +337,9 @@ class PPO:
         mean_std = self.actor_critic.log_std.exp().mean()
 
         fps = int(self.nsteps * self.num_envs / iteration_time)
-        str = f" \033[1m Learning iteration {locs['iteration']}/{locs['max_iterations']} \033[0m "
+        str = f" \033[1m Learning iteration {locs['iteration']}/{self.max_iterations} \033[0m "
 
-        if len(locs["rewbuffer"]) > 0:
+        if self.episode_rewards.len > 0:
             log_string = (
                 f"""{"#" * width}\n"""
                 f"""{str.center(width, " ")}\n\n"""
@@ -349,7 +350,6 @@ class PPO:
                 f"""{"Mean reward:":>{pad}} {locs["mean_episode_reward"]:.2f}\n"""
                 f"""{"Mean episode length:":>{pad}} {locs["mean_episode_length"]:.2f}\n"""
                 f"""{"Mean reward/step:":>{pad}} {locs["mean_reward"]:.2f}\n"""
-                f"""{"Mean episode length/episode:":>{pad}} {locs["mean_trajectory_length"]:.2f}\n"""
             )
         else:
             log_string = (
@@ -360,7 +360,6 @@ class PPO:
                 f"""{"Surrogate loss:":>{pad}} {locs["mean_surrogate_loss"]:.4f}\n"""
                 f"""{"Mean action noise std:":>{pad}} {mean_std.item():.2f}\n"""
                 f"""{"Mean reward/step:":>{pad}} {locs["mean_reward"]:.2f}\n"""
-                f"""{"Mean episode length/episode:":>{pad}} {locs["mean_trajectory_length"]:.2f}\n"""
             )
 
         log_string += ep_string
@@ -369,7 +368,7 @@ class PPO:
             f"""{"Total timesteps:":>{pad}} {self.global_step}\n"""
             f"""{"Iteration time:":>{pad}} {iteration_time:.2f}s\n"""
             f"""{"Total time:":>{pad}} {self.tot_time:.2f}s\n"""
-            f"""{"ETA:":>{pad}} {self.tot_time / (locs["iteration"] + 1) * (locs["max_iterations"] - locs["iteration"]):.1f}s\n"""
+            f"""{"ETA:":>{pad}} {self.tot_time / (locs["iteration"] + 1) * (self.max_iterations - locs["iteration"]):.1f}s\n"""
         )
         print(log_string)
         if self.wandb_run is not None:
@@ -377,7 +376,6 @@ class PPO:
                 "Loss/surrogate": locs["mean_surrogate_loss"],
                 "Policy/noise_std": mean_std.item(),
                 "Train/mean_reward_per_step": locs["mean_reward"],
-                "Train/mean_episode_length_per_episode": locs["mean_trajectory_length"],
                 "Train/mean_succ_rate": locs["mean_succ_rate"],
                 "Train/fps": fps,
                 "timesteps_total": self.global_step,

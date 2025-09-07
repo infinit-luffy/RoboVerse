@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 import copy
-import os
 import random
 from collections import deque
 from copy import deepcopy
 
 import numpy as np
 import torch
-import yaml
 from gymnasium import spaces
 from loguru import logger as log
+
 from metasim.cfg.scenario import ScenarioCfg
 from metasim.constants import SimType
 from metasim.types import EnvState
 from metasim.utils.setup_util import get_sim_env_class, get_task
 from metasim.utils.state import list_state_to_tensor
-
-from rvrl.envs import BaseVecEnv
+from roboverse_learn.dexbench_rvrl.envs.base import BaseVecEnv
 
 
 class DexEnv(BaseVecEnv):
@@ -54,7 +52,7 @@ class DexEnv(BaseVecEnv):
         scenario.task.objects = scenario.objects
         self.sim_device = torch.device(args.device if torch.cuda.is_available() else "cpu")
         assert SimType(scenario.sim) == SimType.ISAACGYM, "Currently only support IsaacGym simulator."
-        self.num_envs = scenario.num_envs
+        self._num_envs = scenario.num_envs
         self.robots = scenario.robots
         self.task = scenario.task
 
@@ -71,14 +69,14 @@ class DexEnv(BaseVecEnv):
         self.num_joints = 0
         for robot in self.robots:
             self.num_joints += robot.num_joints
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(self.action_shape,), dtype=np.float32)
+        self._action_space = spaces.Box(low=-1.0, high=1.0, shape=(self.action_shape,), dtype=np.float32)
 
         # observation space
         # Create an observation space (398 dimensions) for a single environment, instead of the entire batch (num_envs,398).
         self.obs_type = getattr(scenario.task, "obs_type", "state")
         self.use_prio = getattr(scenario.task, "use_prio", True)
         obs_shape = (self.task.obs_shape,)
-        self.observation_space = spaces.Box(low=-5.0, high=5.0, shape=obs_shape, dtype=np.float32)
+        self._observation_space = spaces.Box(low=-5.0, high=5.0, shape=obs_shape, dtype=np.float32)
         if hasattr(self.task, "proprio_shape"):
             self.proprio_shape = self.task.proprio_shape
         else:
@@ -292,20 +290,20 @@ class DexEnv(BaseVecEnv):
 
     @property
     def single_observation_space(self):
-        return self.observation_space
+        return self._observation_space
 
     @property
     def observation_space(self):
-        return self.observation_space
+        return self._observation_space
 
     @property
     def single_action_space(self):
-        return self.action_space
+        return self._action_space
 
     @property
     def action_space(self):
-        return self.action_space
+        return self._action_space
 
     @property
     def num_envs(self) -> int:
-        return self.num_envs
+        return self._num_envs

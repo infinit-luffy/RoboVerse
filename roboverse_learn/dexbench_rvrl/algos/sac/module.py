@@ -16,11 +16,11 @@ class Actor(nn.Module):
             activation = get_activation(model_cfg["activation"])
 
         actor_layers = []
-        actor_layers.append(nn.Linear(*obs_shape, actor_hidden_dim[0]))
+        actor_layers.append(nn.Linear(obs_shape, actor_hidden_dim[0]))
         actor_layers.append(activation)
         for dim in range(len(actor_hidden_dim)):
             if dim == len(actor_hidden_dim) - 1:
-                actor_layers.append(nn.Linear(actor_hidden_dim[dim], *actions_shape * 2))
+                actor_layers.append(nn.Linear(actor_hidden_dim[dim], actions_shape * 2))
             else:
                 actor_layers.append(nn.Linear(actor_hidden_dim[dim], actor_hidden_dim[dim + 1]))
                 actor_layers.append(activation)

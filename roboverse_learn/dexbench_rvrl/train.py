@@ -182,7 +182,7 @@ def main():
 
     wandb_run = None
     if args.use_wandb and not args.test:
-        wandb_name = f"{args.task}_{args.algo}_{args.name}"
+        wandb_name = f"{args.task}_{args.algo}_{args.experiment}"
         if args.objects is not None:
             wandb_name += f"_{args.objects}"
         if args.experiment != "Base":
@@ -190,7 +190,7 @@ def main():
         wandb_name += f"_{time.strftime('%Y_%m_%d_%H_%M_%S')}"
         wandb_run = wandb.init(
             project=args.wandb_project,
-            config=args.train_cfg,
+            config=train_cfg,
             name=wandb_name,
             dir=logdir,
         )

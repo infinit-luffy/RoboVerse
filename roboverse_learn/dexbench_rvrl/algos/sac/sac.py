@@ -11,17 +11,12 @@ import time
 from collections import deque
 from itertools import chain
 
-import tqdm
-
-os.environ["MUJOCO_GL"] = "egl"  # significantly faster rendering compared to glfw and osmesa
-
 import numpy as np
 import torch
 import torch.nn.functional as F
 from loguru import logger as log
 from tensordict import TensorDict
 from torch import Tensor
-from tqdm import tqdm
 
 from roboverse_learn.dexbench_rvrl.algos.sac.module import Actor, QNet
 from roboverse_learn.dexbench_rvrl.algos.sac.storage import ReplayBuffer
@@ -34,8 +29,11 @@ class RollingMeter:
         self.window_size = window_size
         self.deque = deque(maxlen=window_size)
 
-    def update(self, rewards: torch.Tensor):
-        self.deque.extend(rewards.cpu().numpy().tolist())
+    def update(self, rewards):
+        if isinstance(rewards, torch.Tensor):
+            self.deque.extend(rewards.cpu().numpy().tolist())
+        elif isinstance(rewards, float):
+            self.deque.append(rewards)
 
     @property
     def len(self) -> int:
@@ -88,22 +86,23 @@ class SAC:
         self.alpha = learn_cfg.get("alpha", 0.2)
         self.policy_frequency = learn_cfg.get("policy_frequency", 2)
         self.target_network_frequency = learn_cfg.get("target_network_frequency", 2)
-        self.num_envs = learn_cfg["num_envs"]
+        self.num_envs = env.num_envs
         self.batch_size = learn_cfg["batch_size"]
         self.max_iterations = learn_cfg.get("max_iterations", 100000)
         self.log_interval = learn_cfg.get("log_interval", 1)
         self.print_interval = learn_cfg.get("print_interval", 10)
         self.prefill = learn_cfg.get("prefill", 5000)
+        self.max_grad_norm = learn_cfg.get("max_grad_norm", None)
 
         self.model_cfg = self.train_cfg.get("policy", None)
 
         ## Replay buffer
-        buffer = ReplayBuffer(
+        self.buffer = ReplayBuffer(
             self.obs_dim,
             self.action_dim,
             device,
             self.num_envs,
-            self.train_cfg["buffer_size"],
+            learn_cfg.get("buffer_size", 5000),
         )
 
         ## SAC components
@@ -114,10 +113,14 @@ class SAC:
         self.qf2_target = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
         self.qf1_target.load_state_dict(self.qf1.state_dict())
         self.qf2_target.load_state_dict(self.qf2.state_dict())
-        self.qf1_params = TensorDict(self.qf1.named_parameters(), batch_size=())
-        self.qf2_params = TensorDict(self.qf2.named_parameters(), batch_size=())
-        self.qf1_target_params = TensorDict(self.qf1_target.named_parameters(), batch_size=())
-        self.qf2_target_params = TensorDict(self.qf2_target.named_parameters(), batch_size=())
+        for param in self.qf1_target.parameters():
+            param.requires_grad = False
+        for param in self.qf2_target.parameters():
+            param.requires_grad = False
+        self.qf1_params = TensorDict(dict(self.qf1.named_parameters(), batch_size=()))
+        self.qf2_params = TensorDict(dict(self.qf2.named_parameters(), batch_size=()))
+        self.qf1_target_params = TensorDict(dict(self.qf1_target.named_parameters(), batch_size=()))
+        self.qf2_target_params = TensorDict(dict(self.qf2_target.named_parameters(), batch_size=()))
 
         ## Optimizers
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
@@ -126,12 +129,12 @@ class SAC:
         ## Logging
         self.episode_rewards = RollingMeter(learn_cfg.get("window_size", 100))
         self.episode_lengths = RollingMeter(learn_cfg.get("window_size", 100))
-        self.reward_per_step = RollingMeter(learn_cfg.get("window_size", 100))
         self.actor_losses = RollingMeter(learn_cfg.get("window_size", 100))
         self.critic_losses = RollingMeter(learn_cfg.get("window_size", 100))
         self.q_values = RollingMeter(learn_cfg.get("window_size", 100))
-        self.cur_rewards_sum = torch.zeros(self.num_envs, dtype=torch.float32)
-        self.cur_episode_length = torch.zeros(self.num_envs, dtype=torch.int32)
+        self.cur_rewards_sum = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
+        self.cur_episode_length = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
+
         self.model_dir = model_dir
         self.log_dir = log_dir
         self.print_log = print_log
@@ -162,7 +165,7 @@ class SAC:
         log.info("Testing mode")
 
     def load(self, path):
-        self.current_learning_iteration = int(path.split("_")[-1].split(".")[0])
+        self.current_learning_iteration = int(path.split("_")[-1])
         actor_path = os.path.join(path, "actor.pt")
         if os.path.exists(actor_path):
             self.actor.load_state_dict(torch.load(actor_path, map_location=self.device))
@@ -194,26 +197,27 @@ class SAC:
             self.test(self.model_dir)
         elif self.model_dir is not None:
             self.load(self.model_dir)
-        obs = self.env.reset()
+        obs = self.env.reset().clone()
         self.start_time = time.time()
         if not self.is_testing:
             ep_infos = []
-            for iteration in tqdm(range(self.current_learning_iteration, self.max_iterations)):
+            for iteration in range(self.current_learning_iteration, self.max_iterations):
                 with timer("time/iteration"):
                     with torch.inference_mode(), timer("time/roll_out"):
                         if self.global_step < self.prefill:
-                            action = torch.as_tensor(self.env.action_space.sample(), device=self.device)
+                            action = torch.rand((self.num_envs, self.action_dim), device=self.device) * 2 - 1
                         else:
                             action, _ = self.actor.get_action(obs)
                         next_obs, reward, terminated, truncated, info = self.env.step(action)
                         done = torch.logical_or(terminated, truncated)
                         self.buffer.add(obs, action, reward, next_obs, done, terminated)
                         obs.copy_(next_obs)
+
                         ep_infos.append(info)
                         self.cur_rewards_sum += reward
                         self.cur_episode_length += 1
-                        self.reward_per_step.update(torch.mean(reward).item())
                         self.global_step += self.num_envs
+
                         if done.any():
                             self.episode_rewards.update(self.cur_rewards_sum[done])
                             self.episode_lengths.update(self.cur_episode_length[done])
@@ -221,6 +225,7 @@ class SAC:
                             self.cur_episode_length[done] = 0
 
                     self.global_step += self.num_envs
+                    mean_reward = self.buffer.mean_reward()
                     # update the model
                     if self.global_step >= self.prefill:
                         with timer("time/sample_data"):
@@ -230,15 +235,16 @@ class SAC:
                             if iteration % self.policy_frequency == 0:
                                 self.update_actor(data)
                             if iteration % self.target_network_frequency == 0:
-                                self.qf1_target_params.lerp_(self.qf1_params.data, self.tau)
-                                self.qf2_target_params.lerp_(self.qf2_params.data, self.tau)
+                                with torch.no_grad():
+                                    self.qf1_target_params.lerp_(self.qf1_params.data, self.tau)
+                                    self.qf2_target_params.lerp_(self.qf2_params.data, self.tau)
 
                 ## log
                 if (iteration + 1) % self.log_interval == 0 or iteration == self.max_iterations - 1:
                     log_dir = os.path.join(self.log_dir, f"model_{iteration + 1}")
                     os.makedirs(log_dir, exist_ok=True)
                     self.save(log_dir)
-                if (iteration + 1) % self.print_interval == 0:
+                if (iteration + 1) % self.print_interval == 0 & self.print_log:
                     self.log(locals())
                     ep_infos.clear()
 
@@ -247,14 +253,14 @@ class SAC:
         action = data["action"]
         next_obs = data["next_observation"]
         reward = data["reward"]
-        terminated = data["terminated"]
+        done = data["done"]
 
         with torch.no_grad():
             next_action, next_log_prob = self.actor.get_action(next_obs)
             qf1_next_target = self.qf1_target(next_obs, next_action)
             qf2_next_target = self.qf2_target(next_obs, next_action)
             min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_log_prob
-            next_q = reward + (1 - terminated) * self.gamma * min_qf_next_target
+            next_q = reward + (1 - done) * self.gamma * min_qf_next_target
 
         q1 = self.qf1(obs, action)
         q2 = self.qf2(obs, action)
@@ -263,10 +269,12 @@ class SAC:
         critic_loss = q1_loss + q2_loss
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        if self.max_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(chain(self.qf1.parameters(), self.qf2.parameters()), self.max_grad_norm)
         self.critic_optimizer.step()
-
-        self.q_values.update(torch.mean(q1, q2).detach())
-        self.critic_losses.update(critic_loss.detach())
+        q_mean = 0.5 * (q1.mean() + q2.mean()).detach().item()
+        self.q_values.update(q_mean)
+        self.critic_losses.update(critic_loss.detach().item())
 
     def update_actor(self, data: dict[str, Tensor]) -> TensorDict:
         obs = data["observation"]
@@ -277,9 +285,11 @@ class SAC:
         actor_loss = (self.alpha * log_prob - min_q).mean()
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        if self.max_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.max_grad_norm)
         self.actor_optimizer.step()
 
-        self.actor_losses.update(actor_loss.detach())
+        self.actor_losses.update(actor_loss.detach().item())
 
     def log(self, locs, width=80, pad=35):
         ep_string = ""
@@ -293,7 +303,7 @@ class SAC:
                 if key == "total_succ_rate":
                     locs["mean_succ_rate"] = value.item()
 
-        str = f" \033[1m Learning iteration {locs['iteration']}/{locs['max_iterations']} \033[0m "
+        str = f" \033[1m Learning iteration {locs['iteration']}/{self.max_iterations} \033[0m "
         log_string = (
             f"""{"#" * width}\n"""
             f"""{str.center(width, " ")}\n\n"""
@@ -305,11 +315,11 @@ class SAC:
         }
 
         if not timer.disabled:
-            time = timer.compute().item()
-            fps = (self.global_step - self.prev_global_step) / time["time/iteration"]
-            update_time = time["time/update_model"]
-            roll_out_time = time["time/roll_out"]
-            iteration_time = time["time/iteration"]
+            time_ = timer.compute()
+            fps = (self.global_step - self.prev_global_step) / time_["time/iteration"]
+            update_time = time_["time/update_model"]
+            roll_out_time = time_["time/roll_out"]
+            iteration_time = time_["time/iteration"]
             time_str = f"""{"Computation:":>{pad}} {fps:.0f} steps/s (collection {roll_out_time:.3f}s, learning {update_time:.3f}s)\n"""
             log_data["Train/fps"] = fps
             log_data["Time/roll_out"] = roll_out_time
@@ -327,8 +337,8 @@ class SAC:
             log_data["Train/mean_episode_length"] = episode_length
             log_data["Train/mean_reward"] = episode_reward
 
-        log_string += f"""{"Mean reward per step:":>{pad}} {self.reward_per_step.mean:.3f}\n"""
-        log_data["Train/mean_reward_per_step"] = self.reward_per_step.mean
+        log_string += f"""{"Mean reward per step:":>{pad}} {locs["mean_reward"]:.3f}\n"""
+        log_data["Train/mean_reward_per_step"] = locs["mean_reward"]
 
         if self.actor_losses.len > 0:
             actor_loss = self.actor_losses.mean
@@ -346,8 +356,8 @@ class SAC:
         log_string += (
             f"""{"-" * width}\n"""
             f"""{"Total timesteps:":>{pad}} {self.global_step}\n"""
-            f"""{"Total time:":>{pad}} {self.tot_time:.2f}s\n"""
-            f"""{"ETA:":>{pad}} {self.tot_time / (locs["iteration"] + 1) * (locs["max_iterations"] - locs["iteration"]):.1f}s\n"""
+            f"""{"Total time:":>{pad}} {tot_time:.2f}s\n"""
+            f"""{"ETA:":>{pad}} {tot_time / (locs["iteration"] + 1) * (self.max_iterations - locs["iteration"]):.1f}s\n"""
         )
         print(log_string)
         if self.wandb_run is not None:

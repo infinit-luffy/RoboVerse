@@ -4,14 +4,14 @@ clip_observations: 5.0
 clip_actions: 1.0
 
 policy: # only works for MlpPolicy right now
-  pi_hid_sizes: [1024, 1024, 1024]
-  q_hid_sizes: [1024, 1024, 1024]
+  pi_hid_sizes: [1024, 1024, 512]
+  q_hid_sizes: [1024, 1024, 512]
   activation: elu # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
 learn:
   agent_name: shadow_hand
   test: False
   resume: 0
-  log_interval: 1000
+  log_interval: 10000
   print_log: True
 
   # rollout params
@@ -21,11 +21,11 @@ learn:
   max_grad_norm: 1
   actor_lr: 3.e-4 # 3e-4 is default for single agent training with constant schedule
   critic_lr: 3.e-4
-  tau: 0.005
+  tau: 0.001
   alpha: 0.2
-  policy_frequency: 2
+  policy_frequency: 1
   target_network_frequency: 2
-  batch_size: 512
-  prefill: 5000
+  batch_size: 2048
+  prefill: 100000
   buffer_size: 5000
-  gamma: 0.99
+  gamma: 0.96

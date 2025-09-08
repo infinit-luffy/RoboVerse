@@ -171,7 +171,7 @@ def main():
         args=args,
     )
 
-    logdir = args.logdir + f"_seed{args.seed}" + f"_{args.obs_type}"
+    logdir = logdir + f"_seed{args.seed}" + f"_{args.obs_type}"
     if args.objects is not None:
         logdir += f"_{args.objects}"
     if args.experiment != "Base":

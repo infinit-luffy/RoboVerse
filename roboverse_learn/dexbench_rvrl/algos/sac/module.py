@@ -49,25 +49,25 @@ class Actor(nn.Module):
         # assume action is bounded in [-1, 1], which is the value range of tanh. Otherwise we need to add an affine transform
 
         ## Option 1
-        mean, log_std = self.forward(obs)
-        std = log_std.exp()
-        action_dist = TransformedDistribution(
-            Normal(mean, std), TanhTransform(cache_size=1)
-        )  # ! use cache_size=1 to avoid atanh which could cause nan
-        action_dist = Independent(action_dist, 1)
-        action = action_dist.rsample()
-        return action, action_dist.log_prob(action).unsqueeze(-1)
-
-        ## Option 2
-        # mean, log_std = self(obs)
+        # mean, log_std = self.forward(obs)
         # std = log_std.exp()
-        # normal = Normal(mean, std)
-        # x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
-        # action = torch.tanh(x_t)
-        # log_prob = normal.log_prob(x_t)
-        # log_prob -= torch.log((1 - action**2) + 1e-6)  # ! 1e-6 to avoid nan
-        # log_prob = log_prob.sum(1, keepdim=True)
-        # return action, log_prob
+        # action_dist = TransformedDistribution(
+        #     Normal(mean, std), TanhTransform(cache_size=1)
+        # )  # ! use cache_size=1 to avoid atanh which could cause nan
+        # action_dist = Independent(action_dist, 1)
+        # action = action_dist.rsample()
+        # return action, action_dist.log_prob(action).unsqueeze(-1)
+
+        # Option 2
+        mean, log_std = self(obs)
+        std = log_std.exp()
+        normal = Normal(mean, std)
+        x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
+        action = torch.tanh(x_t)
+        log_prob = normal.log_prob(x_t)
+        log_prob -= torch.log((1 - action**2) + 1e-6)  # ! 1e-6 to avoid nan
+        log_prob = log_prob.sum(-1, keepdim=True)
+        return action, log_prob
 
 
 class QNet(nn.Module):

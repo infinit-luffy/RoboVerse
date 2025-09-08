@@ -113,10 +113,6 @@ class SAC:
         self.qf2_target = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
         self.qf1_target.load_state_dict(self.qf1.state_dict())
         self.qf2_target.load_state_dict(self.qf2.state_dict())
-        for param in self.qf1_target.parameters():
-            param.requires_grad = False
-        for param in self.qf2_target.parameters():
-            param.requires_grad = False
         self.qf1_params = TensorDict(dict(self.qf1.named_parameters(), batch_size=()))
         self.qf2_params = TensorDict(dict(self.qf2.named_parameters(), batch_size=()))
         self.qf1_target_params = TensorDict(dict(self.qf1_target.named_parameters(), batch_size=()))
@@ -197,6 +193,10 @@ class SAC:
             self.test(self.model_dir)
         elif self.model_dir is not None:
             self.load(self.model_dir)
+        for param in self.qf1_target.parameters():
+            param.requires_grad = False
+        for param in self.qf2_target.parameters():
+            param.requires_grad = False
         obs = self.env.reset().clone()
         self.start_time = time.time()
         if not self.is_testing:
@@ -244,7 +244,7 @@ class SAC:
                     log_dir = os.path.join(self.log_dir, f"model_{iteration + 1}")
                     os.makedirs(log_dir, exist_ok=True)
                     self.save(log_dir)
-                if (iteration + 1) % self.print_interval == 0 & self.print_log:
+                if (iteration + 1) % self.print_interval == 0 and self.print_log:
                     self.log(locals())
                     ep_infos.clear()
 
@@ -317,7 +317,10 @@ class SAC:
         if not timer.disabled:
             time_ = timer.compute()
             fps = (self.global_step - self.prev_global_step) / time_["time/iteration"]
-            update_time = time_["time/update_model"]
+            if "time/update_model" not in time_:
+                update_time = 0.0
+            else:
+                update_time = time_["time/update_model"]
             roll_out_time = time_["time/roll_out"]
             iteration_time = time_["time/iteration"]
             time_str = f"""{"Computation:":>{pad}} {fps:.0f} steps/s (collection {roll_out_time:.3f}s, learning {update_time:.3f}s)\n"""

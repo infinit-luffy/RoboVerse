@@ -125,13 +125,33 @@ class ActorCritic_RGB(nn.Module):
         self.num_img = (obs_shape[0] - state_shape) // (3 * self.img_h * self.img_w)
 
         # img encoder
-        self.resnet = torchvision.models.resnet18(pretrained=True)
-        self.visual_feature_dim = self.resnet.fc.in_features
-        del self.resnet.fc
-        self.resnet.fc = nn.Identity()
-        if self.fix_img_encoder:
-            for param in self.resnet.parameters():
-                param.requires_grad = False
+        self.encoder_type = model_cfg.get("encoder_type", "resnet")
+        if self.encoder_type == "resnet":
+            self.visiual_encoder = torchvision.models.resnet18(pretrained=True)
+            self.visual_feature_dim = self.visiual_encoder.fc.in_features
+            del self.visiual_encoder.fc
+            self.visiual_encoder.fc = nn.Identity()
+            if self.fix_img_encoder:
+                for param in self.visiual_encoder.parameters():
+                    param.requires_grad = False
+        elif self.encoder_type == "cnn":
+            self.visiual_encoder = nn.Sequential(
+                nn.Conv2d(3, 32, kernel_size=8, stride=4),
+                nn.ReLU(),
+                nn.Conv2d(32, 64, 4, stride=2),
+                nn.ReLU(),
+                nn.Conv2d(64, 64, 3, stride=1),
+                nn.ReLU(),
+                nn.Flatten(),
+            )
+            with torch.no_grad():
+                test_data = torch.zeros(1, 3, self.img_h, self.img_w)
+                self.visual_feature_dim = self.visiual_encoder(test_data).shape[1]
+            if self.fix_img_encoder:
+                for param in self.visiual_encoder.parameters():
+                    param.requires_grad = False
+        else:
+            raise NotImplementedError
         self.fc_shape = self.visual_feature_dim * self.num_img + state_shape
 
         # Policy
@@ -193,9 +213,9 @@ class ActorCritic_RGB(nn.Module):
         # exit(0)
         if self.fix_img_encoder:
             with torch.no_grad():
-                img_features = self.resnet(img)
+                img_features = self.visiual_encoder(img)
         else:
-            img_features = self.resnet(img)  # (batch_size * num_img, visual_feature_dim)
+            img_features = self.visiual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(
             observations.shape[0], -1
         )  # (batch_size, num_img * visual_feature_dim)
@@ -224,9 +244,9 @@ class ActorCritic_RGB(nn.Module):
         img = observations[:, self.state_shape :].view(-1, 3, self.img_h, self.img_w)
         if self.fix_img_encoder:
             with torch.no_grad():
-                img_features = self.resnet(img)
+                img_features = self.visiual_encoder(img)
         else:
-            img_features = self.resnet(img)  # (batch_size * num_img, visual_feature_dim)
+            img_features = self.visiual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(
             observations.shape[0], -1
         )  # (batch_size, num_img * visual_feature_dim)
@@ -240,9 +260,9 @@ class ActorCritic_RGB(nn.Module):
         img = observations[:, self.state_shape :].view(-1, 3, self.img_h, self.img_w)
         if self.fix_img_encoder:
             with torch.no_grad():
-                img_features = self.resnet(img)
+                img_features = self.visiual_encoder(img)
         else:
-            img_features = self.resnet(img)  # (batch_size * num_img, visual_feature_dim)
+            img_features = self.visiual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(
             observations.shape[0], -1
         )  # (batch_size, num_img * visual_feature_dim)

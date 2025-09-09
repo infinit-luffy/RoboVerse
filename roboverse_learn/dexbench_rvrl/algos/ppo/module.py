@@ -112,11 +112,13 @@ class ActorCritic_RGB(nn.Module):
             critic_hidden_dim = [256, 256, 256]
             activation = get_activation("selu")
             self.fix_img_encoder = False
+            self.fix_actor_img_encoder = True
         else:
             actor_hidden_dim = model_cfg["pi_hid_sizes"]
             critic_hidden_dim = model_cfg["vf_hid_sizes"]
             activation = get_activation(model_cfg["activation"])
             self.fix_img_encoder = model_cfg.get("fix_img_encoder", False)
+            self.fix_actor_img_encoder = model_cfg.get("fix_actor_img_encoder", True)
 
         self.state_shape = state_shape
         self.obs_shape = obs_shape
@@ -127,15 +129,15 @@ class ActorCritic_RGB(nn.Module):
         # img encoder
         self.encoder_type = model_cfg.get("encoder_type", "resnet")
         if self.encoder_type == "resnet":
-            self.visiual_encoder = torchvision.models.resnet18(pretrained=True)
-            self.visual_feature_dim = self.visiual_encoder.fc.in_features
-            del self.visiual_encoder.fc
-            self.visiual_encoder.fc = nn.Identity()
+            self.visual_encoder = torchvision.models.resnet18(pretrained=True)
+            self.visual_feature_dim = self.visual_encoder.fc.in_features
+            del self.visual_encoder.fc
+            self.visual_encoder.fc = nn.Identity()
             if self.fix_img_encoder:
-                for param in self.visiual_encoder.parameters():
+                for param in self.visual_encoder.parameters():
                     param.requires_grad = False
         elif self.encoder_type == "cnn":
-            self.visiual_encoder = nn.Sequential(
+            self.visual_encoder = nn.Sequential(
                 nn.Conv2d(3, 32, kernel_size=8, stride=4),
                 nn.ReLU(),
                 nn.Conv2d(32, 64, 4, stride=2),
@@ -146,9 +148,9 @@ class ActorCritic_RGB(nn.Module):
             )
             with torch.no_grad():
                 test_data = torch.zeros(1, 3, self.img_h, self.img_w)
-                self.visual_feature_dim = self.visiual_encoder(test_data).shape[1]
+                self.visual_feature_dim = self.visual_encoder(test_data).shape[1]
             if self.fix_img_encoder:
-                for param in self.visiual_encoder.parameters():
+                for param in self.visual_encoder.parameters():
                     param.requires_grad = False
         else:
             raise NotImplementedError
@@ -213,16 +215,17 @@ class ActorCritic_RGB(nn.Module):
         # exit(0)
         if self.fix_img_encoder:
             with torch.no_grad():
-                img_features = self.visiual_encoder(img)
+                img_features = self.visual_encoder(img)
         else:
-            img_features = self.visiual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+            img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(
             observations.shape[0], -1
         )  # (batch_size, num_img * visual_feature_dim)
         state = observations[:, : self.state_shape]  # (batch_size, state_shape)
         observations = torch.cat((img_features_flatten, state), dim=-1)
 
-        actions_mean = self.actor(observations)
+        actor_observations = observations.detach() if self.fix_actor_img_encoder else observations
+        actions_mean = self.actor(actor_observations)
 
         covariance = torch.diag(self.log_std.exp() * self.log_std.exp())
         distribution = MultivariateNormal(actions_mean, scale_tril=covariance)
@@ -242,11 +245,11 @@ class ActorCritic_RGB(nn.Module):
 
     def act_inference(self, observations):
         img = observations[:, self.state_shape :].view(-1, 3, self.img_h, self.img_w)
-        if self.fix_img_encoder:
+        if self.fix_img_encoder or self.fix_actor_img_encoder:
             with torch.no_grad():
-                img_features = self.visiual_encoder(img)
+                img_features = self.visual_encoder(img)
         else:
-            img_features = self.visiual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+            img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(
             observations.shape[0], -1
         )  # (batch_size, num_img * visual_feature_dim)
@@ -260,16 +263,17 @@ class ActorCritic_RGB(nn.Module):
         img = observations[:, self.state_shape :].view(-1, 3, self.img_h, self.img_w)
         if self.fix_img_encoder:
             with torch.no_grad():
-                img_features = self.visiual_encoder(img)
+                img_features = self.visual_encoder(img)
         else:
-            img_features = self.visiual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+            img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
         img_features_flatten = img_features.view(
             observations.shape[0], -1
         )  # (batch_size, num_img * visual_feature_dim)
         state = observations[:, : self.state_shape]  # (batch_size, state_shape)
         observations = torch.cat((img_features_flatten, state), dim=-1)
 
-        actions_mean = self.actor(observations)
+        actor_observations = observations.detach() if self.fix_actor_img_encoder else observations
+        actions_mean = self.actor(actor_observations)
 
         covariance = torch.diag(self.log_std.exp() * self.log_std.exp())
         distribution = MultivariateNormal(actions_mean, scale_tril=covariance)

@@ -18,7 +18,7 @@ from loguru import logger as log
 from tensordict import TensorDict
 from torch import Tensor
 
-from roboverse_learn.dexbench_rvrl.algos.sac.module import Actor, QNet
+from roboverse_learn.dexbench_rvrl.algos.sac.module import Actor, Actor_RGB, QNet, QNet_RGB, RGB_Encoder
 from roboverse_learn.dexbench_rvrl.algos.sac.storage import ReplayBuffer
 from roboverse_learn.dexbench_rvrl.utils.reproducibility import enable_deterministic_run
 from roboverse_learn.dexbench_rvrl.utils.timer import timer
@@ -106,17 +106,83 @@ class SAC:
         )
 
         ## SAC components
-        self.actor = Actor(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-        self.qf1 = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-        self.qf2 = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-        self.qf1_target = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-        self.qf2_target = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-        self.qf1_target.load_state_dict(self.qf1.state_dict())
-        self.qf2_target.load_state_dict(self.qf2.state_dict())
-        self.qf1_params = TensorDict(dict(self.qf1.named_parameters(), batch_size=()))
-        self.qf2_params = TensorDict(dict(self.qf2.named_parameters(), batch_size=()))
-        self.qf1_target_params = TensorDict(dict(self.qf1_target.named_parameters(), batch_size=()))
-        self.qf2_target_params = TensorDict(dict(self.qf2_target.named_parameters(), batch_size=()))
+        if self.obs_type == "state":
+            self.actor = Actor(self.obs_dim, self.action_dim, self.model_cfg).to(device)
+            self.qf1 = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
+            self.qf2 = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
+            self.qf1_target = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
+            self.qf2_target = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
+            self.qf1_target.load_state_dict(self.qf1.state_dict())
+            self.qf2_target.load_state_dict(self.qf2.state_dict())
+            self.qf1_params = TensorDict(dict(self.qf1.named_parameters(), batch_size=()))
+            self.qf2_params = TensorDict(dict(self.qf2.named_parameters(), batch_size=()))
+            self.qf1_target_params = TensorDict(dict(self.qf1_target.named_parameters(), batch_size=()))
+            self.qf2_target_params = TensorDict(dict(self.qf2_target.named_parameters(), batch_size=()))
+        elif self.obs_type == "rgb":
+            self.img_encoder = RGB_Encoder(self.model_cfg, self.img_h, self.img_w).to(device)
+            self.actor = Actor_RGB(
+                self.obs_dim,
+                self.action_dim,
+                self.model_cfg,
+                self.state_shape,
+                self.img_encoder,
+                self.img_h,
+                self.img_w,
+            ).to(device)
+            self.qf1 = QNet_RGB(
+                self.obs_dim,
+                self.action_dim,
+                self.model_cfg,
+                self.state_shape,
+                self.img_encoder,
+                self.img_h,
+                self.img_w,
+            ).to(device)
+            self.qf2 = QNet_RGB(
+                self.obs_dim,
+                self.action_dim,
+                self.model_cfg,
+                self.state_shape,
+                self.img_encoder,
+                self.img_h,
+                self.img_w,
+            ).to(device)
+            self.qf1_target = QNet_RGB(
+                self.obs_dim,
+                self.action_dim,
+                self.model_cfg,
+                self.state_shape,
+                self.img_encoder,
+                self.img_h,
+                self.img_w,
+            ).to(device)
+            self.qf2_target = QNet_RGB(
+                self.obs_dim,
+                self.action_dim,
+                self.model_cfg,
+                self.state_shape,
+                self.img_encoder,
+                self.img_h,
+                self.img_w,
+            ).to(device)
+            self.qf1_target.load_state_dict(self.qf1.state_dict())
+            self.qf2_target.load_state_dict(self.qf2.state_dict())
+            self.qf1_params = TensorDict(
+                {name: param for name, param in self.qf1.named_parameters() if "visual_encoder" not in name},
+                batch_size=(),
+            )
+            self.qf2_params = TensorDict(
+                {name: param for name, param in self.qf2.named_parameters() if "visual_encoder" not in name},
+                batch_size=(),
+            )
+            self.qf1_target_params = TensorDict(
+                {name: param for name, param in self.qf1_target.named_parameters() if "visual_encoder" not in name},
+                batch_size=(),
+            )
+            self.qf2_target_params = TensorDict(
+                {name: param for name, param in self.qf2_target.named_parameters() if "visual_encoder" not in name},
+                batch_size=(),
+            )
 
         ## Optimizers
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)

@@ -21,11 +21,11 @@ learn:
   max_grad_norm: 1
   actor_lr: 3.e-4 # 3e-4 is default for single agent training with constant schedule
   critic_lr: 3.e-4
-  tau: 0.001
+  tau: 0.005
   alpha: 0.2
   policy_frequency: 1
   target_network_frequency: 2
-  batch_size: 2048
+  batch_size: 4096
   prefill: 100000
   buffer_size: 5000
   gamma: 0.96

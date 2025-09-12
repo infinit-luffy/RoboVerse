@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
-from torch.distributions import Independent, Normal, TanhTransform, TransformedDistribution
+from torch.distributions import Normal
 
 
 class Actor(nn.Module):

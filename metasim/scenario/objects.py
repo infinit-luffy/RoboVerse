@@ -123,6 +123,9 @@ class BaseRigidObjCfg(BaseObjCfg):
     physics: PhysicStateType | None = None
     """IsaacSim's convention for collision and gravity state. Default to None. If specified, it will be translated to :attr:`collision_enabled` and :attr:`fix_base_link`."""
 
+    randomize_color: bool = False
+    """Whether to randomize the color of the object."""
+
     def __post_init__(self):
         super().__post_init__()
 
@@ -144,6 +147,9 @@ class BaseRigidObjCfg(BaseObjCfg):
 @configclass
 class BaseArticulationObjCfg(BaseObjCfg):
     """Base articulation object cfg."""
+
+    randomize_color: bool = False
+    """Whether to randomize the color of the object."""
 
 
 ##################################################

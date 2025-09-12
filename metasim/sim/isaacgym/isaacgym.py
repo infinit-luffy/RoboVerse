@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import random
 from copy import deepcopy
 
 import numpy as np
@@ -650,7 +651,17 @@ class IsaacgymHandler(BaseSimHandler):
                     )
                     self.gym.set_rigid_body_color(env, obj_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, color)
                 elif isinstance(self.objects[obj_i], RigidObjCfg):
-                    pass
+                    if self.objects[obj_i].randomize_color:
+                        num_bodies = self.gym.get_actor_rigid_body_count(env, obj_handle)
+                        for body_idx in range(num_bodies):
+                            color = gymapi.Vec3(
+                                random.uniform(0.0, 1.0),
+                                random.uniform(0.0, 1.0),
+                                random.uniform(0.0, 1.0),
+                            )
+                            self.gym.set_rigid_body_color(
+                                env, obj_handle, body_idx, gymapi.MESH_VISUAL_AND_COLLISION, color
+                            )
                 elif isinstance(self.objects[obj_i], ArticulationObjCfg):
                     self._articulated_obj_handles[-1].append(obj_handle)
                     if self.objects[obj_i].stiffness is not None:
@@ -662,6 +673,17 @@ class IsaacgymHandler(BaseSimHandler):
                     self.gym.set_actor_dof_properties(
                         env, obj_handle, self._articulated_dof_prop_dict[self.objects[obj_i].name]
                     )
+                    if self.objects[obj_i].randomize_color:
+                        num_bodies = self.gym.get_actor_rigid_body_count(env, obj_handle)
+                        for body_idx in range(num_bodies):
+                            color = gymapi.Vec3(
+                                random.uniform(0.0, 1.0),
+                                random.uniform(0.0, 1.0),
+                                random.uniform(0.0, 1.0),
+                            )
+                            self.gym.set_rigid_body_color(
+                                env, obj_handle, body_idx, gymapi.MESH_VISUAL_AND_COLLISION, color
+                            )
                 else:
                     log.error("Unknown object type")
                     raise NotImplementedError

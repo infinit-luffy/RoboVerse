@@ -290,7 +290,6 @@ class SAC:
                             self.cur_rewards_sum[done] = 0
                             self.cur_episode_length[done] = 0
 
-                    self.global_step += self.num_envs
                     mean_reward = self.buffer.mean_reward()
                     # update the model
                     if self.global_step >= self.prefill:

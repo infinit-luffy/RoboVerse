@@ -139,8 +139,8 @@ class HandOverCfg(BaseRLTaskCfg):
             if not self.use_prio:
                 raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
-            self.img_h = 128
-            self.img_w = 128
+            self.img_h = 64
+            self.img_w = 64
             self.cameras = [
                 PinholeCameraCfg(
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)

@@ -67,6 +67,38 @@ class MSEDistribution:
         return -loss
 
 
+class SymlogDist:
+    def __init__(self, mode, dist="mse", agg="sum", tol=1e-8):
+        self._mode = mode
+        self._dist = dist
+        self._agg = agg
+        self._tol = tol
+
+    def mode(self):
+        return symexp(self._mode)
+
+    def mean(self):
+        return symexp(self._mode)
+
+    def log_prob(self, value):
+        assert self._mode.shape == value.shape
+        if self._dist == "mse":
+            distance = (self._mode - symlog(value)) ** 2.0
+            distance = torch.where(distance < self._tol, 0, distance)
+        elif self._dist == "abs":
+            distance = torch.abs(self._mode - symlog(value))
+            distance = torch.where(distance < self._tol, 0, distance)
+        else:
+            raise NotImplementedError(self._dist)
+        if self._agg == "mean":
+            loss = distance.mean(list(range(len(distance.shape)))[2:])
+        elif self._agg == "sum":
+            loss = distance.sum(list(range(len(distance.shape)))[2:])
+        else:
+            raise NotImplementedError(self._agg)
+        return -loss
+
+
 class LayerNormGRUCell(nn.Module):
     """A GRU cell with a LayerNorm
     copied from https://github.com/Eclectic-Sheep/sheeprl/blob/4441dbf4bcd7ae0daee47d35fb0660bc1fe8bd4b/sheeprl/models/models.py#L331
@@ -357,8 +389,19 @@ class Encoder(nn.Module):
         B = obs.shape[0]
         vector_obs = obs[:, : self.state_shape]
         if self.img_h is not None and self.img_w is not None:
-            image_obs = obs[:, self.state_shape :].reshape(B, 3, self.img_h, self.img_w) / 255.0 - 0.5
+            # import cv2
+            # import numpy as np
+
+            # img = obs[:, self.state_shape :].reshape(B, 3, self.img_h, self.img_w)
+            # img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
+            # img_uint8 = (img0 * 255).astype(np.uint8)
+            # img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+            # cv2.imwrite("camera0_image.png", img_bgr)
+            # exit(0)
+            image_obs = obs[:, self.state_shape :].reshape(B, 3, self.img_h, self.img_w) - 0.5
             visual_embedded = self.visual_encoder(image_obs).reshape(B, -1)
+            if self.symlog_input:
+                vector_obs = symlog(vector_obs)
             vector_embedded = self.mlp_encoder(vector_obs)
             embedded_obs = torch.cat([visual_embedded, vector_embedded], dim=-1)
         else:
@@ -436,7 +479,7 @@ class Decoder(nn.Module):
         self.mlp_decoder.append(nn.Linear(input_dim, np.prod(state_shape), bias=True))
         self.mlp_decoder = nn.Sequential(*self.mlp_decoder)
         [m.apply(init_weights) for m in self.mlp_decoder[:-1]]
-        self.mlp_decoder[-1].apply(uniform_init_weights(0.0))
+        self.mlp_decoder[-1].apply(uniform_init_weights(1.0))
 
     def calc_same_pad(self, k, s, d):
         val = d * (k - 1) - s + 1
@@ -449,9 +492,17 @@ class Decoder(nn.Module):
         if self.img_h is not None and self.img_w is not None:
             input_shape = x.shape
             x = x.flatten(0, 1)
-            reconstructed_visual_obs = self.decoder(x)
+            reconstructed_visual_obs = self.linear_layer(x)
+            N = reconstructed_visual_obs.shape[0]
+            reconstructed_visual_obs = reconstructed_visual_obs.view(
+                N,
+                -1,
+                self.min_res,
+                self.min_res,
+            )
+            reconstructed_visual_obs = self.visual_decoder(reconstructed_visual_obs)
             reconstructed_visual_obs = reconstructed_visual_obs.unflatten(0, input_shape[:2]) + 0.5
-            reconstructed_vector_obs = self.mlp_decoder(x)
+            reconstructed_vector_obs = self.mlp_decoder(x).unflatten(0, input_shape[:2])
             reconstructed_obs = {
                 "img": reconstructed_visual_obs,
                 "state": reconstructed_vector_obs,
@@ -569,7 +620,7 @@ class RewardPredictor(nn.Module):
         if model_cfg is None:
             hidden_dim = [512, 512]
         else:
-            hidden_dim = model_cfg.get("value_hidden_dim", [512, 512])
+            hidden_dim = model_cfg.get("reward_hidden_dim", [512, 512])
         self.net = []
         input_dim = deterministic_size + stochastic_size
         for hdim in hidden_dim:
@@ -580,7 +631,7 @@ class RewardPredictor(nn.Module):
         self.net.append(nn.Linear(input_dim, bins))
         self.net = nn.Sequential(*self.net)
         [m.apply(init_weights) for m in self.net[:-1]]
-        self.net[-1].apply(uniform_init_weights(0.0))
+        self.net[-1].apply(uniform_init_weights(1.0))
 
     def forward(self, posterior: Tensor, deterministic: Tensor) -> Tensor:
         input_shape = posterior.shape
@@ -607,6 +658,7 @@ class ContinueModel(nn.Module):
             self.net.append(nn.SiLU())
             input_dim = hdim
         self.net.append(nn.Linear(input_dim, 1))
+        self.net = nn.Sequential(*self.net)
         [m.apply(init_weights) for m in self.net[:-1]]
         self.net[-1].apply(uniform_init_weights(1.0))
 
@@ -665,7 +717,7 @@ class Critic(nn.Module):
         self.critic.append(nn.Linear(input_dim, bins))
         self.critic = nn.Sequential(*self.critic)
         [m.apply(init_weights) for m in self.critic[:-1]]
-        self.critic[-1].apply(uniform_init_weights(0.0))
+        self.critic[-1].apply(uniform_init_weights(1.0))
 
     def forward(self, posterior: Tensor, deterministic: Tensor) -> Tensor:
         x = torch.cat([posterior, deterministic], dim=-1)

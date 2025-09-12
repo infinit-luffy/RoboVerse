@@ -636,7 +636,7 @@ class IsaacgymHandler(BaseSimHandler):
 
                 if isinstance(self.objects[obj_i], _FileBasedMixin):
                     self.gym.set_actor_scale(env, obj_handle, self.objects[obj_i].scale[0])
-                elif isinstance(self.objects[obj_i], PrimitiveCubeCfg):
+                if isinstance(self.objects[obj_i], PrimitiveCubeCfg):
                     color = gymapi.Vec3(
                         self.objects[obj_i].color[0],
                         self.objects[obj_i].color[1],

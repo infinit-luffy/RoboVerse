@@ -175,13 +175,13 @@ class ReplayBuffer_Pytorch:
         def flatten(x: np.ndarray) -> np.ndarray:
             return x.reshape(-1, *x.shape[2:])
 
-        observation = flatten(self.observation)[flattened_index]
-        next_observation = flatten(self.next_observation)[flattened_index]
-        action = flatten(self.action)[flattened_index]
-        reward = flatten(self.reward)[flattened_index]
-        done = flatten(self.done)[flattened_index]
-        terminated = flatten(self.terminated)[flattened_index]
-        if_first = flatten(self.step_idx)[flattened_index] == 1
+        observation = flatten(self.observation)[flattened_index].to(self.device)
+        next_observation = flatten(self.next_observation)[flattened_index].to(self.device)
+        action = flatten(self.action)[flattened_index].to(self.device)
+        reward = flatten(self.reward)[flattened_index].to(self.device)
+        done = flatten(self.done)[flattened_index].to(self.device)
+        terminated = flatten(self.terminated)[flattened_index].to(self.device)
+        if_first = (flatten(self.step_idx)[flattened_index] == 1).to(self.device)
 
         sample = {
             "observation": observation,

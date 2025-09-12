@@ -6,12 +6,13 @@ clip_actions: 1.0
 model: # only works for MlpPolicy right now
   min_res: 4
   kernel_size: 4
-  depth: 16
-  hidden_dim: [256, 256, 256]
+  depth: 32
+  hidden_dim: [1024, 1024, 512]
   recurrent_hidden_dim: 512
   representation_hidden_dim: 1024
   value_hidden_dim: [1024, 1024, 1024]
-  continue_hidden_dim: [512, 512]
+  continue_hidden_dim: [512]
+  reward_hidden_dim: [512]
   actor_hidden_dim: [1024, 1024, 1024]
 learn:
   agent_name: shadow_hand
@@ -27,9 +28,10 @@ learn:
   batch_size: 16
   batch_length: 64
   horizon: 15
-  prefill: 10000
+  prefill: 50000
   buffer_size: 5000
   amp: False
+  nstep: 10
 
   # all model params
   bins: 255

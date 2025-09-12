@@ -36,11 +36,11 @@ from roboverse_learn.dexbench_rvrl.algos.dm3.module import (
     RepresentationModel,
     RewardPredictor,
     SafeBernoulli,
+    SymlogDist,
     TransitionModel,
     TwoHotEncodingDistribution,
-    symlog,
 )
-from roboverse_learn.dexbench_rvrl.algos.dm3.storage import ReplayBuffer
+from roboverse_learn.dexbench_rvrl.algos.dm3.storage import ReplayBuffer, ReplayBuffer_Pytorch
 from roboverse_learn.dexbench_rvrl.utils.metrics import MetricAggregator
 from roboverse_learn.dexbench_rvrl.utils.reproducibility import enable_deterministic_run
 from roboverse_learn.dexbench_rvrl.utils.timer import timer
@@ -136,6 +136,7 @@ class DreamerV3:
         wandb_run=None,
     ):
         self.device = device
+        self.cast_device = self.device.type
 
         self.action_dim = np.prod(env.single_action_space.shape)
         self.obs_dim = np.prod(env.single_observation_space.shape)
@@ -163,6 +164,7 @@ class DreamerV3:
         self.max_iterations = learn_cfg.get("max_iterations", 500000)
         self.prefill = learn_cfg.get("prefill", 10000)
         self.amp = learn_cfg.get("amp", False)
+        self.nstep = learn_cfg.get("nstep", 10)
 
         # all models
         self.bins = learn_cfg.get("bins", 255)
@@ -192,7 +194,7 @@ class DreamerV3:
 
         self.model_cfg = self.train_cfg.get("model", {})
 
-        self.buffer = ReplayBuffer(
+        self.buffer = ReplayBuffer_Pytorch(
             self.obs_dim,
             self.action_dim,
             device,
@@ -288,7 +290,7 @@ class DreamerV3:
         self.is_testing = is_testing
         self.current_learning_iteration = 0
         self.log_interval = learn_cfg.get("log_interval", 1)
-        self.print_interval = learn_cfg.get("print_interval", 10)
+        self.print_interval = learn_cfg.get("print_interval", 1)
 
     def test(self, path):
         state = torch.load(path, map_location=self.device)
@@ -368,47 +370,51 @@ class DreamerV3:
 
             for iteration in range(self.current_learning_iteration, self.max_iterations):
                 ## Step the environment and add to buffer
-                with torch.inference_mode(), timer("time/iteration"):
-                    embeded_obs = self.encoder(obs)
-                    deterministic = self.recurrent_model(posterior, action, deterministic)
-                    posterior_dist, _ = self.representation_model(embeded_obs.view(self.num_envs, -1), deterministic)
-                    posterior = posterior_dist.sample().view(-1, self.stochastic_size)
-                    if self.global_step < self.prefill:
-                        action = torch.rand((self.num_envs, self.action_dim), device=self.device) * 2 - 1
-                    else:
-                        action = self.actor(posterior, deterministic).sample()
-                    next_obs, reward, terminated, truncated, info = self.env.step(action)
-                    done = torch.logical_or(terminated, truncated)
-                    env_step = self.env.episode_lengths
-                    self.buffer.add(obs, action, reward, next_obs, done, terminated, env_step)
-                    obs.copy_(next_obs)
+                for _step in range(self.nstep):
+                    with torch.inference_mode(), timer("time/iteration"):
+                        embeded_obs = self.encoder(obs)
+                        deterministic = self.recurrent_model(posterior, action, deterministic)
+                        posterior_dist, _ = self.representation_model(
+                            embeded_obs.view(self.num_envs, -1), deterministic
+                        )
+                        posterior = posterior_dist.sample().view(-1, self.stochastic_size)
+                        if self.global_step < self.prefill:
+                            action = torch.rand((self.num_envs, self.action_dim), device=self.device) * 2 - 1
+                        else:
+                            action = self.actor(posterior, deterministic).sample()
+                        next_obs, reward, terminated, truncated, info = self.env.step(action)
+                        done = torch.logical_or(terminated, truncated)
+                        env_step = self.env.episode_lengths
+                        self.buffer.add(obs, action, reward, next_obs, done, terminated, env_step)
+                        obs.copy_(next_obs)
 
-                    ep_infos.append(info)
-                    cur_rewards_sum += reward
-                    cur_episode_length += 1
-                    self.global_step += self.num_envs
+                        ep_infos.append(info)
+                        cur_rewards_sum += reward
+                        cur_episode_length += 1
+                        self.global_step += self.num_envs
 
-                    if done.any():
-                        self.episode_rewards.update(cur_rewards_sum[done])
-                        self.episode_lengths.update(cur_episode_length[done])
-                        cur_rewards_sum[done] = 0
-                        cur_episode_length[done] = 0
-                        posterior[done] = 0
-                        deterministic[done] = 0
-                        action[done] = 0
+                        if done.any():
+                            self.episode_rewards.update(cur_rewards_sum[done])
+                            self.episode_lengths.update(cur_episode_length[done])
+                            cur_rewards_sum[done] = 0
+                            cur_episode_length[done] = 0
+                            posterior[done] = 0
+                            deterministic[done] = 0
+                            action[done] = 0
 
                 mean_reward = self.buffer.mean_reward()
                 ## Update the model
                 if self.global_step > self.prefill:
                     with timer("time/train"):
-                        gradient_steps = self.ratio(self.global_step - self.prefill)
-                        for _ in range(gradient_steps):
-                            with timer("time/data_sample"):
-                                data = self.buffer.sample(self.batch_size, self.batch_length)
-                            with timer("time/dynamic_learning"):
-                                posteriors, deterministics = self.dynamic_learning(data)
-                            with timer("time/behavior_learning"):
-                                self.behavior_learning(posteriors, deterministics)
+                        # gradient_steps = self.ratio(self.global_step - self.prefill)
+
+                        # for _ in range(gradient_steps):
+                        with timer("time/data_sample"):
+                            data = self.buffer.sample(self.batch_size, self.batch_length)
+                        with timer("time/dynamic_learning"):
+                            posteriors, deterministics = self.dynamic_learning(data)
+                        with timer("time/behavior_learning"):
+                            self.behavior_learning(posteriors, deterministics)
 
                 ## log
                 if (iteration + 1) % self.log_interval == 0 or iteration == self.max_iterations - 1:
@@ -434,9 +440,7 @@ class DreamerV3:
         # Observations:   o'0    [o'1]    [o'2]    [o'3]     <-- input
         # Rewards:                r'1      r'2      r'3      <-- output
         # Continues:              c'1      c'2      c'3      <-- output
-
-        with torch.autocast(self.device, enabled=self.amp):
-            ## TODO Change
+        with torch.autocast(self.cast_device, enabled=self.amp):
             posterior = torch.zeros(self.batch_size, self.stochastic_size, device=self.device)
             deterministic = torch.zeros(self.batch_size, self.deterministic_size, device=self.device)
             embeded_obs = self.encoder(data["observation"].flatten(0, 1)).unflatten(
@@ -484,17 +488,13 @@ class DreamerV3:
                 reconstructed_img_obs_loss = -reconstructed_img_obs_dist.log_prob(img_obs).mean()
                 reconstructed_vector_obs = reconstructed_obs["state"]
                 vector_obs = data["observation"][:, :, : self.state_shape]
-                if self.symlog_input:
-                    vector_obs = symlog(vector_obs)
-                reconstructed_vector_obs_dist = MSEDistribution(reconstructed_vector_obs, 1)
+                reconstructed_vector_obs_dist = SymlogDist(reconstructed_vector_obs)
                 reconstructed_vector_obs_loss = -reconstructed_vector_obs_dist.log_prob(vector_obs).mean()
-                reconstructed_obs_loss = (reconstructed_img_obs_loss + reconstructed_vector_obs_loss) / 2.0
+                reconstructed_obs_loss = reconstructed_img_obs_loss + reconstructed_vector_obs_loss
             else:
                 reconstructed_vector_obs = reconstructed_obs["state"]
                 vector_obs = data["observation"][:, 1:, : self.state_shape]
-                if self.symlog_input:
-                    vector_obs = symlog(vector_obs)
-                reconstructed_vector_obs_dist = MSEDistribution(reconstructed_vector_obs, 1)
+                reconstructed_vector_obs_dist = SymlogDist(reconstructed_vector_obs)
                 reconstructed_obs_loss = -reconstructed_vector_obs_dist.log_prob(vector_obs).mean()
 
             predicted_reward_bins = self.reward_predictor(posteriors, deterministics)
@@ -557,7 +557,7 @@ class DreamerV3:
         # Values:                 v'1      v'2      v'3      v'4    <-- output
         # Lambda-values:          l'1      l'2      l'3             <-- output
 
-        with torch.autocast(self.device, enabled=self.amp):
+        with torch.autocast(self.cast_device, enabled=self.amp):
             actions = []
             states = []
             deterministics = []
@@ -607,12 +607,12 @@ class DreamerV3:
         self.actor_optimizer.zero_grad()
         self.actor_scaler.scale(actor_loss).backward()
         self.actor_scaler.unscale_(self.actor_optimizer)
-        actor_grad_norm = nn.utils.clip_grad_norm_(self.actor.parameters(), self.args.actor_clip)
+        actor_grad_norm = nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_clip)
         self.actor_scaler.step(self.actor_optimizer)
         self.actor_scaler.update()
 
         # TODO: implement target critic
-        with torch.autocast(self.device, enabled=self.amp):
+        with torch.autocast(self.cast_device, enabled=self.amp):
             predicted_value_bins = self.critic(states[:, :-1].detach(), deterministics[:, :-1].detach())
             predicted_value_dist = TwoHotEncodingDistribution(predicted_value_bins, dims=1)
             value_loss = -predicted_value_dist.log_prob(lambda_values.detach())

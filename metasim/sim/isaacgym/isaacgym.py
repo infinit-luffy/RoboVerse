@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import MISSING
 from copy import deepcopy
 
 import numpy as np
@@ -651,7 +652,18 @@ class IsaacgymHandler(BaseSimHandler):
                     )
                     self.gym.set_rigid_body_color(env, obj_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, color)
                 elif isinstance(self.objects[obj_i], RigidObjCfg):
-                    if self.objects[obj_i].randomize_color:
+                    if self.objects[obj_i].color is not MISSING:
+                        color = gymapi.Vec3(
+                            self.objects[obj_i].color[0],
+                            self.objects[obj_i].color[1],
+                            self.objects[obj_i].color[2],
+                        )
+                        num_bodies = self.gym.get_actor_rigid_body_count(env, obj_handle)
+                        for body_idx in range(num_bodies):
+                            self.gym.set_rigid_body_color(
+                                env, obj_handle, body_idx, gymapi.MESH_VISUAL_AND_COLLISION, color
+                            )
+                    elif self.objects[obj_i].randomize_color:
                         num_bodies = self.gym.get_actor_rigid_body_count(env, obj_handle)
                         for body_idx in range(num_bodies):
                             color = gymapi.Vec3(
@@ -673,7 +685,18 @@ class IsaacgymHandler(BaseSimHandler):
                     self.gym.set_actor_dof_properties(
                         env, obj_handle, self._articulated_dof_prop_dict[self.objects[obj_i].name]
                     )
-                    if self.objects[obj_i].randomize_color:
+                    if self.objects[obj_i].color is not MISSING:
+                        color = gymapi.Vec3(
+                            self.objects[obj_i].color[0],
+                            self.objects[obj_i].color[1],
+                            self.objects[obj_i].color[2],
+                        )
+                        num_bodies = self.gym.get_actor_rigid_body_count(env, obj_handle)
+                        for body_idx in range(num_bodies):
+                            self.gym.set_rigid_body_color(
+                                env, obj_handle, body_idx, gymapi.MESH_VISUAL_AND_COLLISION, color
+                            )
+                    elif self.objects[obj_i].randomize_color:
                         num_bodies = self.gym.get_actor_rigid_body_count(env, obj_handle)
                         for body_idx in range(num_bodies):
                             color = gymapi.Vec3(

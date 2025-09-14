@@ -389,15 +389,6 @@ class Encoder(nn.Module):
         B = obs.shape[0]
         vector_obs = obs[:, : self.state_shape]
         if self.img_h is not None and self.img_w is not None:
-            # import cv2
-            # import numpy as np
-
-            # img = obs[:, self.state_shape :].reshape(B, 3, self.img_h, self.img_w)
-            # img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
-            # img_uint8 = (img0 * 255).astype(np.uint8)
-            # img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
-            # cv2.imwrite("camera0_image.png", img_bgr)
-            # exit(0)
             image_obs = obs[:, self.state_shape :].reshape(B, 3, self.img_h, self.img_w) - 0.5
             visual_embedded = self.visual_encoder(image_obs).reshape(B, -1)
             if self.symlog_input:
@@ -423,7 +414,7 @@ class Decoder(nn.Module):
             stages = int(np.log2(img_h) - np.log2(self.min_res))
             kernel_size = model_cfg.get("kernel_size", 4)
             depth = model_cfg.get("depth", 16)
-            visual_feature_dim = self.min_res**2 * depth * 2 ** (stages - 1)
+            visual_feature_dim = (self.min_res**2) * depth * (2 ** (stages - 1))
             self.linear_layer = nn.Linear(deterministic_size + stochastic_size, visual_feature_dim)
             self.linear_layer.apply(uniform_init_weights(1.0))
             input_dim = visual_feature_dim // (self.min_res * self.min_res)  # depth * 2**(stages-1)

@@ -164,7 +164,7 @@ class DreamerV3:
         self.max_iterations = learn_cfg.get("max_iterations", 500000)
         self.prefill = learn_cfg.get("prefill", 10000)
         self.amp = learn_cfg.get("amp", False)
-        self.nstep = learn_cfg.get("nstep", 10)
+        self.nstep = learn_cfg.get("nstep", 1)
 
         # all models
         self.bins = learn_cfg.get("bins", 255)
@@ -283,6 +283,7 @@ class DreamerV3:
         })
         self.episode_rewards = RollingMeter(learn_cfg.get("window_size", 100))
         self.episode_lengths = RollingMeter(learn_cfg.get("window_size", 100))
+        self.episode_rewards_step = RollingMeter(learn_cfg.get("window_size", 100))
         self.model_dir = model_dir
         self.log_dir = log_dir
         self.print_log = print_log
@@ -392,6 +393,7 @@ class DreamerV3:
                         cur_rewards_sum += reward
                         cur_episode_length += 1
                         self.global_step += self.num_envs
+                        self.episode_rewards_step.update(reward.mean().item())
 
                         if done.any():
                             self.episode_rewards.update(cur_rewards_sum[done])
@@ -402,7 +404,7 @@ class DreamerV3:
                             deterministic[done] = 0
                             action[done] = 0
 
-                mean_reward = self.buffer.mean_reward()
+                mean_reward = self.episode_rewards_step.mean
                 ## Update the model
                 if self.global_step > self.prefill:
                     with timer("time/train"):
@@ -412,14 +414,16 @@ class DreamerV3:
                         with timer("time/data_sample"):
                             data = self.buffer.sample(self.batch_size, self.batch_length)
                         with timer("time/dynamic_learning"):
-                            posteriors, deterministics = self.dynamic_learning(data)
+                            if iteration % 10 == 0:
+                                posteriors, deterministics = self.dynamic_learning(data, save_recon=True)
+                            else:
+                                posteriors, deterministics = self.dynamic_learning(data)
                         with timer("time/behavior_learning"):
                             self.behavior_learning(posteriors, deterministics)
 
                 ## log
                 if (iteration + 1) % self.log_interval == 0 or iteration == self.max_iterations - 1:
-                    log_dir = os.path.join(self.log_dir, f"model_{iteration + 1}")
-                    os.makedirs(log_dir, exist_ok=True)
+                    log_dir = os.path.join(self.log_dir, f"model_{iteration + 1}.pth")
                     self.save(log_dir)
                 if (iteration + 1) % self.print_interval == 0 and self.print_log:
                     metrics_dict = self.aggregator.compute()
@@ -427,7 +431,7 @@ class DreamerV3:
                     ep_infos.clear()
                     self.aggregator.reset()
 
-    def dynamic_learning(self, data: dict[str, Tensor]) -> tuple[Tensor, Tensor]:
+    def dynamic_learning(self, data: dict[str, Tensor], save_recon=False) -> tuple[Tensor, Tensor]:
         # TODO: utilize "next_observation" to update the model
         # TODO: since the replay buffer may contain termination/truncation in the middle of a rollout, we need to handle this case by resetting posterior, deterministic, and action to initial state (zero)
 
@@ -482,6 +486,20 @@ class DreamerV3:
                 img_obs = data["observation"][:, :, self.state_shape :].view(
                     self.batch_size, self.batch_length, 3, self.img_h, self.img_w
                 )
+                # if save_recon:
+                #     import cv2
+                #     import numpy as np
+
+                #     img = reconstructed_img_obs[0, 0]
+                #     img0 = img.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
+                #     img0_uint8 = (img0 * 255).astype(np.uint8)
+                #     img0_bgr = cv2.cvtColor(img0_uint8, cv2.COLOR_RGB2BGR)
+                #     img1 = img_obs[0, 0]
+                #     img1 = img1.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
+                #     img1_uint8 = (img1 * 255).astype(np.uint8)
+                #     img1_bgr = cv2.cvtColor(img1_uint8, cv2.COLOR_RGB2BGR)
+                #     img_bgr = np.concatenate([img1_bgr, img0_bgr], axis=1)
+                #     cv2.imwrite("recon_img.png", img_bgr)
                 reconstructed_img_obs_dist = MSEDistribution(
                     reconstructed_img_obs, 3
                 )  # 3 is number of dimensions for observation space, shape is (3, H, W)
@@ -529,6 +547,11 @@ class DreamerV3:
         self.model_scaler.update()
 
         with torch.no_grad():
+            # if self.img_h is not None and self.img_w is not None:
+            #     self.aggregator.update(
+            #         "loss/recon_rgb_loss_mean", reconstructed_img_obs_loss.item() / (3 * self.img_h * self.img_w)
+            #     )
+            # self.aggregator.update("loss/recon_vec_loss_mean", reconstructed_vector_obs_loss.item() / self.state_shape)
             self.aggregator.update("loss/reconstruction_loss", reconstructed_obs_loss.item())
             self.aggregator.update("loss/reward_loss", reward_loss.item())
             self.aggregator.update("loss/continue_loss", continue_loss.item())
@@ -559,6 +582,8 @@ class DreamerV3:
 
         with torch.autocast(self.cast_device, enabled=self.amp):
             actions = []
+            # states = [state]
+            # deterministics = [deterministic]
             states = []
             deterministics = []
             for t in range(self.horizon):
@@ -602,6 +627,7 @@ class DreamerV3:
                 actor_target = advantages
             elif self.actor_grad == "reinforce":
                 actor_target = advantages.detach() * actor_dist.log_prob(actions[:, :-1]).unsqueeze(-1)
+            # actor_target = advantages.detach() * actor_dist.log_prob(actions).unsqueeze(-1)
             # For discount factor, see https://ai.stackexchange.com/q/7680
             actor_loss = -((actor_target + self.actor_ent_coef * actor_entropy) * discount).mean()
         self.actor_optimizer.zero_grad()

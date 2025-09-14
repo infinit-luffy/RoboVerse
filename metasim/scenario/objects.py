@@ -126,6 +126,9 @@ class BaseRigidObjCfg(BaseObjCfg):
     randomize_color: bool = False
     """Whether to randomize the color of the object."""
 
+    color: list[float] = MISSING
+    """Color of the object in RGB"""
+
     def __post_init__(self):
         super().__post_init__()
 
@@ -150,6 +153,9 @@ class BaseArticulationObjCfg(BaseObjCfg):
 
     randomize_color: bool = False
     """Whether to randomize the color of the object."""
+
+    color: list[float] = MISSING
+    """Color of the object in RGB"""
 
 
 ##################################################

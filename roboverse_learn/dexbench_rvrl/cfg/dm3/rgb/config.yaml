@@ -18,7 +18,7 @@ learn:
   agent_name: shadow_hand
   test: False
   resume: 0
-  log_interval: 10000
+  log_interval: 5000
   print_log: True
 
   # rollout params
@@ -31,7 +31,7 @@ learn:
   prefill: 50000
   buffer_size: 5000
   amp: False
-  nstep: 10
+  nstep: 1
 
   # all model params
   bins: 255
@@ -47,6 +47,7 @@ learn:
   deterministic_size: 512
 
   # actor-critic params
+  # actor_grad: "reinforce"
   actor_grad: "dynamics"
   actor_lr: 8.e-5
   actor_eps: 1.e-5

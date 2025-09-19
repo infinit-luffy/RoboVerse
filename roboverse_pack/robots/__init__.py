@@ -10,6 +10,8 @@ from .base_dex_cfg import BaseDexCfg
 from .base_robot_cfg import BaseRobotCfg
 from .cartpole_cfg import CartpoleCfg
 from .fetch_cfg import FetchCfg
+from .franka_allegro_left_cfg import FrankaAllegroHandLeftCfg
+from .franka_allegro_right_cfg import FrankaAllegroHandRightCfg
 from .franka_cfg import FrankaCfg
 from .franka_shadow_left_cfg import FrankaShadowHandLeftCfg
 from .franka_shadow_right_cfg import FrankaShadowHandRightCfg

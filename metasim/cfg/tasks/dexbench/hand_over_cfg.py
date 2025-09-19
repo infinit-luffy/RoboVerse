@@ -11,7 +11,12 @@ from loguru import logger as log
 from rich.logging import RichHandler
 
 from metasim.cfg.objects import ArticulationObjCfg, RigidObjCfg
-from metasim.cfg.robots import FrankaShadowHandLeftCfg, FrankaShadowHandRightCfg
+from metasim.cfg.robots import (
+    FrankaAllegroHandLeftCfg,
+    FrankaAllegroHandRightCfg,
+    FrankaShadowHandLeftCfg,
+    FrankaShadowHandRightCfg,
+)
 from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
@@ -43,6 +48,7 @@ class HandOverCfg(BaseRLTaskCfg):
     obs_type = "state"
     use_prio = True
     current_object_type = "egg"
+    current_robot_type = "shadow"
     objects_cfg = {
         "cube": RigidObjCfg(
             name="cube",
@@ -65,19 +71,7 @@ class HandOverCfg(BaseRLTaskCfg):
         ),
     }
     objects = []
-    robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
-        FrankaShadowHandLeftCfg(use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True),
-    ]
-    step_actions_shape = 0
-    for robot in robots:
-        step_actions_shape += robot.num_joints
-    action_shape = 0
-    for robot in robots:
-        if robot.robot_controller == "ik":
-            action_shape += 6 * robot.num_fingertips
-        elif robot.robot_controller == "dof_pos":
-            action_shape += robot.num_actuated_joints - robot.num_arm_joints
+    robots = []
     decimation = 1
     env_spacing = 1.5
     sim_params = SimParamCfg(
@@ -96,12 +90,6 @@ class HandOverCfg(BaseRLTaskCfg):
     goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     goal_rot = None  # Placeholder for goal rotation, to be set later, shape (num_envs, 4)
     sensors = []
-    for name in robots[0].fingertips:
-        r_name = "right" + name
-        sensors.append(ContactForceSensorCfg(base_link=("franka_shadow_right", name), source_link=None, name=r_name))
-    for name in robots[1].fingertips:
-        l_name = "left" + name
-        sensors.append(ContactForceSensorCfg(base_link=("franka_shadow_left", name), source_link=None, name=l_name))
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
@@ -120,52 +108,19 @@ class HandOverCfg(BaseRLTaskCfg):
     w_throw_bonus = True
 
     def set_objects(self) -> None:
-        """Set the objects for the shadow hand over task."""
+        """Set the objects for the hand over task."""
         self.objects.append(self.objects_cfg[self.current_object_type])
-
-    def set_init_states(self) -> None:
-        """Set the initial states for the shadow hand over task."""
-        self.proceptual_shape = 0
-        for robot in self.robots:
-            self.proceptual_shape += robot.observation_shape
-            self.proceptual_shape += robot.num_fingertips * 6  # fingertip forces
-        self.proceptual_shape += self.action_shape
-        self.proprio_shape = (
-            self.proceptual_shape + 24
-        )  # object position(3), rotation(4), linear velocity(3), angular velocity(3), goal position(3), goal rotation(4)
-        self.obs_shape = self.proprio_shape
-        if self.obs_type == "state":
-            self.cameras = []
-            if not self.use_prio:
-                raise ValueError("State observation type requires proprioception to be enabled.")
-        elif self.obs_type == "rgb":
-            self.img_h = 128
-            self.img_w = 128
-            self.cameras = [
-                PinholeCameraCfg(
-                    name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)
-                )
+        if self.current_robot_type == "shadow":
+            self.robots = [
+                FrankaShadowHandRightCfg(
+                    use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True, name="right_hand"
+                ),
+                FrankaShadowHandLeftCfg(
+                    use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True, name="left_hand"
+                ),
             ]
-            if self.use_prio:
-                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w  # 398-dimensional state + RGB image
-            else:
-                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
-        self.init_goal_pos = torch.tensor(
-            [0.0, -0.64, 0.85], dtype=torch.float32, device=self.device
-        )  # Initial goal position, shape (3,)
-        self.init_goal_rot = torch.tensor(
-            [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
-        )  # Initial goal rotation, shape (4,)
-        """Set the initial states for the shadow hand over task."""
-        self.init_states = {
-            "objects": {
-                self.current_object_type: {
-                    "pos": torch.tensor([0.0, -0.38, 0.87]),
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                },
-            },
-            "robots": {
-                "franka_shadow_right": {
+            self.robot_init_state = {
+                "right_hand": {
                     "pos": torch.tensor([0.0, 0.316, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
@@ -202,7 +157,7 @@ class HandOverCfg(BaseRLTaskCfg):
                         "panda_joint7": -2.356194,
                     },
                 },
-                "franka_shadow_left": {
+                "left_hand": {
                     "pos": torch.tensor([0.0, -1.356, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
@@ -239,7 +194,134 @@ class HandOverCfg(BaseRLTaskCfg):
                         "panda_joint7": -2.356194,
                     },
                 },
+            }
+        elif self.current_robot_type == "allegro":
+            self.robots = [
+                FrankaAllegroHandRightCfg(use_vhacd=False, robot_controller="dof_pos", name="right_hand"),
+                FrankaAllegroHandLeftCfg(use_vhacd=False, robot_controller="dof_pos", name="left_hand"),
+            ]
+            self.robot_init_state = {
+                "right_hand": {
+                    "pos": torch.tensor([0.0, 0.316, 0.0]),
+                    "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
+                    "dof_pos": {
+                        "joint_0": 0.0,
+                        "joint_1": 0.0,
+                        "joint_2": 0.0,
+                        "joint_3": 0.0,
+                        "joint_4": 0.0,
+                        "joint_5": 0.0,
+                        "joint_6": 0.0,
+                        "joint_7": 0.0,
+                        "joint_8": 0.0,
+                        "joint_9": 0.0,
+                        "joint_10": 0.0,
+                        "joint_11": 0.0,
+                        "joint_12": 0.0,
+                        "joint_13": 0.0,
+                        "joint_14": 0.0,
+                        "joint_15": 0.0,
+                        "panda_joint1": 0.0,
+                        "panda_joint2": -0.785398,
+                        "panda_joint3": 0.0,
+                        "panda_joint4": -2.356194,
+                        "panda_joint5": 0.0,
+                        "panda_joint6": 3.1415928,
+                        "panda_joint7": -2.356194,
+                    },
+                },
+                "left_hand": {
+                    "pos": torch.tensor([0.0, -1.356, 0.0]),
+                    "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
+                    "dof_pos": {
+                        "joint_0": 0.0,
+                        "joint_1": 0.0,
+                        "joint_2": 0.0,
+                        "joint_3": 0.0,
+                        "joint_4": 0.0,
+                        "joint_5": 0.0,
+                        "joint_6": 0.0,
+                        "joint_7": 0.0,
+                        "joint_8": 0.0,
+                        "joint_9": 0.0,
+                        "joint_10": 0.0,
+                        "joint_11": 0.0,
+                        "joint_12": 0.0,
+                        "joint_13": 0.0,
+                        "joint_14": 0.0,
+                        "joint_15": 0.0,
+                        "panda_joint1": 0.0,
+                        "panda_joint2": -0.785398,
+                        "panda_joint3": 0.0,
+                        "panda_joint4": -2.356194,
+                        "panda_joint5": 0.0,
+                        "panda_joint6": 3.1415928,
+                        "panda_joint7": -2.356194,
+                    },
+                },
+            }
+        self.step_actions_shape = 0
+        for robot in self.robots:
+            self.step_actions_shape += robot.num_joints
+        self.action_shape = 0
+        for robot in self.robots:
+            if robot.robot_controller == "ik":
+                self.action_shape += 6 * robot.num_fingertips
+            elif robot.robot_controller == "dof_pos":
+                self.action_shape += robot.num_actuated_joints - robot.num_arm_joints
+        for name in self.robots[0].fingertips:
+            r_name = "right" + name
+            self.sensors.append(
+                ContactForceSensorCfg(base_link=(self.robots[0].name, name), source_link=None, name=r_name)
+            )
+        for name in self.robots[1].fingertips:
+            l_name = "left" + name
+            self.sensors.append(
+                ContactForceSensorCfg(base_link=(self.robots[0].name, name), source_link=None, name=l_name)
+            )
+
+    def set_init_states(self) -> None:
+        """Set the initial states for the hand over task."""
+        self.proceptual_shape = 0
+        for robot in self.robots:
+            self.proceptual_shape += robot.observation_shape
+            self.proceptual_shape += robot.num_fingertips * 6  # fingertip forces
+        self.proceptual_shape += self.action_shape
+        self.proprio_shape = (
+            self.proceptual_shape + 24
+        )  # object position(3), rotation(4), linear velocity(3), angular velocity(3), goal position(3), goal rotation(4)
+        self.obs_shape = self.proprio_shape
+        if self.obs_type == "state":
+            self.cameras = []
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
+        elif self.obs_type == "rgb":
+            self.img_h = 128
+            self.img_w = 128
+            self.cameras = [
+                PinholeCameraCfg(
+                    name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)
+                )
+            ]
+            if self.use_prio:
+                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w  # 398-dimensional state + RGB image
+            else:
+                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
+        self.init_goal_pos = torch.tensor(
+            [0.0, -0.64, 0.85], dtype=torch.float32, device=self.device
+        )  # Initial goal position, shape (3,)
+        self.init_goal_rot = torch.tensor(
+            [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
+        )  # Initial goal rotation, shape (4,)
+        """Set the initial states for the hand over task."""
+        self.init_states = {
+            "objects": {
+                self.current_object_type: {
+                    "pos": torch.tensor([0.0, -0.38, 0.87]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                },
             },
+            "robots": self.robot_init_state,
         }
         self.robot_dof_default_pos = {}
         self.robot_dof_default_pos_cpu = {}
@@ -299,7 +381,7 @@ class HandOverCfg(BaseRLTaskCfg):
         return step_actions
 
     def observation_fn(self, envstates: list[EnvState], actions: torch.Tensor, device=None) -> torch.Tensor:
-        """Observation function for shadow hand over tasks.
+        """Observation function for hand over tasks.
 
         Args:
             envstates (list[EnvState]): List of environment states to process.
@@ -471,19 +553,15 @@ class HandOverCfg(BaseRLTaskCfg):
         self.env_throw_bonus[env_ids] = True
         if isinstance(init_states, list):
             reset_state = deepcopy(init_states)
-            num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
+            num_dofs = self.robots[0].num_joints + self.robots[1].num_joints
             x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
             y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
 
             # generate random values
-            rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device="cpu")
+            rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_dofs + 5), device="cpu")
 
             new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
-
-            robot_dof_default_pos = self.robot_dof_default_pos_cpu[self.robots[0].name]
-            delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
-            delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
-
+            start_idx = 5
             for i, env_id in enumerate(env_ids):
                 for obj_name in reset_state[env_id]["objects"].keys():
                     reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
@@ -491,14 +569,20 @@ class HandOverCfg(BaseRLTaskCfg):
                     )
                     reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
 
-                # reset shadow hand
-                for robot_name in reset_state[env_id]["robots"].keys():
-                    rand_delta = delta_min + (delta_max - delta_min) * rand_floats[i, 5 : 5 + num_shadow_hand_dofs]
+                # reset hand
+                for robot in self.robots:
+                    robot_dof_default_pos = reset_state.robots[robot.name].joint_pos[env_ids]
+                    delta_max = robot.joint_limits_upper - robot_dof_default_pos
+                    delta_min = robot.joint_limits_lower - robot_dof_default_pos
+                    rand_delta = (
+                        delta_min + (delta_max - delta_min) * rand_floats[i, start_idx : start_idx + robot.num_joints]
+                    )
                     dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
-                    reset_state[env_id]["robots"][robot_name]["dof_pos"] = {
+                    reset_state[env_id]["robots"][robot.name]["dof_pos"] = {
                         name: dof_pos[j].item()
-                        for j, name in enumerate(reset_state[env_id]["robots"][robot_name]["dof_pos"].keys())
+                        for j, name in enumerate(reset_state[env_id]["robots"][robot.name]["dof_pos"].keys())
                     }
+                    start_idx += robot.num_joints
 
             return reset_state
         elif isinstance(init_states, TensorState):

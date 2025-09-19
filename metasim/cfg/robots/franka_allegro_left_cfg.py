@@ -15,18 +15,18 @@ from .base_robot_cfg import BaseActuatorCfg
 
 
 @configclass
-class FrankaShadowHandLeftCfg(BaseDexCfg):
-    """Cfg for the franka with left shadow hand robot."""
+class FrankaAllegroHandLeftCfg(BaseDexCfg):
+    """Cfg for the franka with left allegro hand robot."""
 
-    name: str = "franka_shadow_left"
-    num_joints: int = 31
+    name: str = "franka_allegro_left"
+    num_joints: int = 23
     num_arm_joints: int = 7
     fix_base_link: bool = True
-    urdf_path: str = "roboverse_data/robots/franka_shadow_hand/urdf/franka_shadow_left.urdf"
-    mjcf_path: str = "roboverse_data/robots/franka_shadow_hand/mjcf/franka_shadow_left.xml"
+    urdf_path: str = "roboverse_data/robots/franka_allegro_hand/urdf/franka_allegro_left.urdf"
+    # mjcf_path: str = "roboverse_data/robots/franka_shadow_hand/mjcf/franka_shadow_left.xml"
     project_root: Path = Path(__file__).resolve().parents[3]
     hand_urdf_path: Path = (
-        project_root / "roboverse_data" / "robots" / "franka_shadow_hand" / "urdf" / "shadow_left.urdf"
+        project_root / "roboverse_data" / "robots" / "franka_allegro_hand" / "urdf" / "allegro_left.urdf"
     )
     isaacgym_read_mjcf: bool = False
     enabled_gravity: bool = False
@@ -39,43 +39,33 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
     tendon_damping: float = 0.1
     friction = None  # Use default friction from MJCF
     robot_controller: Literal["ik", "dof_pos", "dof_effort"] = "ik"
-    fingertips = ["ffdistal", "mfdistal", "rfdistal", "lfdistal", "thdistal"]
-    fingertips_offset = [0.0, 0.005, 0.02]
-    wrist = "forearm"
-    palm = "palm"
+    fingertips = ["link_3_tip", "link_7_tip", "link_11_tip", "link_15_tip"]
+    fingertips_offset = [0.0, 0.0, 0.0]
+    wrist = "base_link"
+    palm = "base_link"
     root_link = "panda_link0"
-    shadow_hand_wrist_stiffness: float = 5
-    shadow_hand_wrist_damping: float = 0.5
-    shadow_hand_finger_stiffness: float = 1.0
-    shadow_hand_finger_damping: float = 0.1
+    allegro_stiffness: float = 3.0
+    allegro_damping: float = 0.1
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
 
     actuators: dict[str, BaseActuatorCfg] = {
-        "FFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "WRJ1": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
-        "WRJ2": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
+        "joint_0": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_1": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_10": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_11": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_12": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_13": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_14": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_15": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_2": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_3": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_4": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_5": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_6": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_7": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_8": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
+        "joint_9": BaseActuatorCfg(stiffness=allegro_stiffness, damping=allegro_damping),
         "panda_joint1": BaseActuatorCfg(stiffness=1e5, damping=1e4, velocity_limit=2.175),
         "panda_joint2": BaseActuatorCfg(stiffness=1e4, damping=1e3, velocity_limit=2.175),
         "panda_joint3": BaseActuatorCfg(stiffness=1e5, damping=5e3, velocity_limit=2.175),
@@ -86,30 +76,22 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
     }
 
     joint_limits: dict[str, tuple[float, float]] = {
-        "FFJ1": (0, 1.571),
-        "FFJ2": (0, 1.571),
-        "FFJ3": (0, 1.571),
-        "FFJ4": (-0.349, 0.349),
-        "LFJ1": (0, 1.571),
-        "LFJ2": (0, 1.571),
-        "LFJ3": (0, 1.571),
-        "LFJ4": (-0.349, 0.349),
-        "LFJ5": (0, 0.785),
-        "MFJ1": (0, 1.571),
-        "MFJ2": (0, 1.571),
-        "MFJ3": (0, 1.571),
-        "MFJ4": (-0.349, 0.349),
-        "RFJ1": (0, 1.571),
-        "RFJ2": (0, 1.571),
-        "RFJ3": (0, 1.571),
-        "RFJ4": (-0.349, 0.349),
-        "THJ1": (0, 1.571),
-        "THJ2": (-0.524, 0.524),
-        "THJ3": (-0.209, 0.209),
-        "THJ4": (0, 1.222),
-        "THJ5": (-1.047, 1.047),
-        "WRJ1": (-0.698, 0.489),
-        "WRJ2": (-0.489, 0.14),
+        "joint_0": (-0.47, 0.47),
+        "joint_1": (-0.174, 1.709),
+        "joint_10": (-0.174, 1.709),
+        "joint_11": (-0.227, 1.618),
+        "joint_12": (0.263, 1.396),
+        "joint_13": (-0.105, 1.163),
+        "joint_14": (-0.189, 1.644),
+        "joint_15": (-0.162, 1.719),
+        "joint_2": (-0.174, 1.709),
+        "joint_3": (-0.227, 1.618),
+        "joint_4": (-0.47, 0.47),
+        "joint_5": (-0.196, 1.61),
+        "joint_6": (-0.174, 1.709),
+        "joint_7": (-0.227, 1.618),
+        "joint_8": (-0.47, 0.47),
+        "joint_9": (-0.196, 1.61),
         "panda_joint1": (-2.8973, 2.8973),
         "panda_joint2": (-1.7628, 1.7628),
         "panda_joint3": (-2.8973, 2.8973),
@@ -132,30 +114,22 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
     isaacgym_flip_visual_attachments = False
 
     default_joint_positions: dict[str, float] = {
-        "FFJ1": 0.0,
-        "FFJ2": 0.0,
-        "FFJ3": 0.0,
-        "FFJ4": 0.0,
-        "LFJ1": 0.0,
-        "LFJ2": 0.0,
-        "LFJ3": 0.0,
-        "LFJ4": 0.0,
-        "LFJ5": 0.0,
-        "MFJ1": 0.0,
-        "MFJ2": 0.0,
-        "MFJ3": 0.0,
-        "MFJ4": 0.0,
-        "RFJ1": 0.0,
-        "RFJ2": 0.0,
-        "RFJ3": 0.0,
-        "RFJ4": 0.0,
-        "THJ1": 0.0,
-        "THJ2": 0.0,
-        "THJ3": 0.0,
-        "THJ4": 0.0,
-        "THJ5": 0.0,
-        "WRJ1": 0.0,
-        "WRJ2": 0.0,
+        "joint_0": 0.0,
+        "joint_1": 0.0,
+        "joint_10": 0.0,
+        "joint_11": 0.0,
+        "joint_12": 0.0,
+        "joint_13": 0.0,
+        "joint_14": 0.0,
+        "joint_15": 0.0,
+        "joint_2": 0.0,
+        "joint_3": 0.0,
+        "joint_4": 0.0,
+        "joint_5": 0.0,
+        "joint_6": 0.0,
+        "joint_7": 0.0,
+        "joint_8": 0.0,
+        "joint_9": 0.0,
         "panda_joint1": 0.0,
         "panda_joint2": -0.785398,
         "panda_joint3": 0.0,
@@ -166,11 +140,6 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
     }
 
     def __post_init__(self):
-        if self.isaacgym_read_mjcf:
-            self.actuators["LFJ1"].fully_actuated = False
-            self.actuators["RFJ1"].fully_actuated = False
-            self.actuators["MFJ1"].fully_actuated = False
-            self.actuators["FFJ1"].fully_actuated = False
         super().__post_init__()
         self.load_robot_for_ik()
 
@@ -229,9 +198,13 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
         # Create robot.
         self.hand = pk.Robot.from_urdf(urdf)
         self.solver = jax.jit(jax.vmap(_solve_ik_single_env, in_axes=(None, 0, 0, 0, None), out_axes=0))
-        self.hand_dof_names_ik = self.hand.joints.names[1:]  # skip the first joint which is world joint
-        self.ik_reindex = [self.hand_dof_names.index(name) for name in self.hand_dof_names_ik]
-        self.ik_reindex_inverse = [self.hand_dof_names_ik.index(name) for name in self.hand_dof_names]
+        self.hand_dof_names_ik = self.hand.joints.actuated_names  # skip the first joint which is world joint
+        self.ik_reindex = [
+            self.hand_dof_names.index(name) for name in self.hand_dof_names_ik if name in self.hand_dof_names
+        ]
+        self.ik_reindex_inverse = [
+            self.hand_dof_names_ik.index(name) for name in self.hand_dof_names if name in self.hand_dof_names_ik
+        ]
 
     def control_hand_ik(self, target_pos, target_rot):
         if self.robot_controller != "ik":
@@ -280,6 +253,7 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
         """
         dists = self.ft_pos - target_pos.unsqueeze(1)  # (num_envs, num_fingertips, 3)
         dists = torch.norm(dists, p=2, dim=-1)  # (num_envs, num_fingertips)
-        dists = torch.sum(dists, dim=-1)  # (num_envs,)
-        reward = 1.2 - dists  # (num_envs,)
-        return reward
+        mean_dists = torch.mean(dists, dim=-1)
+        sum_dists = torch.sum(dists, dim=-1)  # (num_envs,)
+        reward = 1.2 - sum_dists  # (num_envs,)
+        return reward, mean_dists

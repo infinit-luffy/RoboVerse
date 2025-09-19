@@ -13,7 +13,9 @@ from .base_robot_cfg import BaseRobotCfg
 
 @configclass
 class BaseDexCfg(BaseRobotCfg):
-    """Base cfg for dexterous hand robot."""
+    """Base cfg for dexterous hand robot.
+    Actuator should be set in alphabetical order of joint names.
+    """
 
     num_arm_joints: int = MISSING
     """Number of arm joints."""

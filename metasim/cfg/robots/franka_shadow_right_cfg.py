@@ -237,9 +237,11 @@ class FrankaShadowHandRightCfg(BaseDexCfg):
         if self.robot_controller != "ik":
             raise ValueError("robot_controller must be 'ik' to use control_hand_ik")
         init_q = torch_to_jax(self.dof_pos[:, self.hand_dof_idx][:, self.ik_reindex])
-        target_wxyz = math.quat_mul(
-            math.quat_from_euler_xyz(target_rot[..., 0], target_rot[..., 1], target_rot[..., 2]),
-            self.ft_relative_rot,
+        target_wxyz = torch_to_jax(
+            math.quat_mul(
+                math.quat_from_euler_xyz(target_rot[..., 0], target_rot[..., 1], target_rot[..., 2]),
+                self.ft_relative_rot,
+            )
         )
         target_position = target_pos + self.ft_pos
         target_position = torch_to_jax(

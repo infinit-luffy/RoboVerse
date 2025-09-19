@@ -652,7 +652,7 @@ class IsaacgymHandler(BaseSimHandler):
                     )
                     self.gym.set_rigid_body_color(env, obj_handle, 0, gymapi.MESH_VISUAL_AND_COLLISION, color)
                 elif isinstance(self.objects[obj_i], RigidObjCfg):
-                    if self.objects[obj_i].color is not MISSING:
+                    if self.objects[obj_i].color is not None:
                         color = gymapi.Vec3(
                             self.objects[obj_i].color[0],
                             self.objects[obj_i].color[1],
@@ -685,7 +685,7 @@ class IsaacgymHandler(BaseSimHandler):
                     self.gym.set_actor_dof_properties(
                         env, obj_handle, self._articulated_dof_prop_dict[self.objects[obj_i].name]
                     )
-                    if self.objects[obj_i].color is not MISSING:
+                    if self.objects[obj_i].color is not None:
                         color = gymapi.Vec3(
                             self.objects[obj_i].color[0],
                             self.objects[obj_i].color[1],

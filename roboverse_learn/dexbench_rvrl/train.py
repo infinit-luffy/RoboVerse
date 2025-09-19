@@ -82,6 +82,7 @@ class Args:
     wandb_project: str = "roboverse_dexbench_rl"
     objects: str = None
     obs_type: str = "state"  # "state" or "rgb"
+    robot: str = "shadow"  # "allegro" or "shadow"
     no_prio: bool = False
 
 
@@ -174,6 +175,8 @@ def main():
     logdir = logdir + f"_seed{args.seed}" + f"_{args.obs_type}"
     if args.objects is not None:
         logdir += f"_{args.objects}"
+    if args.robot is not None:
+        logdir += f"_{args.robot}"
     if args.experiment != "Base":
         logdir += f"_{args.experiment}"
 
@@ -185,6 +188,8 @@ def main():
         wandb_name = f"{args.task}_{args.algo}_{args.experiment}"
         if args.objects is not None:
             wandb_name += f"_{args.objects}"
+        if args.robot is not None:
+            wandb_name += f"_{args.robot}"
         if args.experiment != "Base":
             wandb_name += f"_{args.experiment}"
         wandb_name += f"_{time.strftime('%Y_%m_%d_%H_%M_%S')}"

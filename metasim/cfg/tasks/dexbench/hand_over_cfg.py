@@ -202,7 +202,7 @@ class HandOverCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.0, 0.316, 0.0]),
+                    "pos": torch.tensor([0.0, 0.095, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -226,12 +226,12 @@ class HandOverCfg(BaseRLTaskCfg):
                         "panda_joint3": 0.0,
                         "panda_joint4": -2.356194,
                         "panda_joint5": 0.0,
-                        "panda_joint6": 3.1415928,
+                        "panda_joint6": 2.8915928,
                         "panda_joint7": -2.356194,
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.356, 0.0]),
+                    "pos": torch.tensor([0.0, -1.18, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,

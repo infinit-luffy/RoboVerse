@@ -28,6 +28,8 @@ class DexEnv(BaseVecEnv):
         task = task_cls()
         if args.objects is not None:
             task.current_object_type = args.objects
+        if args.robot is not None:
+            task.current_robot_type = args.robot
         task.num_envs = args.num_envs
         task.device = args.device
         task.is_testing = args.test

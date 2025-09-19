@@ -162,7 +162,7 @@ class DreamerV3:
         self.batch_length = learn_cfg.get("batch_length", 64)
         self.horizon = learn_cfg.get("horizon", 15)
         self.max_iterations = learn_cfg.get("max_iterations", 500000)
-        self.prefill = learn_cfg.get("prefill", 10000)
+        self.prefill = learn_cfg.get("prefill", 200)
         self.amp = learn_cfg.get("amp", False)
         self.nstep = learn_cfg.get("nstep", 1)
 
@@ -266,6 +266,8 @@ class DreamerV3:
         self.prev_global_step = 0
         self.ratio = Ratio(ratio=0.5)
         self.aggregator = MetricAggregator({
+            # "loss/recon_rgb_loss_mean": MeanMetric(sync_on_compute=False),
+            # "loss/recon_vec_loss_mean": MeanMetric(sync_on_compute=False),
             "Loss/reconstruction_loss": MeanMetric(sync_on_compute=False),
             "Loss/reward_loss": MeanMetric(sync_on_compute=False),
             "Loss/continue_loss": MeanMetric(sync_on_compute=False),
@@ -379,7 +381,7 @@ class DreamerV3:
                             embeded_obs.view(self.num_envs, -1), deterministic
                         )
                         posterior = posterior_dist.sample().view(-1, self.stochastic_size)
-                        if self.global_step < self.prefill:
+                        if iteration < self.prefill:
                             action = torch.rand((self.num_envs, self.action_dim), device=self.device) * 2 - 1
                         else:
                             action = self.actor(posterior, deterministic).sample()
@@ -406,7 +408,7 @@ class DreamerV3:
 
                 mean_reward = self.episode_rewards_step.mean
                 ## Update the model
-                if self.global_step > self.prefill:
+                if iteration > self.prefill:
                     with timer("time/train"):
                         # gradient_steps = self.ratio(self.global_step - self.prefill)
 
@@ -486,20 +488,20 @@ class DreamerV3:
                 img_obs = data["observation"][:, :, self.state_shape :].view(
                     self.batch_size, self.batch_length, 3, self.img_h, self.img_w
                 )
-                # if save_recon:
-                #     import cv2
-                #     import numpy as np
+                if save_recon:
+                    import cv2
+                    import numpy as np
 
-                #     img = reconstructed_img_obs[0, 0]
-                #     img0 = img.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
-                #     img0_uint8 = (img0 * 255).astype(np.uint8)
-                #     img0_bgr = cv2.cvtColor(img0_uint8, cv2.COLOR_RGB2BGR)
-                #     img1 = img_obs[0, 0]
-                #     img1 = img1.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
-                #     img1_uint8 = (img1 * 255).astype(np.uint8)
-                #     img1_bgr = cv2.cvtColor(img1_uint8, cv2.COLOR_RGB2BGR)
-                #     img_bgr = np.concatenate([img1_bgr, img0_bgr], axis=1)
-                #     cv2.imwrite("recon_img.png", img_bgr)
+                    img = reconstructed_img_obs[0, 0]
+                    img0 = img.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
+                    img0_uint8 = (img0 * 255).astype(np.uint8)
+                    img0_bgr = cv2.cvtColor(img0_uint8, cv2.COLOR_RGB2BGR)
+                    img1 = img_obs[0, 0]
+                    img1 = img1.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
+                    img1_uint8 = (img1 * 255).astype(np.uint8)
+                    img1_bgr = cv2.cvtColor(img1_uint8, cv2.COLOR_RGB2BGR)
+                    img_bgr = np.concatenate([img1_bgr, img0_bgr], axis=1)
+                    cv2.imwrite("recon_img.png", img_bgr)
                 reconstructed_img_obs_dist = MSEDistribution(
                     reconstructed_img_obs, 3
                 )  # 3 is number of dimensions for observation space, shape is (3, H, W)
@@ -626,8 +628,7 @@ class DreamerV3:
                 # Below directly computes the gradient through dynamics.
                 actor_target = advantages
             elif self.actor_grad == "reinforce":
-                actor_target = advantages.detach() * actor_dist.log_prob(actions[:, :-1]).unsqueeze(-1)
-            # actor_target = advantages.detach() * actor_dist.log_prob(actions).unsqueeze(-1)
+                actor_target = advantages.detach() * actor_dist.log_prob(actions[:, 1:]).unsqueeze(-1)
             # For discount factor, see https://ai.stackexchange.com/q/7680
             actor_loss = -((actor_target + self.actor_ent_coef * actor_entropy) * discount).mean()
         self.actor_optimizer.zero_grad()

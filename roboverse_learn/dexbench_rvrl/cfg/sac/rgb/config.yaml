@@ -10,6 +10,7 @@ policy: # only works for MlpPolicy right now
   encoder_type: "cnn"
   fix_img_encoder: True # if True, the image encoder will not be trained, useful for transfer learning
   fix_actor_img_encoder: True # if True, the image encoder in the actor will not be trained, useful for transfer learning
+  visual_feature_dim: 512
 learn:
   agent_name: shadow_hand
   test: False
@@ -29,6 +30,10 @@ learn:
   policy_frequency: 1
   target_network_frequency: 2
   batch_size: 4096
-  prefill: 100000
+  prefill: 400
   buffer_size: 5000
   gamma: 0.96
+
+env:
+  img_h: 128
+  img_w: 128

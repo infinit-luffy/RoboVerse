@@ -58,3 +58,7 @@ learn:
   critic_clip: 100.0
   gae_lambda: 0.95
   gamma: 0.99
+
+env:
+  img_h: 128
+  img_w: 128

@@ -6,9 +6,13 @@ clip_actions: 1.0
 policy: # only works for MlpPolicy right now
   pi_hid_sizes: [1024, 1024, 512]
   vf_hid_sizes: [1024, 1024, 512]
+  visual_feature_dim: 1024
   activation: elu # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
-  encoder_type: "resnet"
-  fix_img_encoder: True # if True, the image encoder will not be trained, useful for transfer learning
+  encoder_type: "cnn"
+  min_res: 4
+  kernel_size: 4
+  depth: 32
+  fix_img_encoder: False # if True, the image encoder will not be trained, useful for transfer learning
   fix_actor_img_encoder: True # if True, the image encoder in the actor will not be trained, useful for transfer learning
 learn:
   agent_name: shadow_hand
@@ -33,3 +37,7 @@ learn:
   gamma: 0.9
   lam: 0.95
   init_noise_std: 0.8
+
+env:
+  img_h: 128
+  img_w: 128

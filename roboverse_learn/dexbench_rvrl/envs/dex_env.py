@@ -21,7 +21,7 @@ from roboverse_learn.dexbench_rvrl.envs.base import BaseVecEnv
 class DexEnv(BaseVecEnv):
     """Dex Environment Wrapper for RL tasks."""
 
-    def __init__(self, task_name: str, args=None):
+    def __init__(self, task_name: str, args=None, env_cfg=None):
         """Initialize the BiDex environment wrapper."""
         assert args is not None, "args must be provided"
         task_cls = get_task(task_name)
@@ -34,6 +34,9 @@ class DexEnv(BaseVecEnv):
         task.device = args.device
         task.is_testing = args.test
         task.obs_type = args.obs_type
+        if "rgb" in args.obs_type and env_cfg is not None:
+            task.img_h = env_cfg.get("img_h", 256)
+            task.img_w = env_cfg.get("img_w", 256)
         task.use_prio = not args.no_prio  # Use proprioception in state observation
         task.set_objects()
         task.set_init_states()
@@ -76,17 +79,14 @@ class DexEnv(BaseVecEnv):
         # observation space
         # Create an observation space (398 dimensions) for a single environment, instead of the entire batch (num_envs,398).
         self.obs_type = getattr(scenario.task, "obs_type", "state")
-        self.use_prio = getattr(scenario.task, "use_prio", True)
-        obs_shape = (self.task.obs_shape,)
-        self._observation_space = spaces.Box(low=-5.0, high=5.0, shape=obs_shape, dtype=np.float32)
+        obs_shape = self.task.obs_shape
+        self._observation_space = spaces.Dict({
+            key: spaces.Box(low=-5.0, high=5.0, shape=shape, dtype=np.float32) for key, shape in obs_shape.items()
+        })
         if hasattr(self.task, "proprio_shape"):
             self.proprio_shape = self.task.proprio_shape
         else:
             self.proprio_shape = None
-        if hasattr(self.task, "proceptual_shape"):
-            self.proceptual_shape = self.task.proceptual_shape
-        else:
-            self.proceptual_shape = None
         if hasattr(self.task, "img_h") and hasattr(self.task, "img_w"):
             self.img_h = self.task.img_h
             self.img_w = self.task.img_w
@@ -135,11 +135,12 @@ class DexEnv(BaseVecEnv):
         observations = self.task.observation_fn(
             obs, torch.zeros((self.num_envs, self.action_shape), device=self.sim_device)
         )
-        observations = torch.clamp(
-            observations,
-            torch.tensor(self.observation_space.low, device=self.sim_device),
-            torch.tensor(self.observation_space.high, device=self.sim_device),
-        )
+        for key, value in observations.items():
+            value = torch.clamp(
+                value,
+                torch.tensor(self.observation_space[key].low, device=self.sim_device),
+                torch.tensor(self.observation_space[key].high, device=self.sim_device),
+            )
         self.reset_goal_pose(env_ids)
 
         # Reset episode tracking variables
@@ -233,11 +234,12 @@ class DexEnv(BaseVecEnv):
         self.task.update_state(envstates)
         self.tensor_states = envstates
         observations = self.task.observation_fn(envstates=envstates, actions=actions, device=self.sim_device)
-        observations = torch.clamp(
-            observations,
-            torch.tensor(self.observation_space.low, device=self.sim_device),
-            torch.tensor(self.observation_space.high, device=self.sim_device),
-        )
+        for key, value in observations.items():
+            value = torch.clamp(
+                value,
+                torch.tensor(self.observation_space[key].low, device=self.sim_device),
+                torch.tensor(self.observation_space[key].high, device=self.sim_device),
+            )
 
         info["success_rate"] = torch.tensor([success_rate], dtype=torch.float32, device=self.sim_device)
         info["total_succ_rate"] = torch.tensor([self.mean_success_rate], dtype=torch.float32, device=self.sim_device)

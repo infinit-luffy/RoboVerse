@@ -1,4 +1,5 @@
 import torch
+from tensordict import TensorDict
 from torch.utils.data.sampler import BatchSampler, SequentialSampler, SubsetRandomSampler
 
 
@@ -16,7 +17,12 @@ class RolloutStorage:
         self.sampler = sampler
 
         # Core
-        self.observations = torch.zeros(num_transitions_per_env, num_envs, obs_shape, device=self.device)
+        self.observations = TensorDict({
+            key: torch.zeros(num_transitions_per_env, num_envs, *shape, device=self.device)
+            if "rgb" not in key
+            else torch.zeros(num_transitions_per_env, num_envs, *shape, dtype=torch.uint8, device=self.device)
+            for key, shape in obs_shape.items()
+        })
         self.rewards = torch.zeros(num_transitions_per_env, num_envs, device=self.device)
         self.actions = torch.zeros(num_transitions_per_env, num_envs, actions_shape, device=self.device)
         self.dones = torch.zeros(num_transitions_per_env, num_envs, device=self.device).byte()
@@ -37,7 +43,11 @@ class RolloutStorage:
     def add_transitions(self, observations, actions, rewards, dones, values, actions_log_prob, mu, sigma):
         if self.step >= self.num_transitions_per_env:
             raise AssertionError("Rollout buffer overflow")
-        self.observations[self.step].copy_(observations)
+        for key in self.observations.keys():
+            if "rgb" in key:
+                self.observations[key][self.step].copy_((observations[key] * 255.0).detach().to(torch.uint8))
+            else:
+                self.observations[key][self.step].copy_(observations[key])
         self.actions[self.step].copy_(actions)
         self.rewards[self.step].copy_(rewards)
         self.dones[self.step].copy_(dones)

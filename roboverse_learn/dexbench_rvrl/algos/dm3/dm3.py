@@ -139,13 +139,8 @@ class DreamerV3:
         self.cast_device = self.device.type
 
         self.action_dim = np.prod(env.single_action_space.shape)
-        self.obs_dim = np.prod(env.single_observation_space.shape)
+        self.obs_shape = {k: v.shape for k, v in env.single_observation_space.spaces.items()}
         self.obs_type = getattr(env, "obs_type", "state")
-        self.use_prio = getattr(env, "use_prio", True)
-        if self.use_prio:
-            self.state_shape = getattr(env, "proprio_shape", None)
-        else:
-            self.state_shape = getattr(env, "proceptual_shape", None)
         self.img_h = getattr(env, "img_h", None)
         self.img_w = getattr(env, "img_w", None)
         self.env = env
@@ -195,7 +190,7 @@ class DreamerV3:
         self.model_cfg = self.train_cfg.get("model", {})
 
         self.buffer = ReplayBuffer_Pytorch(
-            self.obs_dim,
+            self.obs_shape,
             self.action_dim,
             device,
             num_envs=self.num_envs,
@@ -205,16 +200,18 @@ class DreamerV3:
         # dm3 components
         self.encoder = Encoder(
             self.model_cfg,
-            self.state_shape,
+            self.obs_type,
+            self.obs_shape,
             self.symlog_input,
             self.img_h,
             self.img_w,
         ).to(device)
         self.decoder = Decoder(
+            self.obs_type,
+            self.obs_shape,
             self.deterministic_size,
             self.stochastic_size,
             self.model_cfg,
-            self.state_shape,
             self.img_h,
             self.img_w,
         ).to(device)
@@ -266,8 +263,6 @@ class DreamerV3:
         self.prev_global_step = 0
         self.ratio = Ratio(ratio=0.5)
         self.aggregator = MetricAggregator({
-            # "loss/recon_rgb_loss_mean": MeanMetric(sync_on_compute=False),
-            # "loss/recon_vec_loss_mean": MeanMetric(sync_on_compute=False),
             "Loss/reconstruction_loss": MeanMetric(sync_on_compute=False),
             "Loss/reward_loss": MeanMetric(sync_on_compute=False),
             "Loss/continue_loss": MeanMetric(sync_on_compute=False),
@@ -361,7 +356,8 @@ class DreamerV3:
             self.test(self.model_dir)
         elif self.model_dir is not None:
             self.load(self.model_dir)
-        obs = self.env.reset().clone()
+        reset_obs = self.env.reset()
+        obs = {k: reset_obs[k].clone() for k in reset_obs.keys()}
         self.start_time = time.time()
         if not self.is_testing:
             cur_rewards_sum = torch.zeros(self.num_envs, device=self.device)
@@ -389,7 +385,8 @@ class DreamerV3:
                         done = torch.logical_or(terminated, truncated)
                         env_step = self.env.episode_lengths
                         self.buffer.add(obs, action, reward, next_obs, done, terminated, env_step)
-                        obs.copy_(next_obs)
+                        for key in obs.keys():
+                            obs[key].copy_(next_obs[key])
 
                         ep_infos.append(info)
                         cur_rewards_sum += reward
@@ -549,11 +546,6 @@ class DreamerV3:
         self.model_scaler.update()
 
         with torch.no_grad():
-            # if self.img_h is not None and self.img_w is not None:
-            #     self.aggregator.update(
-            #         "loss/recon_rgb_loss_mean", reconstructed_img_obs_loss.item() / (3 * self.img_h * self.img_w)
-            #     )
-            # self.aggregator.update("loss/recon_vec_loss_mean", reconstructed_vector_obs_loss.item() / self.state_shape)
             self.aggregator.update("loss/reconstruction_loss", reconstructed_obs_loss.item())
             self.aggregator.update("loss/reward_loss", reward_loss.item())
             self.aggregator.update("loss/continue_loss", continue_loss.item())

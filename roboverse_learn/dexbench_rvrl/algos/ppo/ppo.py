@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from roboverse_learn.dexbench_rvrl.algos.ppo.module import ActorCritic, ActorCritic_RGB
+from roboverse_learn.dexbench_rvrl.algos.ppo.module import ActorCritic
 from roboverse_learn.dexbench_rvrl.algos.ppo.storage import RolloutStorage
 
 
@@ -69,13 +69,8 @@ class PPO:
 
         ## env info
         self.action_dim = np.prod(env.single_action_space.shape)
-        self.obs_dim = np.prod(env.single_observation_space.shape)
+        self.obs_shape = {k: v.shape for k, v in env.single_observation_space.spaces.items()}
         self.obs_type = getattr(env, "obs_type", "state")
-        self.use_prio = getattr(env, "use_prio", True)
-        if self.use_prio:
-            self.state_shape = getattr(env, "proprio_shape", None)
-        else:
-            self.state_shape = getattr(env, "proceptual_shape", None)
         self.img_h = getattr(env, "img_h", None)
         self.img_w = getattr(env, "img_w", None)
 
@@ -98,32 +93,21 @@ class PPO:
 
         ## ppo components
         self.env = env
-        if self.obs_type == "state":
-            print("Using state observation")
-            self.actor_critic = ActorCritic(
-                self.obs_dim,
-                self.action_dim,
-                self.init_noise_std,
-                self.model_cfg,
-            )
-        elif self.obs_type == "rgb":
-            print("Using RGB observation")
-            self.actor_critic = ActorCritic_RGB(
-                self.obs_dim,
-                self.action_dim,
-                self.init_noise_std,
-                self.model_cfg,
-                state_shape=self.state_shape,
-                img_h=self.img_h,
-                img_w=self.img_w,
-            )
-        else:
-            raise ValueError(f"Unsupported observation type: {self.obs_type}")
+        print(f"Observation type: {self.obs_type}")
+        self.actor_critic = ActorCritic(
+            obs_type=self.obs_type,
+            obs_shape=self.obs_shape,
+            actions_shape=self.action_dim,
+            initial_std=self.init_noise_std,
+            model_cfg=self.model_cfg,
+            img_h=self.img_h,
+            img_w=self.img_w,
+        )
 
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.step_size, eps=1e-5)
 
         self.buffer = RolloutStorage(
-            self.num_envs, self.nsteps, self.obs_dim, self.action_dim, device=self.device, sampler=self.sampler
+            self.num_envs, self.nsteps, self.obs_shape, self.action_dim, device=self.device, sampler=self.sampler
         )
 
         self.episode_rewards = RollingMeter(learn_cfg.get("window_size", 100))
@@ -173,7 +157,8 @@ class PPO:
         elif self.model_dir is not None:
             self.load(self.model_dir)
             print(f"Loaded model from {self.model_dir}")
-        obs = self.env.reset().clone()
+        rest_obs = self.env.reset()
+        obs = {k: rest_obs[k].clone() for k in rest_obs.keys()}
         if not self.is_testing:
             for iteration in range(self.current_learning_iteration, self.max_iterations):
                 ## collect rollout
@@ -187,7 +172,8 @@ class PPO:
                     dones = torch.logical_or(terminated, truncated)
                     self.buffer.add_transitions(obs, action, reward, dones, value.view(-1), log_prob, mu, sigma)
 
-                    obs.copy_(next_obs)
+                    for k in obs.keys():
+                        obs[k].copy_(next_obs[k])
 
                     self.cur_rewards_sum += reward
                     self.cur_episode_length += 1
@@ -230,7 +216,12 @@ class PPO:
         ## optimize
         for epoch in range(self.num_learning_epochs):
             for indices in batch:
-                obs_batch = self.buffer.observations.view(-1, self.obs_dim)[indices]
+                obs_batch = {
+                    key: self.buffer.observations[key].view(-1, *self.obs_shape[key])[indices]
+                    if "rgb" not in key
+                    else self.buffer.observations[key].view(-1, *self.obs_shape[key])[indices].float() / 255.0
+                    for key in self.obs_shape
+                }
                 actions_batch = self.buffer.actions.view(-1, self.action_dim)[indices]
                 returns_batch = self.buffer.returns.view(-1)[indices]
                 old_log_probs_batch = self.buffer.actions_log_prob.view(-1)[indices]

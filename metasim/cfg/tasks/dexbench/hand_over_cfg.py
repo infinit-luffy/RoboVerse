@@ -282,31 +282,28 @@ class HandOverCfg(BaseRLTaskCfg):
 
     def set_init_states(self) -> None:
         """Set the initial states for the hand over task."""
-        self.proceptual_shape = 0
+        self.state_shape = 0
         for robot in self.robots:
-            self.proceptual_shape += robot.observation_shape
-            self.proceptual_shape += robot.num_fingertips * 6  # fingertip forces
-        self.proceptual_shape += self.action_shape
-        self.proprio_shape = (
-            self.proceptual_shape + 24
-        )  # object position(3), rotation(4), linear velocity(3), angular velocity(3), goal position(3), goal rotation(4)
-        self.obs_shape = self.proprio_shape
+            self.state_shape += robot.observation_shape
+            self.state_shape += robot.num_fingertips * 6  # fingertip forces
+        self.state_shape += self.action_shape
+        if self.use_prio:
+            self.state_shape += 24
+        self.obs_shape = {
+            "state": (self.state_shape,),
+        }
         if self.obs_type == "state":
             self.cameras = []
             if not self.use_prio:
                 raise ValueError("State observation type requires proprioception to be enabled.")
         elif self.obs_type == "rgb":
-            self.img_h = 128
-            self.img_w = 128
+            assert hasattr(self, "img_h") and hasattr(self, "img_w"), "Image height and width must be set."
             self.cameras = [
                 PinholeCameraCfg(
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)
                 )
             ]
-            if self.use_prio:
-                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w  # 398-dimensional state + RGB image
-            else:
-                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_goal_pos = torch.tensor(
             [0.0, -0.64, 0.85], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
@@ -425,51 +422,50 @@ class HandOverCfg(BaseRLTaskCfg):
                 .view(1, -1)
                 .repeat(num_envs, 1)
             )
-        obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float32, device=device)
+        obs = {
+            "state": torch.zeros((num_envs, self.state_shape), dtype=torch.float32, device=device),
+        }
+        state_obs = obs["state"]
         t = 0
-        obs[:, : self.robots[0].observation_shape] = self.robots[0].observation()
+        state_obs[:, : self.robots[0].observation_shape] = self.robots[0].observation()
         t += self.robots[0].observation_shape
         for name in self.robots[0].fingertips:
             # shape: (num_envs, 3) + (num_envs, 3) => (num_envs, 6)
             r_name = "right" + name
             force = envstates.sensors[r_name].force  # (num_envs, 3)
             torque = envstates.sensors[r_name].torque  # (num_envs, 3)
-            obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
+            state_obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
-        obs[:, t : t + self.action_shape // 2] = actions[:, : self.action_shape // 2]  # actions for right hand
+        state_obs[:, t : t + self.action_shape // 2] = actions[:, : self.action_shape // 2]  # actions for right hand
         t += self.action_shape // 2
-        obs[:, t : t + self.robots[1].observation_shape] = self.robots[1].observation()
+        state_obs[:, t : t + self.robots[1].observation_shape] = self.robots[1].observation()
         t += self.robots[1].observation_shape
         for name in self.robots[1].fingertips:
             # shape: (num_envs, 3) + (num_envs, 3) => (num_envs, 6)
             l_name = "left" + name
             force = envstates.sensors[l_name].force
             torque = envstates.sensors[l_name].torque
-            obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
+            state_obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
-        obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
+        state_obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
         t += self.action_shape // 2
         if self.use_prio:
-            obs[:, t : t + 13] = envstates.objects[self.current_object_type].root_state
-            obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object angvel
+            state_obs[:, t : t + 13] = envstates.objects[self.current_object_type].root_state
+            state_obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object angvel
             t += 13
-            obs[:, t : t + 7] = torch.cat(
+            state_obs[:, t : t + 7] = torch.cat(
                 [self.goal_pos, self.goal_rot], dim=1
             )  # goal position and rotation (num_envs, 7)
             t += 7
-            obs[:, t : t + 4] = math.quat_mul(
+            state_obs[:, t : t + 4] = math.quat_mul(
                 envstates.objects[self.current_object_type].root_state[:, 3:7], math.quat_inv(self.goal_rot)
             )  # goal rotation - object rotation
             t += 4
-            if self.obs_type == "rgb":
-                obs[:, t:] = (
-                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
-        else:
-            if self.obs_type == "rgb":
-                obs[:, t:] = (
-                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
+        obs["state"] = state_obs
+        if self.obs_type == "rgb":
+            obs["rgb"] = (
+                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2) / 255.0
+            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W)
         return obs
 
     def reward_fn(
@@ -552,6 +548,16 @@ class HandOverCfg(BaseRLTaskCfg):
             return deepcopy(init_states)
         self.env_throw_bonus[env_ids] = True
         if isinstance(init_states, list):
+            if getattr(self, "robot_dof_default_pos_cpu", None) is None:
+                self.robot_dof_default_pos_cpu = {}
+                for robot in self.robots:
+                    self.robot_dof_default_pos_cpu[robot.name] = torch.zeros(
+                        robot.num_joints, dtype=torch.float32, device="cpu"
+                    )
+                    for idx, name in enumerate(robot.dof_names):
+                        self.robot_dof_default_pos_cpu[robot.name][idx] = self.init_states["robots"][robot.name][
+                            "dof_pos"
+                        ][name]
             reset_state = deepcopy(init_states)
             num_dofs = self.robots[0].num_joints + self.robots[1].num_joints
             x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
@@ -571,16 +577,15 @@ class HandOverCfg(BaseRLTaskCfg):
 
                 # reset hand
                 for robot in self.robots:
-                    robot_dof_default_pos = reset_state.robots[robot.name].joint_pos[env_ids]
-                    delta_max = robot.joint_limits_upper - robot_dof_default_pos
-                    delta_min = robot.joint_limits_lower - robot_dof_default_pos
+                    robot_dof_default_pos = self.robot_dof_default_pos_cpu[robot.name]
+                    delta_max = robot.joint_limits_upper.cpu() - robot_dof_default_pos
+                    delta_min = robot.joint_limits_lower.cpu() - robot_dof_default_pos
                     rand_delta = (
                         delta_min + (delta_max - delta_min) * rand_floats[i, start_idx : start_idx + robot.num_joints]
                     )
                     dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
                     reset_state[env_id]["robots"][robot.name]["dof_pos"] = {
-                        name: dof_pos[j].item()
-                        for j, name in enumerate(reset_state[env_id]["robots"][robot.name]["dof_pos"].keys())
+                        name: dof_pos[idx].item() for idx, name in enumerate(robot.dof_names)
                     }
                     start_idx += robot.num_joints
 

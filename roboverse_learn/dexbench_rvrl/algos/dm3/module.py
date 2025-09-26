@@ -333,13 +333,23 @@ def uniform_init_weights(given_scale):
 
 
 class Encoder(nn.Module):
-    def __init__(self, model_cfg, state_shape, symlog_input=True, img_h=None, img_w=None):
+    def __init__(self, model_cfg, obs_type, obs_shape, symlog_input=True, img_h=None, img_w=None):
         super().__init__()
-        self.state_shape = state_shape
+        self.obs_type = obs_type
+        self.obs_shape = obs_shape
+        self.obs_key = list(obs_shape.keys())
+        self.state_key = [key for key in obs_shape.keys() if "state" in key]
+        self.state_shape = sum([sum(obs_shape[key]) for key in self.state_key])
         self.symlog_input = symlog_input
-        self.img_h = img_h
-        self.img_w = img_w
-        if img_h is not None and img_w is not None:
+        if "rgb" in obs_type:
+            self.img_h = img_h
+            self.img_w = img_w
+            self.img_key = [key for key in obs_shape.keys() if "rgb" in key]
+            assert len(self.img_key) == 1, "only support one rgb observation, shape 3xhxw"
+            self.num_channel = [obs_shape[key][0] for key in self.img_key]
+            self.num_img = len(self.img_key)
+            self.visual_feature_dim = model_cfg.get("visual_feature_dim", 4096)
+
             self.min_res = model_cfg.get("min_res", 4)
             stages = int(np.log2(img_h) - np.log2(self.min_res))
             kernel_size = model_cfg.get("kernel_size", 4)
@@ -374,7 +384,7 @@ class Encoder(nn.Module):
         else:
             hidden_dim = model_cfg.get("hidden_dim")
         self.mlp_encoder = []
-        input_dim = np.prod(state_shape)
+        input_dim = np.prod(self.state_shape)
         for hdim in hidden_dim:
             self.mlp_encoder.append(nn.Linear(input_dim, hdim, bias=False))
             self.mlp_encoder.append(nn.LayerNorm(hdim, eps=1e-3))
@@ -386,30 +396,35 @@ class Encoder(nn.Module):
         self.output_dim = self.visual_feature_dim + self.mlp_feature_dim
 
     def forward(self, obs: Tensor) -> Tensor:
-        B = obs.shape[0]
-        vector_obs = obs[:, : self.state_shape]
-        if self.img_h is not None and self.img_w is not None:
-            image_obs = obs[:, self.state_shape :].reshape(B, 3, self.img_h, self.img_w) - 0.5
-            visual_embedded = self.visual_encoder(image_obs).reshape(B, -1)
-            if self.symlog_input:
-                vector_obs = symlog(vector_obs)
-            vector_embedded = self.mlp_encoder(vector_obs)
-            embedded_obs = torch.cat([visual_embedded, vector_embedded], dim=-1)
-        else:
-            if self.symlog_input:
-                vector_obs = symlog(vector_obs)
-            vector_embedded = self.mlp_encoder(vector_obs)
-            embedded_obs = vector_embedded
+        feature = []
+        B = obs[self.state_key[0]].shape[0]
+        for key in self.obs_key:
+            if key in self.state_key:
+                vector_obs = obs[key]
+                if self.symlog_input:
+                    vector_obs = symlog(vector_obs)
+                vector_embedded = self.mlp_encoder(vector_obs)
+                feature.append(vector_embedded)
+            elif key in self.img_key:
+                image_obs = obs[key] - 0.5
+                visual_embedded = self.visual_encoder(image_obs).reshape(B, -1)
+                feature.append(visual_embedded)
+
+        embedded_obs = torch.cat(feature, dim=-1)
         return embedded_obs.reshape(B, -1)  # flatten the last 3 dimensions C, H, W
 
 
 class Decoder(nn.Module):
-    def __init__(self, deterministic_size, stochastic_size, model_cfg, state_shape, img_h, img_w):
+    def __init__(self, obs_type, obs_shape, deterministic_size, stochastic_size, model_cfg, img_h, img_w):
         super().__init__()
-        self.state_shape = state_shape
-        self.img_h = img_h
-        self.img_w = img_w
-        if self.img_h is not None and self.img_w is not None:
+        self.obs_type = obs_type
+        self.obs_shape = obs_shape
+        self.obs_key = list(obs_shape.keys())
+        self.state_key = [key for key in obs_shape.keys() if "state" in key]
+        self.state_shape = sum([sum(obs_shape[key]) for key in self.state_key])
+        if "rgb" in obs_type:
+            self.img_h = img_h
+            self.img_w = img_w
             self.min_res = model_cfg.get("min_res", 4)
             stages = int(np.log2(img_h) - np.log2(self.min_res))
             kernel_size = model_cfg.get("kernel_size", 4)
@@ -467,7 +482,7 @@ class Decoder(nn.Module):
             self.mlp_decoder.append(nn.LayerNorm(hdim, eps=1e-3))
             self.mlp_decoder.append(nn.SiLU())
             input_dim = hdim
-        self.mlp_decoder.append(nn.Linear(input_dim, np.prod(state_shape), bias=True))
+        self.mlp_decoder.append(nn.Linear(input_dim, np.prod(self.state_shape), bias=True))
         self.mlp_decoder = nn.Sequential(*self.mlp_decoder)
         [m.apply(init_weights) for m in self.mlp_decoder[:-1]]
         self.mlp_decoder[-1].apply(uniform_init_weights(1.0))
@@ -480,30 +495,25 @@ class Decoder(nn.Module):
 
     def forward(self, posterior: Tensor, deterministic: Tensor) -> Tensor:
         x = torch.cat([posterior, deterministic], dim=-1)
-        if self.img_h is not None and self.img_w is not None:
-            input_shape = x.shape
-            x = x.flatten(0, 1)
-            reconstructed_visual_obs = self.linear_layer(x)
-            N = reconstructed_visual_obs.shape[0]
-            reconstructed_visual_obs = reconstructed_visual_obs.view(
-                N,
-                -1,
-                self.min_res,
-                self.min_res,
-            )
-            reconstructed_visual_obs = self.visual_decoder(reconstructed_visual_obs)
-            reconstructed_visual_obs = reconstructed_visual_obs.unflatten(0, input_shape[:2]) + 0.5
-            reconstructed_vector_obs = self.mlp_decoder(x).unflatten(0, input_shape[:2])
-            reconstructed_obs = {
-                "img": reconstructed_visual_obs,
-                "state": reconstructed_vector_obs,
-            }
-        else:
-            input_shape = x.shape
-            x = x.flatten(0, 1)
-            reconstructed_vector_obs = self.mlp_decoder(x)
-            reconstructed_obs = reconstructed_vector_obs
-            reconstructed_obs = {"state": reconstructed_obs.unflatten(0, input_shape[:2])}
+        input_shape = x.shape
+        x = x.flatten(0, 1)
+        reconstructed_obs = {}
+        for key in self.obs_key:
+            if key in self.state_key:
+                reconstructed_vector_obs = self.mlp_decoder(x).unflatten(0, input_shape[:2])
+                reconstructed_obs[key] = reconstructed_vector_obs
+            elif key in self.img_key:
+                reconstructed_visual_obs = self.linear_layer(x)
+                N = reconstructed_visual_obs.shape[0]
+                reconstructed_visual_obs = reconstructed_visual_obs.view(
+                    N,
+                    -1,
+                    self.min_res,
+                    self.min_res,
+                )
+                reconstructed_visual_obs = self.visual_decoder(reconstructed_visual_obs)
+                reconstructed_visual_obs = reconstructed_visual_obs.unflatten(0, input_shape[:2]) + 0.5
+                reconstructed_obs[key] = reconstructed_visual_obs
 
         return reconstructed_obs
 

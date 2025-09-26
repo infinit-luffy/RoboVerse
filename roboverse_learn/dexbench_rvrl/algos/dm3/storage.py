@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from loguru import logger as log
 from rich.logging import RichHandler
+from tensordict import TensorDict
 from torch import Tensor
 
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
@@ -18,7 +19,7 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 class ReplayBuffer:
     def __init__(
         self,
-        observation_shape: int,
+        observation_shape: dict,
         action_size: int,
         device: str | torch.device,
         num_envs: int = 1,
@@ -28,8 +29,18 @@ class ReplayBuffer:
         self.num_envs = num_envs
         self.capacity = capacity
 
-        self.observation = np.empty((self.capacity, self.num_envs, observation_shape), dtype=np.float32)
-        self.next_observation = np.empty((self.capacity, self.num_envs, observation_shape), dtype=np.float32)
+        self.observation = {
+            key: np.empty((self.capacity, self.num_envs, *shape), dtype=np.float32)
+            if "rgb" not in key
+            else np.empty((self.capacity, self.num_envs, *shape), dtype=np.uint8)
+            for key, shape in observation_shape.items()
+        }
+        self.next_observation = {
+            key: np.empty((self.capacity, self.num_envs, *shape), dtype=np.float32)
+            if "rgb" not in key
+            else np.empty((self.capacity, self.num_envs, *shape), dtype=np.uint8)
+            for key, shape in observation_shape.items()
+        }
         self.action = np.empty((self.capacity, self.num_envs, action_size), dtype=np.float32)
         self.reward = np.empty((self.capacity, self.num_envs, 1), dtype=np.float32)
         self.done = np.empty((self.capacity, self.num_envs, 1), dtype=np.float32)
@@ -52,10 +63,22 @@ class ReplayBuffer:
         terminated: Tensor,
         step: Tensor,
     ):
-        self.observation[self.buffer_index] = observation.detach().cpu().numpy()
+        for key in self.observation.keys():
+            if "rgb" in key:
+                self.observation[key][self.buffer_index] = (observation[key].detach().cpu().numpy() * 255.0).astype(
+                    np.uint8
+                )
+            else:
+                self.observation[key][self.buffer_index] = observation[key].detach().cpu().numpy()
         self.action[self.buffer_index] = action.detach().cpu().numpy()
         self.reward[self.buffer_index] = reward.unsqueeze(-1).detach().cpu().numpy()
-        self.next_observation[self.buffer_index] = next_observation.detach().cpu().numpy()
+        for key in self.next_observation.keys():
+            if "rgb" in key:
+                self.next_observation[key][self.buffer_index] = (
+                    next_observation[key].detach().cpu().numpy() * 255.0
+                ).astype(np.uint8)
+            else:
+                self.next_observation[key][self.buffer_index] = next_observation[key].detach().cpu().numpy()
         self.done[self.buffer_index] = done.unsqueeze(-1).detach().cpu().numpy()
         self.terminated[self.buffer_index] = terminated.unsqueeze(-1).detach().cpu().numpy()
         self.step_idx[self.buffer_index] = step.unsqueeze(-1).detach().cpu().numpy()
@@ -82,8 +105,19 @@ class ReplayBuffer:
         def flatten(x: np.ndarray) -> np.ndarray:
             return x.reshape(-1, *x.shape[2:])
 
-        observation = torch.as_tensor(flatten(self.observation)[flattened_index], device=self.device).float()
-        next_observation = torch.as_tensor(flatten(self.next_observation)[flattened_index], device=self.device).float()
+        observation = {
+            key: torch.as_tensor(flatten(self.observation[key])[flattened_index], device=self.device).float() / 255.0
+            if "rgb" in key
+            else torch.as_tensor(flatten(self.observation[key])[flattened_index], device=self.device).float()
+            for key in self.observation.keys()
+        }
+        next_observation = {
+            key: torch.as_tensor(flatten(self.next_observation[key])[flattened_index], device=self.device).float()
+            / 255.0
+            if "rgb" in key
+            else torch.as_tensor(flatten(self.next_observation[key])[flattened_index], device=self.device).float()
+            for key in self.next_observation.keys()
+        }
         action = torch.as_tensor(flatten(self.action)[flattened_index], device=self.device)
         reward = torch.as_tensor(flatten(self.reward)[flattened_index], device=self.device)
         done = torch.as_tensor(flatten(self.done)[flattened_index], device=self.device)
@@ -111,23 +145,39 @@ class ReplayBuffer:
 class ReplayBuffer_Pytorch:
     def __init__(
         self,
-        observation_shape: int,
+        observation_shape: dict,
         action_size: int,
         device: str | torch.device,
+        storage_device: str | torch.device = "cpu",
         num_envs: int = 1,
         capacity: int = 5000000,
     ):
         self.device = device
+        self.storage_device = storage_device
         self.num_envs = num_envs
         self.capacity = capacity
 
-        self.observation = torch.zeros((self.capacity, self.num_envs, observation_shape), dtype=torch.float32)
-        self.next_observation = torch.zeros((self.capacity, self.num_envs, observation_shape), dtype=torch.float32)
-        self.action = torch.zeros((self.capacity, self.num_envs, action_size), dtype=torch.float32)
-        self.reward = torch.zeros((self.capacity, self.num_envs, 1), dtype=torch.float32)
-        self.done = torch.zeros((self.capacity, self.num_envs, 1), dtype=torch.float32)
-        self.terminated = torch.zeros((self.capacity, self.num_envs, 1), dtype=torch.float32)
-        self.step_idx = torch.zeros((self.capacity, self.num_envs, 1), dtype=torch.float32)
+        self.observation = TensorDict({
+            key: torch.zeros((self.capacity, self.num_envs, *shape), dtype=torch.float32, device=self.storage_device)
+            if "rgb" not in key
+            else torch.zeros((self.capacity, self.num_envs, *shape), dtype=torch.uint8, device=self.storage_device)
+            for key, shape in observation_shape.items()
+        })
+        self.next_observation = TensorDict({
+            key: torch.zeros((self.capacity, self.num_envs, *shape), dtype=torch.float32, device=self.storage_device)
+            if "rgb" not in key
+            else torch.zeros((self.capacity, self.num_envs, *shape), dtype=torch.uint8, device=self.storage_device)
+            for key, shape in observation_shape.items()
+        })
+        self.action = torch.zeros(
+            (self.capacity, self.num_envs, action_size), dtype=torch.float32, device=self.storage_device
+        )
+        self.reward = torch.zeros((self.capacity, self.num_envs, 1), dtype=torch.float32, device=self.storage_device)
+        self.done = torch.zeros((self.capacity, self.num_envs, 1), dtype=torch.float32, device=self.storage_device)
+        self.terminated = torch.zeros(
+            (self.capacity, self.num_envs, 1), dtype=torch.float32, device=self.storage_device
+        )
+        self.step_idx = torch.zeros((self.capacity, self.num_envs, 1), dtype=torch.float32, device=self.storage_device)
 
         self.buffer_index = 0
         self.full = False
@@ -137,7 +187,7 @@ class ReplayBuffer_Pytorch:
 
     def add(
         self,
-        observation: Tensor,
+        observation: TensorDict,
         action: Tensor,
         reward: Tensor,
         next_observation: Tensor,
@@ -145,10 +195,20 @@ class ReplayBuffer_Pytorch:
         terminated: Tensor,
         step: Tensor,
     ):
-        self.observation[self.buffer_index].copy_(observation.detach())
+        for key in self.observation.keys():
+            if "rgb" in key:
+                self.observation[key][self.buffer_index].copy_((observation[key] * 255.0).detach().to(torch.uint8))
+            else:
+                self.observation[key][self.buffer_index].copy_(observation[key].detach())
         self.action[self.buffer_index].copy_(action.detach())
         self.reward[self.buffer_index].copy_(reward.unsqueeze(-1).detach())
-        self.next_observation[self.buffer_index].copy_(next_observation.detach())
+        for key in self.next_observation.keys():
+            if "rgb" in key:
+                self.next_observation[key][self.buffer_index].copy_(
+                    (next_observation[key] * 255.0).detach().to(torch.uint8)
+                )
+            else:
+                self.next_observation[key][self.buffer_index].copy_(next_observation[key].detach())
         self.done[self.buffer_index].copy_(done.unsqueeze(-1).detach())
         self.terminated[self.buffer_index].copy_(terminated.unsqueeze(-1).detach())
         self.step_idx[self.buffer_index].copy_(step.unsqueeze(-1).detach())
@@ -175,8 +235,18 @@ class ReplayBuffer_Pytorch:
         def flatten(x: np.ndarray) -> np.ndarray:
             return x.reshape(-1, *x.shape[2:])
 
-        observation = flatten(self.observation)[flattened_index].to(self.device)
-        next_observation = flatten(self.next_observation)[flattened_index].to(self.device)
+        observation = {
+            key: (flatten(self.observation[key])[flattened_index].to(self.device).float() / 255.0)
+            if "rgb" in key
+            else flatten(self.observation[key])[flattened_index].to(self.device).float()
+            for key in self.observation.keys()
+        }
+        next_observation = {
+            key: (flatten(self.next_observation[key])[flattened_index].to(self.device).float() / 255.0)
+            if "rgb" in key
+            else flatten(self.next_observation[key])[flattened_index].to(self.device).float()
+            for key in self.next_observation.keys()
+        }
         action = flatten(self.action)[flattened_index].to(self.device)
         reward = flatten(self.reward)[flattened_index].to(self.device)
         done = flatten(self.done)[flattened_index].to(self.device)

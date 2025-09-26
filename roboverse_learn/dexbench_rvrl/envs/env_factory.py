@@ -12,6 +12,7 @@ SEED_SPACING = 1_000_000
 def create_vector_env(
     env_id: str,
     args=None,
+    env_cfg=None,
 ) -> BaseVecEnv:
     """
     Create a vectorized environment.
@@ -31,7 +32,7 @@ def create_vector_env(
     if env_id.startswith("dexbench/"):
         from .dex_env import DexEnv
 
-        envs = DexEnv(env_id.replace("dexbench/", ""), args)
+        envs = DexEnv(env_id.replace("dexbench/", ""), args, env_cfg)
         return envs
     else:
         raise ValueError(f"Unknown environment: {env_id}")

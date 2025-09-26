@@ -155,6 +155,7 @@ def main():
     args = tyro.cli(Args)
     logdir, train_cfg_path = get_config_path(args)
     logdir, train_cfg = load_cfg(args, train_cfg_path, logdir)
+    env_cfg = train_cfg.get("env", None)
     print("Algorithm: ", args.algo)
     ## set device
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
@@ -170,6 +171,7 @@ def main():
     envs = create_vector_env(
         args.env_id,
         args=args,
+        env_cfg=env_cfg,
     )
 
     logdir = logdir + f"_seed{args.seed}" + f"_{args.obs_type}"
@@ -213,7 +215,7 @@ def main():
     )
 
     log.info(f"{envs.single_action_space.shape=}")
-    log.info(f"{envs.single_observation_space.shape=}")
+    log.info(f"{envs.single_observation_space=}")
 
     log.info(f"Algorithm: {args.algo}")
     log.info(f"Number of environments: {args.num_envs}")

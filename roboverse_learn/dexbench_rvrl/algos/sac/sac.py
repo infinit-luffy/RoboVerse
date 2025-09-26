@@ -18,7 +18,7 @@ from loguru import logger as log
 from tensordict import TensorDict
 from torch import Tensor
 
-from roboverse_learn.dexbench_rvrl.algos.sac.module import Actor, Actor_RGB, QNet, QNet_RGB, RGB_Encoder
+from roboverse_learn.dexbench_rvrl.algos.sac.module import Actor, QNet, RGB_Encoder
 from roboverse_learn.dexbench_rvrl.algos.sac.storage import ReplayBuffer
 from roboverse_learn.dexbench_rvrl.utils.reproducibility import enable_deterministic_run
 from roboverse_learn.dexbench_rvrl.utils.timer import timer
@@ -63,13 +63,8 @@ class SAC:
         self.device = device
 
         self.action_dim = np.prod(env.single_action_space.shape)
-        self.obs_dim = np.prod(env.single_observation_space.shape)
+        self.obs_shape = {k: v.shape for k, v in env.single_observation_space.spaces.items()}
         self.obs_type = getattr(env, "obs_type", "state")
-        self.use_prio = getattr(env, "use_prio", True)
-        if self.use_prio:
-            self.state_shape = getattr(env, "proprio_shape", None)
-        else:
-            self.state_shape = getattr(env, "proceptual_shape", None)
         self.img_h = getattr(env, "img_h", None)
         self.img_w = getattr(env, "img_w", None)
         self.env = env
@@ -91,14 +86,14 @@ class SAC:
         self.max_iterations = learn_cfg.get("max_iterations", 100000)
         self.log_interval = learn_cfg.get("log_interval", 1)
         self.print_interval = learn_cfg.get("print_interval", 10)
-        self.prefill = learn_cfg.get("prefill", 5000)
+        self.prefill = learn_cfg.get("prefill", 200)
         self.max_grad_norm = learn_cfg.get("max_grad_norm", None)
 
         self.model_cfg = self.train_cfg.get("policy", None)
 
         ## Replay buffer
         self.buffer = ReplayBuffer(
-            self.obs_dim,
+            self.obs_shape,
             self.action_dim,
             device,
             self.num_envs,
@@ -106,83 +101,70 @@ class SAC:
         )
 
         ## SAC components
-        if self.obs_type == "state":
-            self.actor = Actor(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-            self.qf1 = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-            self.qf2 = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-            self.qf1_target = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-            self.qf2_target = QNet(self.obs_dim, self.action_dim, self.model_cfg).to(device)
-            self.qf1_target.load_state_dict(self.qf1.state_dict())
-            self.qf2_target.load_state_dict(self.qf2.state_dict())
-            self.qf1_params = TensorDict(dict(self.qf1.named_parameters(), batch_size=()))
-            self.qf2_params = TensorDict(dict(self.qf2.named_parameters(), batch_size=()))
-            self.qf1_target_params = TensorDict(dict(self.qf1_target.named_parameters(), batch_size=()))
-            self.qf2_target_params = TensorDict(dict(self.qf2_target.named_parameters(), batch_size=()))
-        elif self.obs_type == "rgb":
-            self.img_encoder = RGB_Encoder(self.model_cfg, self.img_h, self.img_w).to(device)
-            self.actor = Actor_RGB(
-                self.obs_dim,
-                self.action_dim,
-                self.model_cfg,
-                self.state_shape,
-                self.img_encoder,
-                self.img_h,
-                self.img_w,
-            ).to(device)
-            self.qf1 = QNet_RGB(
-                self.obs_dim,
-                self.action_dim,
-                self.model_cfg,
-                self.state_shape,
-                self.img_encoder,
-                self.img_h,
-                self.img_w,
-            ).to(device)
-            self.qf2 = QNet_RGB(
-                self.obs_dim,
-                self.action_dim,
-                self.model_cfg,
-                self.state_shape,
-                self.img_encoder,
-                self.img_h,
-                self.img_w,
-            ).to(device)
-            self.qf1_target = QNet_RGB(
-                self.obs_dim,
-                self.action_dim,
-                self.model_cfg,
-                self.state_shape,
-                self.img_encoder,
-                self.img_h,
-                self.img_w,
-            ).to(device)
-            self.qf2_target = QNet_RGB(
-                self.obs_dim,
-                self.action_dim,
-                self.model_cfg,
-                self.state_shape,
-                self.img_encoder,
-                self.img_h,
-                self.img_w,
-            ).to(device)
-            self.qf1_target.load_state_dict(self.qf1.state_dict())
-            self.qf2_target.load_state_dict(self.qf2.state_dict())
-            self.qf1_params = TensorDict(
-                {name: param for name, param in self.qf1.named_parameters() if "visual_encoder" not in name},
-                batch_size=(),
-            )
-            self.qf2_params = TensorDict(
-                {name: param for name, param in self.qf2.named_parameters() if "visual_encoder" not in name},
-                batch_size=(),
-            )
-            self.qf1_target_params = TensorDict(
-                {name: param for name, param in self.qf1_target.named_parameters() if "visual_encoder" not in name},
-                batch_size=(),
-            )
-            self.qf2_target_params = TensorDict(
-                {name: param for name, param in self.qf2_target.named_parameters() if "visual_encoder" not in name},
-                batch_size=(),
-            )
+        self.img_encoder = RGB_Encoder(self.model_cfg, self.img_h, self.img_w).to(device)
+        self.actor = Actor(
+            self.obs_type,
+            self.obs_shape,
+            self.action_dim,
+            self.model_cfg,
+            self.img_encoder,
+            self.img_h,
+            self.img_w,
+        ).to(device)
+        self.qf1 = QNet(
+            self.obs_type,
+            self.obs_shape,
+            self.action_dim,
+            self.model_cfg,
+            self.img_encoder,
+            self.img_h,
+            self.img_w,
+        ).to(device)
+        self.qf2 = QNet(
+            self.obs_type,
+            self.obs_shape,
+            self.action_dim,
+            self.model_cfg,
+            self.img_encoder,
+            self.img_h,
+            self.img_w,
+        ).to(device)
+        self.qf1_target = QNet(
+            self.obs_type,
+            self.obs_shape,
+            self.action_dim,
+            self.model_cfg,
+            self.img_encoder,
+            self.img_h,
+            self.img_w,
+        ).to(device)
+        self.qf2_target = QNet(
+            self.obs_type,
+            self.obs_shape,
+            self.action_dim,
+            self.model_cfg,
+            self.img_encoder,
+            self.img_h,
+            self.img_w,
+        ).to(device)
+        self.qf1_target.load_state_dict(self.qf1.state_dict())
+        self.qf2_target.load_state_dict(self.qf2.state_dict())
+        self.qf1_params = TensorDict(
+            {name: param for name, param in self.qf1.named_parameters() if "visual_encoder" not in name},
+            batch_size=(),
+        )
+        self.qf2_params = TensorDict(
+            {name: param for name, param in self.qf2.named_parameters() if "visual_encoder" not in name},
+            batch_size=(),
+        )
+        self.qf1_target_params = TensorDict(
+            {name: param for name, param in self.qf1_target.named_parameters() if "visual_encoder" not in name},
+            batch_size=(),
+        )
+        self.qf2_target_params = TensorDict(
+            {name: param for name, param in self.qf2_target.named_parameters() if "visual_encoder" not in name},
+            batch_size=(),
+        )
 
         ## Optimizers
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
@@ -263,21 +245,24 @@ class SAC:
             param.requires_grad = False
         for param in self.qf2_target.parameters():
             param.requires_grad = False
-        obs = self.env.reset().clone()
+        rest_obs = self.env.reset()
+        obs = {k: rest_obs[k].clone() for k in rest_obs.keys()}
         self.start_time = time.time()
         if not self.is_testing:
             ep_infos = []
             for iteration in range(self.current_learning_iteration, self.max_iterations):
                 with timer("time/iteration"):
                     with torch.inference_mode(), timer("time/roll_out"):
-                        if self.global_step < self.prefill:
+                        if iteration < self.prefill:
                             action = torch.rand((self.num_envs, self.action_dim), device=self.device) * 2 - 1
                         else:
                             action, _ = self.actor.get_action(obs)
                         next_obs, reward, terminated, truncated, info = self.env.step(action)
                         done = torch.logical_or(terminated, truncated)
                         self.buffer.add(obs, action, reward, next_obs, done, terminated)
-                        obs.copy_(next_obs)
+
+                        for k in obs:
+                            obs[k].copy_(next_obs[k])
 
                         ep_infos.append(info)
                         self.cur_rewards_sum += reward
@@ -292,7 +277,7 @@ class SAC:
 
                     mean_reward = self.buffer.mean_reward()
                     # update the model
-                    if self.global_step >= self.prefill:
+                    if iteration >= self.prefill:
                         with timer("time/sample_data"):
                             data = self.buffer.sample(self.batch_size)
                         with timer("time/update_model"):

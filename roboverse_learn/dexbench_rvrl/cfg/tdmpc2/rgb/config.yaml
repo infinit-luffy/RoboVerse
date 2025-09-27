@@ -21,8 +21,8 @@ model:
   latent_dim: 512
   num_q: 5
   num_bins: 101
-  vmin: -10
-  vmax: +10
+  vmin: -20
+  vmax: +20
   log_std_min: -10
   log_std_max: 2
   task_dim: 0
@@ -49,11 +49,11 @@ learn:
   nstep: 1
   nupdate: 1
   batch_size: 256
-  reward_coef: 0.5
-  value_coef: 0.5
-  termination_coef: 5
-  consistency_coef: 200
-  rho: 0.5
+  reward_coef: 0.1
+  value_coef: 0.1
+  termination_coef: 1.0
+  consistency_coef: 20
+  rho: 0.7
 
   lr: 3.e-4
   enc_lr_scale: 0.3

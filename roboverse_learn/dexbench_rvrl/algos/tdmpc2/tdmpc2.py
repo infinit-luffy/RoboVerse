@@ -512,7 +512,7 @@ class TDMPC2:
         consistency_loss = 0
         for t, (_action, _next_z) in enumerate(zip(action.unbind(0), next_z.unbind(0))):
             z = self.model.next(z, _action, task)
-            consistency_loss += F.mse_loss(z, _next_z.detach()) * (self.rho**t)
+            consistency_loss += F.mse_loss(z, _next_z.detach(), reduction="sum") * (self.rho**t)
             zs[t + 1] = z
 
         # Predictions
@@ -520,7 +520,7 @@ class TDMPC2:
         qs = self.model.Q(_zs, action, task, return_type="all")
         reward_preds = self.model.reward(_zs, action, task)
         if self.episodic:
-            termination_pred = self.model.termination(zs[1:], task, unnormalized=True)
+            termination_pred = self.model.termination(zs[:-1], task, unnormalized=True)
 
         # Compute losses
         reward_loss, value_loss = 0, 0

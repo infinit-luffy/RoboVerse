@@ -79,8 +79,9 @@ class SAC:
         self.gamma = learn_cfg.get("gamma", 0.99)
         self.tau = learn_cfg.get("tau", 0.005)
         self.alpha = learn_cfg.get("alpha", 0.2)
-        self.policy_frequency = learn_cfg.get("policy_frequency", 2)
-        self.target_network_frequency = learn_cfg.get("target_network_frequency", 2)
+        self.policy_frequency = learn_cfg.get("policy_frequency", 1)
+        self.critic_frequency = learn_cfg.get("critic_frequency", 1)
+        self.target_network_frequency = learn_cfg.get("target_network_frequency", 1)
         self.num_envs = env.num_envs
         self.batch_size = learn_cfg["batch_size"]
         self.max_iterations = learn_cfg.get("max_iterations", 100000)
@@ -281,7 +282,8 @@ class SAC:
                         with timer("time/sample_data"):
                             data = self.buffer.sample(self.batch_size)
                         with timer("time/update_model"):
-                            self.update_q(data)
+                            if iteration % self.critic_frequency == 0:
+                                self.update_q(data)
                             if iteration % self.policy_frequency == 0:
                                 self.update_actor(data)
                             if iteration % self.target_network_frequency == 0:

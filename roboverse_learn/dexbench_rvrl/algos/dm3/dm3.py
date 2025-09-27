@@ -502,34 +502,6 @@ class DreamerV3:
                 )
                 recon_loss += -recon_obs_dist.log_prob(true_obs).mean()
             reconstructed_obs_loss = recon_loss / len(self.obs_shape)
-            # if "rgb" in self.obs_type:
-            #     reconstructed_img_obs = reconstructed_obs["rgb"]
-            #     img_obs = data["observation"][:, :, self.state_shape :].view(
-            #         self.batch_size, self.batch_length, 3, self.img_h, self.img_w
-            #     )
-            #     if save_recon:
-            #         import cv2
-            #         import numpy as np
-
-            #         img = reconstructed_img_obs[0, 0]
-            #         img0 = img.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
-            #         img0_uint8 = (img0 * 255).astype(np.uint8)
-            #         img0_bgr = cv2.cvtColor(img0_uint8, cv2.COLOR_RGB2BGR)
-            #         img1 = img_obs[0, 0]
-            #         img1 = img1.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
-            #         img1_uint8 = (img1 * 255).astype(np.uint8)
-            #         img1_bgr = cv2.cvtColor(img1_uint8, cv2.COLOR_RGB2BGR)
-            #         img_bgr = np.concatenate([img1_bgr, img0_bgr], axis=1)
-            #         cv2.imwrite("recon_img.png", img_bgr)
-            #     reconstructed_img_obs_dist = MSEDistribution(
-            #         reconstructed_img_obs, 3
-            #     )  # 3 is number of dimensions for observation space, shape is (3, H, W)
-            #     reconstructed_img_obs_loss = -reconstructed_img_obs_dist.log_prob(img_obs).mean()
-            #     reconstructed_vector_obs = reconstructed_obs["state"]
-            #     vector_obs = data["observation"][:, :, : self.state_shape]
-            #     reconstructed_vector_obs_dist = SymlogDist(reconstructed_vector_obs)
-            #     reconstructed_vector_obs_loss = -reconstructed_vector_obs_dist.log_prob(vector_obs).mean()
-            #     reconstructed_obs_loss = reconstructed_img_obs_loss + reconstructed_vector_obs_loss
 
             predicted_reward_bins = self.reward_predictor(posteriors, deterministics)
             predicted_reward_dist = TwoHotEncodingDistribution(predicted_reward_bins, dims=1)

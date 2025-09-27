@@ -119,10 +119,10 @@ class TDMPC2:
         self.temperature = learn_cfg.get("temperature", 0.5)
         self.discount_denom = learn_cfg.get("discount_denom", 5)
 
-        self.consistency_coef = learn_cfg.get("consistency_coef", 20.0)
-        self.reward_coef = learn_cfg.get("reward_coef", 0.1)
-        self.termination_coef = learn_cfg.get("termination_coef", 1.0)
-        self.value_coef = learn_cfg.get("value_coef", 0.1)
+        self.consistency_coef = learn_cfg.get("consistency_coef", 200.0)
+        self.reward_coef = learn_cfg.get("reward_coef", 0.5)
+        self.termination_coef = learn_cfg.get("termination_coef", 5.0)
+        self.value_coef = learn_cfg.get("value_coef", 0.5)
 
         self.max_iterations = learn_cfg.get("max_iterations", 500000)
         self.nstep = learn_cfg.get("nstep", 1)
@@ -512,7 +512,7 @@ class TDMPC2:
         consistency_loss = 0
         for t, (_action, _next_z) in enumerate(zip(action.unbind(0), next_z.unbind(0))):
             z = self.model.next(z, _action, task)
-            consistency_loss = consistency_loss + F.mse_loss(z, _next_z) * self.rho**t
+            consistency_loss += F.mse_loss(z, _next_z.detach()) * (self.rho**t)
             zs[t + 1] = z
 
         # Predictions

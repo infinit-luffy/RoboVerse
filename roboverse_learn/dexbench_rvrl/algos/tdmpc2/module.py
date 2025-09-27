@@ -388,23 +388,6 @@ class WorldModel(nn.Module):
         self.init()
 
     def init(self):
-        # # Create params
-        # detach_params = TensorDict({key: val.detach() for key, val in self._Qs.params.items()})
-        # detach_clone_params = TensorDict({key: val.detach().clone() for key, val in self._Qs.params.items()})
-        # self._detach_Qs_params = TensorDictParams(detach_params, no_convert=True)
-        # self._target_Qs_params = TensorDictParams(detach_clone_params, no_convert=True)
-
-        # # Create modules
-        # with self._detach_Qs_params.data.to("meta").to_module(self._Qs.module):
-        #     self._detach_Qs = deepcopy(self._Qs)
-        #     self._target_Qs = deepcopy(self._Qs)
-
-        # # Assign params to modules
-        # # We do this strange assignment to avoid having duplicated tensors in the state-dict -- working on a better API for this
-        # delattr(self._detach_Qs, "params")
-        # self._detach_Qs.__dict__["params"] = self._detach_Qs_params
-        # delattr(self._target_Qs, "params")
-        # self._target_Qs.__dict__["params"] = self._target_Qs_params
         self._detach_Qs_params = TensorDictParams(
             TensorDict({k: v.detach() for k, v in self._Qs.params.items()}, batch_size=[self.num_q]), no_convert=True
         )
@@ -486,6 +469,15 @@ class WorldModel(nn.Module):
         for key, value in obs.items():
             assert key in self._encoder, f"Encoder for observation type {key} not found."
             if "rgb" in key and value.ndim == 5:
+                # import cv2
+                # import numpy as np
+
+                # img = value[0, 0]
+                # img0 = img.permute(1, 2, 0).cpu().detach().numpy()  # Get the first environment's camera image
+                # img0_uint8 = (img0 * 255).astype(np.uint8)
+                # img0_bgr = cv2.cvtColor(img0_uint8, cv2.COLOR_RGB2BGR)
+                # cv2.imwrite("tdmp_img.png", img0_bgr)
+                # exit(0)
                 T, B, C, H, W = value.shape
                 value = value.reshape(B * T, C, H, W)
                 embeddings.append(self._encoder[key](value).reshape(T, B, -1))

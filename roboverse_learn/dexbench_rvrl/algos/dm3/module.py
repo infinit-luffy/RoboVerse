@@ -425,6 +425,11 @@ class Decoder(nn.Module):
         if "rgb" in obs_type:
             self.img_h = img_h
             self.img_w = img_w
+            self.img_key = [key for key in obs_shape.keys() if "rgb" in key]
+            assert len(self.img_key) == 1, "only support one rgb observation, shape 3xhxw"
+            self.num_channel = [obs_shape[key][0] for key in self.img_key]
+            self.num_img = len(self.img_key)
+
             self.min_res = model_cfg.get("min_res", 4)
             stages = int(np.log2(img_h) - np.log2(self.min_res))
             kernel_size = model_cfg.get("kernel_size", 4)

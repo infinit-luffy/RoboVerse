@@ -1,0 +1,80 @@
+seed: -1
+
+clip_observations: 5.0
+clip_actions: 1.0
+
+model:
+  hidden_dim: [512, 512]
+  feature_dim: [512, 512]
+  dynamics_dim: [512, 512]
+  reward_dim: 512
+  termination_dim: 512
+  actor_dim: [1024, 1024, 512]
+  critic_dim: [1024, 1024, 512]
+
+  encoder_type: "cnn"
+  visual_feature_dim: 1024
+  min_res: 4
+  kernel_size: 4
+  depth: 32
+
+  latent_dim: 512
+  num_q: 5
+  num_bins: 101
+  vmin: -10
+  vmax: +10
+  log_std_min: -10
+  log_std_max: 2
+  task_dim: 0
+
+learn:
+  agent_name: shadow_hand
+  test: False
+  resume: 0
+  log_interval: 5000
+  print_log: True
+  window_size: 100
+
+  # rollout params
+  max_iterations: 100000
+
+  # training params
+  batch_size: 256
+  episodic: True
+  multitask: False
+  horizon: 15
+  prefill: 400
+  buffer_size: 5000
+  nstep: 1
+  nupdate: 1
+  batch_size: 256
+  reward_coef: 0.1
+  value_coef: 0.1
+  termination_coef: 1
+  consistency_coef: 20
+  rho: 0.5
+
+  lr: 3.e-4
+  enc_lr_scale: 0.3
+  grad_clip_norm: 20
+  tau: 0.01
+  discount_denom: 5
+  discount_min: 0.95
+  discount_max: 0.995
+
+  # planning params
+  mpc: true
+  mpc_iterations: 6
+  num_samples: 512
+  num_elites: 64
+  num_pi_trajs: 24
+  horizon: 3
+  min_std: 0.05
+  max_std: 2
+  temperature: 0.5
+  entropy_coef: 1.e-4
+
+
+env:
+  img_h: 128
+  img_w: 128

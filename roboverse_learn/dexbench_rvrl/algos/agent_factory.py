@@ -1,6 +1,7 @@
 from roboverse_learn.dexbench_rvrl.algos.dm3.dm3 import DreamerV3
 from roboverse_learn.dexbench_rvrl.algos.ppo.ppo import PPO
 from roboverse_learn.dexbench_rvrl.algos.sac.sac import SAC
+from roboverse_learn.dexbench_rvrl.algos.tdmpc2.tdmpc2 import TDMPC2
 
 
 def create_agent(
@@ -33,6 +34,7 @@ def create_agent(
         "PPO": PPO,
         "SAC": SAC,
         "DM3": DreamerV3,
+        "TDMPC2": TDMPC2,
     }
 
     assert algo.upper() in ALGO_MAP, f"Algorithm {algo} not supported. Supported algorithms: {list(ALGO_MAP.keys())}"

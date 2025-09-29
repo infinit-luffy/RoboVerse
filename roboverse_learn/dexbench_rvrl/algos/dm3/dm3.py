@@ -212,8 +212,7 @@ class DreamerV3:
             self.deterministic_size,
             self.stochastic_size,
             self.model_cfg,
-            self.img_h,
-            self.img_w,
+            decode_shapes=self.encoder.conv_shapes,
         ).to(device)
         self.embedded_obs_dim = self.encoder.output_dim
         self.recurrent_model = RecurrentModel(

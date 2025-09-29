@@ -215,12 +215,16 @@ class QNet(nn.Module):
 
 
 class RGB_Encoder(nn.Module):
-    def __init__(self, model_cfg, img_h=None, img_w=None):
+    def __init__(self, obs_type, obs_shape, model_cfg, img_h=None, img_w=None):
         super().__init__()
         self.encoder_type = model_cfg.get("encoder_type", "resnet")
         self.visual_feature_dim = model_cfg.get("visual_feature_dim", 512)
         self.img_h = img_h if img_h is not None else 256
         self.img_w = img_w if img_w is not None else 256
+        self.img_key = [key for key in obs_shape.keys() if "rgb" in key]
+        assert len(self.img_key) == 1, "only support one rgb observation, shape 3xhxw"
+        self.num_channel = [obs_shape[key][0] for key in self.img_key]
+        self.num_img = len(self.img_key)
 
         if self.encoder_type == "resnet":
             self.encoder = torchvision.models.resnet18(pretrained=True)
@@ -229,24 +233,51 @@ class RGB_Encoder(nn.Module):
             self.encoder.fc = nn.Identity()
             print("=> using resnet18 as visual encoder")
         elif self.encoder_type == "cnn":
-            self.min_res = model_cfg.get("min_res", 4)
-            stages = int(np.log2(self.img_h // self.min_res))
-            kernel_size = model_cfg.get("kernel_size", 4)
+            stages = model_cfg.get("stages", 5)
             input_dim = self.num_channel[0]
-            depth = model_cfg.get("depth", 32)
-            output_dim = depth
+
+            kernel_size = model_cfg.get("kernel_size", [4])
+            if isinstance(kernel_size, int):
+                kernel_size = [kernel_size] * stages
+            elif isinstance(kernel_size, list):
+                if len(kernel_size) == 1:
+                    kernel_size = kernel_size * stages
+                else:
+                    assert len(kernel_size) == stages, "kernel_size should be an int or list of length stages"
+
+            stride = model_cfg.get("stride", [2])
+            if isinstance(stride, int):
+                stride = [stride] * stages
+            elif isinstance(stride, list):
+                if len(stride) == 1:
+                    stride = stride * stages
+                else:
+                    assert len(stride) == stages, "stride should be an int or list of length stages"
+
+            depth = model_cfg.get("depth", [32])
+            if isinstance(depth, int):
+                depth = [depth] * stages
+            elif isinstance(depth, list):
+                if len(depth) == 1:
+                    depth = depth * stages
+                else:
+                    assert len(depth) == stages, "depth should be an int or list of length stages"
+
             self.visual_encoder = []
-            self.h = self.img_h
-            self.w = self.img_w
             for i in range(stages):
+                padding = (kernel_size[i] - 1) // stride[i]
                 self.visual_encoder.append(
-                    nn.Conv2d(input_dim, output_dim, kernel_size=kernel_size, stride=2, padding=1)
+                    nn.Conv2d(
+                        input_dim,
+                        depth[i],
+                        kernel_size=kernel_size[i],
+                        stride=stride[i],
+                        padding=padding,
+                        bias=False,
+                    )
                 )
                 self.visual_encoder.append(nn.ReLU())
-                input_dim = output_dim
-                output_dim = min(512, output_dim * 2)
-                self.h = self.h // 2
-                self.w = self.w // 2
+                input_dim = depth[i]
 
             self.visual_encoder.append(nn.Flatten())
             self.visual_encoder = nn.Sequential(*self.visual_encoder)

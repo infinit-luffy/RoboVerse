@@ -333,7 +333,15 @@ def uniform_init_weights(given_scale):
 
 
 class Encoder(nn.Module):
-    def __init__(self, model_cfg, obs_type, obs_shape, symlog_input=True, img_h=None, img_w=None):
+    def __init__(
+        self,
+        model_cfg,
+        obs_type,
+        obs_shape,
+        symlog_input=True,
+        img_h=None,
+        img_w=None,
+    ):
         super().__init__()
         self.obs_type = obs_type
         self.obs_shape = obs_shape
@@ -350,35 +358,63 @@ class Encoder(nn.Module):
             self.num_img = len(self.img_key)
             self.visual_feature_dim = model_cfg.get("visual_feature_dim", 4096)
 
-            self.min_res = model_cfg.get("min_res", 4)
-            stages = int(np.log2(img_h) - np.log2(self.min_res))
+            stages = model_cfg.get("stages", 5)
+            input_dim = self.num_channel[0]
             kernel_size = model_cfg.get("kernel_size", 4)
-            input_dim = 3
+            if isinstance(kernel_size, int):
+                kernel_size = [kernel_size] * stages
+            else:
+                if len(kernel_size) == 1:
+                    kernel_size = kernel_size * stages
+                else:
+                    assert len(kernel_size) == stages, "kernel_size should be an int or list of length stages"
+
+            stride = model_cfg.get("stride", 2)
+            if isinstance(stride, int):
+                stride = [stride] * stages
+            else:
+                if len(stride) == 1:
+                    stride = stride * stages
+                else:
+                    assert len(stride) == stages, "stride should be an int or list of length stages"
+
             depth = model_cfg.get("depth", 16)
-            output_dim = depth
+            if isinstance(depth, int):
+                depth = depth * stages
+            else:
+                if len(depth) == 1:
+                    depth = depth * stages
+                else:
+                    assert len(depth) == stages, "depth should be an int or list of length stages"
+
             self.visual_encoder = []
-            self.h = img_h
-            self.w = img_w
-            for stage in range(stages):
+            for i in range(stages):
+                padding = (kernel_size[i] - 1) // stride[i]
                 self.visual_encoder.append(
                     nn.Conv2d(
                         input_dim,
-                        output_dim,
-                        kernel_size=kernel_size,
-                        stride=2,
-                        padding=1,
+                        depth[i],
+                        kernel_size=kernel_size[i],
+                        stride=stride[i],
+                        padding=padding,
                         bias=False,
                     )
                 )
-                self.visual_encoder.append(LayerNormChannelLast(output_dim, eps=1e-3))
+                self.visual_encoder.append(LayerNormChannelLast(depth[i], eps=1e-3))
                 self.visual_encoder.append(nn.SiLU())
-                input_dim = output_dim
-                output_dim = min(512, output_dim * 2)
-                self.h = self.h // 2
-                self.w = self.w // 2
+                input_dim = depth[i]
+
             self.visual_encoder = nn.Sequential(*self.visual_encoder)
             self.visual_encoder.apply(init_weights)
-            self.visual_feature_dim = input_dim * self.h * self.w
+            with torch.no_grad():
+                self.conv_shapes = []
+                test_data = torch.zeros(1, self.num_channel[0], self.img_h, self.img_w)
+                self.conv_shapes.append(test_data[0].shape)
+                for idx, layer in enumerate(self.visual_encoder):
+                    test_data = layer(test_data)
+                    if isinstance(layer, nn.Conv2d):
+                        self.conv_shapes.append(test_data[0].shape)
+                self.visual_feature_dim = test_data.shape[1] * test_data.shape[2] * test_data.shape[3]
         if model_cfg is None:
             hidden_dim = [256, 256, 256]
         else:
@@ -415,7 +451,15 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, obs_type, obs_shape, deterministic_size, stochastic_size, model_cfg, img_h, img_w):
+    def __init__(
+        self,
+        obs_type,
+        obs_shape,
+        deterministic_size,
+        stochastic_size,
+        model_cfg,
+        decode_shapes=None,
+    ):
         super().__init__()
         self.obs_type = obs_type
         self.obs_shape = obs_shape
@@ -423,51 +467,93 @@ class Decoder(nn.Module):
         self.state_key = [key for key in obs_shape.keys() if "state" in key]
         self.state_shape = sum([sum(obs_shape[key]) for key in self.state_key])
         if "rgb" in obs_type:
-            self.img_h = img_h
-            self.img_w = img_w
+            assert decode_shapes is not None, "decode_shapes must be provided for rgb observation"
+            decode_shapes.reverse()
+            self.decode_shapes = decode_shapes
+            self.img_h = self.decode_shapes[-1][1]
+            self.img_w = self.decode_shapes[-1][2]
             self.img_key = [key for key in obs_shape.keys() if "rgb" in key]
             assert len(self.img_key) == 1, "only support one rgb observation, shape 3xhxw"
             self.num_channel = [obs_shape[key][0] for key in self.img_key]
             self.num_img = len(self.img_key)
 
-            self.min_res = model_cfg.get("min_res", 4)
-            stages = int(np.log2(img_h) - np.log2(self.min_res))
+            stages = model_cfg.get("stages", 5)
             kernel_size = model_cfg.get("kernel_size", 4)
+            if isinstance(kernel_size, int):
+                kernel_size = [kernel_size] * stages
+            else:
+                if len(kernel_size) == 1:
+                    kernel_size = kernel_size * stages
+                else:
+                    assert len(kernel_size) == stages, "kernel_size should be an int or list of length stages"
+            kernel_size.reverse()
+
+            stride = model_cfg.get("stride", 2)
+            if isinstance(stride, int):
+                stride = [stride] * stages
+            else:
+                if len(stride) == 1:
+                    stride = stride * stages
+                else:
+                    assert len(stride) == stages, "stride should be an int or list of length stages"
+            stride.reverse()
+
             depth = model_cfg.get("depth", 16)
-            visual_feature_dim = (self.min_res**2) * depth * (2 ** (stages - 1))
+            if isinstance(depth, int):
+                depth = depth * stages
+            else:
+                if len(depth) == 1:
+                    depth = depth * stages
+                else:
+                    assert len(depth) == stages, "depth should be an int or list of length stages"
+            depth.reverse()
+
+            visual_feature_dim = self.decode_shapes[0][0] * self.decode_shapes[0][1] * self.decode_shapes[0][2]
             self.linear_layer = nn.Linear(deterministic_size + stochastic_size, visual_feature_dim)
             self.linear_layer.apply(uniform_init_weights(1.0))
-            input_dim = visual_feature_dim // (self.min_res * self.min_res)  # depth * 2**(stages-1)
-            output_dim = input_dim // 2
+            input_dim = depth[0]
             self.visual_decoder = []
-            for stage in range(stages - 1):
-                if stage != 0:
-                    input_dim = 2 ** (stages - (stage - 1) - 2) * depth
-                pad_h, outpad_h = self.calc_same_pad(k=kernel_size, s=2, d=1)
-                pad_w, outpad_w = self.calc_same_pad(k=kernel_size, s=2, d=1)
+            for i in range(stages - 1):
+                pad_h, outpad_h = self.calc_same_pad(
+                    k=kernel_size[i], s=stride[i], d=1, in_=self.decode_shapes[i][1], out_=self.decode_shapes[i + 1][1]
+                )
+                pad_w, outpad_w = self.calc_same_pad(
+                    k=kernel_size[i], s=stride[i], d=1, in_=self.decode_shapes[i][2], out_=self.decode_shapes[i + 1][2]
+                )
                 self.visual_decoder.append(
                     nn.ConvTranspose2d(
                         input_dim,
-                        output_dim,
-                        kernel_size,
-                        2,
+                        depth[i + 1],
+                        kernel_size[i],
+                        stride[i],
                         padding=(pad_h, pad_w),
                         output_padding=(outpad_h, outpad_w),
                         bias=False,
                     )
                 )
-                self.visual_decoder.append(LayerNormChannelLast(output_dim, eps=1e-3))
+                self.visual_decoder.append(LayerNormChannelLast(depth[i + 1], eps=1e-3))
                 self.visual_decoder.append(nn.SiLU())
-                input_dim = output_dim
-                output_dim = max(depth, output_dim // 2)
-            pad_h, outpad_h = self.calc_same_pad(k=kernel_size, s=2, d=1)
-            pad_w, outpad_w = self.calc_same_pad(k=kernel_size, s=2, d=1)
+                input_dim = depth[i + 1]
+            pad_h, outpad_h = self.calc_same_pad(
+                k=kernel_size[stages - 1],
+                s=stride[stages - 1],
+                d=1,
+                in_=self.decode_shapes[-2][1],
+                out_=self.decode_shapes[-1][1],
+            )
+            pad_w, outpad_w = self.calc_same_pad(
+                k=kernel_size[stages - 1],
+                s=stride[stages - 1],
+                d=1,
+                in_=self.decode_shapes[-2][2],
+                out_=self.decode_shapes[-1][2],
+            )
             self.visual_decoder.append(
                 nn.ConvTranspose2d(
-                    input_dim,
+                    depth[-1],
                     3,
-                    kernel_size,
-                    2,
+                    kernel_size[stages - 1],
+                    stride[stages - 1],
                     padding=(pad_h, pad_w),
                     output_padding=(outpad_h, outpad_w),
                     bias=True,
@@ -492,10 +578,10 @@ class Decoder(nn.Module):
         [m.apply(init_weights) for m in self.mlp_decoder[:-1]]
         self.mlp_decoder[-1].apply(uniform_init_weights(1.0))
 
-    def calc_same_pad(self, k, s, d):
-        val = d * (k - 1) - s + 1
-        pad = math.ceil(val / 2)
-        outpad = pad * 2 - val
+    def calc_same_pad(self, k, s, d, in_, out_):
+        pad = (k - 1) // s
+        val = (in_ - 1) * s - 2 * pad + d * (k - 1) + 1
+        outpad = out_ - val
         return pad, outpad
 
     def forward(self, posterior: Tensor, deterministic: Tensor) -> Tensor:
@@ -513,8 +599,8 @@ class Decoder(nn.Module):
                 reconstructed_visual_obs = reconstructed_visual_obs.view(
                     N,
                     -1,
-                    self.min_res,
-                    self.min_res,
+                    self.decode_shapes[0][1],
+                    self.decode_shapes[0][2],
                 )
                 reconstructed_visual_obs = self.visual_decoder(reconstructed_visual_obs)
                 reconstructed_visual_obs = reconstructed_visual_obs.unflatten(0, input_shape[:2]) + 0.5
@@ -591,6 +677,7 @@ class RepresentationModel(nn.Module):
             hidden_dim = 1024
         else:
             hidden_dim = model_cfg.get("representation_hidden_dim", 1024)
+        print(embedded_obs_size, deterministic_size)
         self.net = nn.Sequential(
             nn.Linear(embedded_obs_size + deterministic_size, hidden_dim, bias=False),
             nn.LayerNorm(hidden_dim, eps=1e-3),

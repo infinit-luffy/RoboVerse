@@ -9,9 +9,10 @@ policy: # only works for MlpPolicy right now
   visual_feature_dim: 1024
   activation: elu # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
   encoder_type: "cnn"
-  min_res: 4
+  stages: 5
   kernel_size: 4
-  depth: 32
+  stride: 2
+  depth: [32, 64, 128, 256, 512]
   fix_img_encoder: False # if True, the image encoder will not be trained, useful for transfer learning
   fix_actor_img_encoder: True # if True, the image encoder in the actor will not be trained, useful for transfer learning
 learn:
@@ -31,7 +32,7 @@ learn:
   num_learning_epochs: 5
   num_minibatches: 4 # this is per agent
   max_grad_norm: 1
-  optim_stepsize: 5.e-5 # 3e-4 is default for single agent training with constant schedule
+  optim_stepsize: 5.e-5
   schedule: adaptive # could be adaptive or linear or fixed
   desired_kl: 0.016
   gamma: 0.99

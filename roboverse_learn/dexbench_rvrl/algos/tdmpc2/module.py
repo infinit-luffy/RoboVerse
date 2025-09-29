@@ -40,7 +40,7 @@ class Ensemble(nn.Module):
         self.device = device
         self.params, self.buffers = stack_module_state(modules)
         for k, v in self.params.items():
-            self.params[k] = v.to(device)
+            self.params[k] = nn.Parameter(v.to(device))
         for k, v in self.buffers.items():
             self.params[k] = v.to(device)
         self.module = deepcopy(modules[0]).to(device)
@@ -174,8 +174,8 @@ def mlp(in_dim, mlp_dims, out_dim, act=None, dropout=0.0):
     dims = [in_dim] + mlp_dims + [out_dim]
     mlp = nn.ModuleList()
     for i in range(len(dims) - 2):
-        mlp.append(NormedLinear(dims[i], dims[i + 1], dropout=dropout * (i == 0)))
-    mlp.append(NormedLinear(dims[-2], dims[-1], act=act) if act else nn.Linear(dims[-2], dims[-1]))
+        mlp.append(NormedLinear(dims[i], dims[i + 1], dropout=dropout * (i == 0), act=nn.Mish(inplace=False)))
+    mlp.append(nn.Linear(dims[-2], dims[-1]))
     return nn.Sequential(*mlp)
 
 
@@ -193,34 +193,64 @@ def rgb_enc(in_shape, model_cfg, img_h=None, img_w=None, act=True):
         print("=> using resnet18 as visual encoder")
         return encoder, visual_feature_dim
     elif encoder_type == "cnn":
-        min_res = model_cfg.get("min_res", 4)
-        stages = int(np.log2(img_h // min_res))
-        kernel_size = model_cfg.get("kernel_size", 4)
+        stages = model_cfg.get("stages", 5)
         input_dim = in_shape[0]
-        depth = model_cfg.get("depth", 32)
-        output_dim = depth
+
+        kernel_size = model_cfg.get("kernel_size", [4])
+        if isinstance(kernel_size, int):
+            kernel_size = [kernel_size] * stages
+        elif isinstance(kernel_size, list):
+            if len(kernel_size) == 1:
+                kernel_size = kernel_size * stages
+            else:
+                assert len(kernel_size) == stages, "kernel_size should be an int or list of length stages"
+
+        stride = model_cfg.get("stride", [2])
+        if isinstance(stride, int):
+            stride = [stride] * stages
+        elif isinstance(stride, list):
+            if len(stride) == 1:
+                stride = stride * stages
+            else:
+                assert len(stride) == stages, "stride should be an int or list of length stages"
+
+        depth = model_cfg.get("depth", [32])
+        if isinstance(depth, int):
+            depth = [depth] * stages
+        elif isinstance(depth, list):
+            if len(depth) == 1:
+                depth = depth * stages
+            else:
+                assert len(depth) == stages, "depth should be an int or list of length stages"
+
         visual_encoder = []
-        h = img_h
-        w = img_w
         visual_encoder.append(ShiftAug())
         visual_encoder.append(PixelPreprocess())
         for i in range(stages):
-            visual_encoder.append(nn.Conv2d(input_dim, output_dim, kernel_size=kernel_size, stride=2, padding=1))
+            padding = (kernel_size[i] - 1) // stride[i]
+            visual_encoder.append(
+                nn.Conv2d(
+                    input_dim,
+                    depth[i],
+                    kernel_size=kernel_size[i],
+                    stride=stride[i],
+                    padding=padding,
+                    bias=False,
+                )
+            )
             visual_encoder.append(nn.ReLU())
-            input_dim = output_dim
-            output_dim = min(512, output_dim * 2)
-            h = h // 2
-            w = w // 2
+            input_dim = depth[i]
 
         visual_encoder.append(nn.Flatten())
         visual_encoder = nn.Sequential(*visual_encoder)
 
         with torch.no_grad():
             test_data = torch.zeros(1, *in_shape)
-            out_dim = visual_encoder(test_data).shape[1]
-            visual_encoder.add_module("out", nn.Linear(out_dim, visual_feature_dim))
+            visual_feature_dim = visual_encoder(test_data).shape[1]
+            # out_dim = visual_encoder(test_data).shape[1]
+            # visual_encoder.add_module("out", NormedLinear(out_dim, visual_feature_dim))
             if act:
-                visual_encoder.add_module("act", SimNorm(visual_feature_dim))
+                visual_encoder.add_module("act", nn.Mish(inplace=False))
         print("=> using custom cnn as visual encoder")
         return visual_encoder, visual_feature_dim
     else:
@@ -240,7 +270,7 @@ def enc(obs_shape, model_cfg, img_h=64, img_w=64, out={}):
                 obs_shape[k][0] + model_cfg.get("task_dim", 96),
                 hidden_dim,
                 latent_dim,
-                act=SimNorm(latent_dim),
+                act=nn.Mish(inplace=False),
             )
             feature_dim += latent_dim
         elif "rgb" in k:
@@ -351,23 +381,36 @@ class WorldModel(nn.Module):
             feature_dim,
             model_cfg.get("feature_dim", [256, 256]),
             self.latent_dim,
-            act=SimNorm(self.latent_dim),
+            act=nn.Mish(inplace=False),
         )
         self._dynamics = mlp(
             self.latent_dim + self.action_dim + self.task_dim,
             model_cfg.get("dynamics_dim", [256, 256]),
             self.latent_dim,
-            act=SimNorm(self.latent_dim),
+            act=nn.Mish(inplace=False),
         )
         self._reward = mlp(
             self.latent_dim + self.action_dim + self.task_dim,
             model_cfg.get("reward_dim", [256, 256]),
             self.num_bins,
+            act=nn.Mish(inplace=False),
         )
         self._termination = (
-            mlp(self.latent_dim + self.task_dim, model_cfg.get("termination_dim", [256, 256]), 1) if episodic else None
+            mlp(
+                self.latent_dim + self.task_dim,
+                model_cfg.get("termination_dim", [256, 256]),
+                1,
+                act=nn.Mish(inplace=False),
+            )
+            if episodic
+            else None
         )
-        self._pi = mlp(self.latent_dim + self.task_dim, model_cfg.get("actor_dim", [256, 256]), 2 * self.action_dim)
+        self._pi = mlp(
+            self.latent_dim + self.task_dim,
+            model_cfg.get("actor_dim", [256, 256]),
+            2 * self.action_dim,
+            act=nn.Mish(inplace=False),
+        )
         self._Qs = Ensemble(
             [
                 mlp(
@@ -375,6 +418,7 @@ class WorldModel(nn.Module):
                     model_cfg.get("critic_dim", [256, 256]),
                     self.num_bins,
                     dropout=model_cfg.get("dropout", 0.0),
+                    act=nn.Mish(inplace=False),
                 )
                 for _ in range(self.num_q)
             ],
@@ -463,8 +507,6 @@ class WorldModel(nn.Module):
         Encodes an observation into its latent representation.
         This implementation assumes a single state-based observation.
         """
-        if self.multitask:
-            obs = self.task_emb(obs, task)
         embeddings = []
         for key, value in obs.items():
             assert key in self._encoder, f"Encoder for observation type {key} not found."
@@ -482,7 +524,11 @@ class WorldModel(nn.Module):
                 value = value.reshape(B * T, C, H, W)
                 embeddings.append(self._encoder[key](value).reshape(T, B, -1))
             else:
-                embeddings.append(self._encoder[key](value))
+                if self.multitask:
+                    task_value = self.task_emb(value, task)
+                else:
+                    task_value = value
+                embeddings.append(self._encoder[key](task_value))
         feature = torch.cat(embeddings, dim=-1)
         latent = self._linear(feature)
         return latent
@@ -542,19 +588,18 @@ class WorldModel(nn.Module):
 
         # Scale log probability by action dimensions
         size = eps.shape[-1] if action_dims is None else action_dims
-        scaled_log_prob = log_prob * size
+        scaled_log_prob = log_prob
 
         # Reparameterization trick
         action = mean + eps * log_std.exp()
         mean, action, log_prob = math.squash(mean, action, log_prob)
 
-        entropy_scale = scaled_log_prob / (log_prob + 1e-8)
         info = TensorDict({
             "mean": mean,
             "log_std": log_std,
             "action_prob": 1.0,
             "entropy": -log_prob,
-            "scaled_entropy": -log_prob * entropy_scale,
+            "scaled_entropy": -scaled_log_prob,
         })
         return action, info
 

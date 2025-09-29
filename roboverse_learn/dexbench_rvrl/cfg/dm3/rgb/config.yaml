@@ -4,9 +4,10 @@ clip_observations: 5.0
 clip_actions: 1.0
 
 model: # only works for MlpPolicy right now
-  min_res: 4
+  stages: 5
   kernel_size: 4
-  depth: 32
+  stride: 2
+  depth: [32, 64, 128, 256, 512]
   hidden_dim: [1024, 1024, 512]
   recurrent_hidden_dim: 512
   representation_hidden_dim: 1024

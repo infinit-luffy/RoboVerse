@@ -52,24 +52,51 @@ class ActorCritic(nn.Module):
                     for param in self.visual_encoder.parameters():
                         param.requires_grad = False
             elif self.encoder_type == "cnn":
-                self.min_res = model_cfg.get("min_res", 4)
-                stages = int(np.log2(self.img_h // self.min_res))
-                kernel_size = model_cfg.get("kernel_size", 4)
+                stages = model_cfg.get("stages", 5)
                 input_dim = self.num_channel[0]
-                depth = model_cfg.get("depth", 32)
-                output_dim = depth
+
+                kernel_size = model_cfg.get("kernel_size", [4])
+                if isinstance(kernel_size, int):
+                    kernel_size = [kernel_size] * stages
+                elif isinstance(kernel_size, list):
+                    if len(kernel_size) == 1:
+                        kernel_size = kernel_size * stages
+                    else:
+                        assert len(kernel_size) == stages, "kernel_size should be an int or list of length stages"
+
+                stride = model_cfg.get("stride", [2])
+                if isinstance(stride, int):
+                    stride = [stride] * stages
+                elif isinstance(stride, list):
+                    if len(stride) == 1:
+                        stride = stride * stages
+                    else:
+                        assert len(stride) == stages, "stride should be an int or list of length stages"
+
+                depth = model_cfg.get("depth", [32])
+                if isinstance(depth, int):
+                    depth = [depth] * stages
+                elif isinstance(depth, list):
+                    if len(depth) == 1:
+                        depth = depth * stages
+                    else:
+                        assert len(depth) == stages, "depth should be an int or list of length stages"
+
                 self.visual_encoder = []
-                self.h = self.img_h
-                self.w = self.img_w
                 for i in range(stages):
+                    padding = (kernel_size[i] - 1) // stride[i]
                     self.visual_encoder.append(
-                        nn.Conv2d(input_dim, output_dim, kernel_size=kernel_size, stride=2, padding=1)
+                        nn.Conv2d(
+                            input_dim,
+                            depth[i],
+                            kernel_size=kernel_size[i],
+                            stride=stride[i],
+                            padding=padding,
+                            bias=False,
+                        )
                     )
                     self.visual_encoder.append(nn.ReLU())
-                    input_dim = output_dim
-                    output_dim = min(512, output_dim * 2)
-                    self.h = self.h // 2
-                    self.w = self.w // 2
+                    input_dim = depth[i]
 
                 self.visual_encoder.append(nn.Flatten())
                 self.visual_encoder = nn.Sequential(*self.visual_encoder)

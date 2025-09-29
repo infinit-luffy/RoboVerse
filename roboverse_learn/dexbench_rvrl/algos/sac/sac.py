@@ -102,7 +102,7 @@ class SAC:
         )
 
         ## SAC components
-        self.img_encoder = RGB_Encoder(self.model_cfg, self.img_h, self.img_w).to(device)
+        self.img_encoder = RGB_Encoder(self.obs_type, self.obs_shape, self.model_cfg, self.img_h, self.img_w).to(device)
         self.actor = Actor(
             self.obs_type,
             self.obs_shape,

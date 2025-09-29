@@ -119,10 +119,10 @@ class TDMPC2:
         self.temperature = learn_cfg.get("temperature", 0.5)
         self.discount_denom = learn_cfg.get("discount_denom", 5)
 
-        self.consistency_coef = learn_cfg.get("consistency_coef", 200.0)
-        self.reward_coef = learn_cfg.get("reward_coef", 0.5)
-        self.termination_coef = learn_cfg.get("termination_coef", 5.0)
-        self.value_coef = learn_cfg.get("value_coef", 0.5)
+        self.consistency_coef = learn_cfg.get("consistency_coef", 20.0)
+        self.reward_coef = learn_cfg.get("reward_coef", 0.1)
+        self.termination_coef = learn_cfg.get("termination_coef", 1.0)
+        self.value_coef = learn_cfg.get("value_coef", 0.1)
 
         self.max_iterations = learn_cfg.get("max_iterations", 500000)
         self.nstep = learn_cfg.get("nstep", 1)
@@ -134,7 +134,12 @@ class TDMPC2:
         self.num_bins = self.model_cfg.get("num_bins", 51)
         self.vmin = self.model_cfg.get("vmin", -10)
         self.vmax = self.model_cfg.get("vmax", 10)
+        self.reward_vmin = self.model_cfg.get("reward_vmin", -1)
+        self.reward_vmax = self.model_cfg.get("reward_vmax", 1)
         self.bin_size = self.model_cfg.get("bin_size", (self.vmax - self.vmin) / (self.num_bins - 1))
+        self.reward_bin_size = self.model_cfg.get(
+            "reward_bin_size", (self.reward_vmax - self.reward_vmin) / (self.num_bins - 1)
+        )
         self.latent_dim = self.model_cfg.get("latent_dim", 512)
         self.num_q = self.model_cfg.get("num_q", 5)
 
@@ -161,13 +166,14 @@ class TDMPC2:
             img_w=self.img_w,
             device=self.device,
         ).to(self.device)
+
         self.optim = torch.optim.Adam(
             [
                 {"params": self.model._encoder.parameters(), "lr": self.lr * self.enc_lr_scale},
                 {"params": self.model._dynamics.parameters()},
                 {"params": self.model._reward.parameters()},
                 {"params": self.model._termination.parameters() if self.episodic else []},
-                {"params": self.model._Qs.parameters()},
+                {"params": self.model._Qs.params.values()},
                 {"params": self.model._task_emb.parameters() if self.multitask else []},
             ],
             lr=self.lr,
@@ -356,7 +362,9 @@ class TDMPC2:
         G, discount = 0, 1
         termination = torch.zeros(self.num_envs, self.num_samples, 1, dtype=torch.float32, device=z.device)
         for t in range(self.horizon):
-            reward = math.two_hot_inv(self.model.reward(z, actions[:, t], task), self.num_bins, self.vmin, self.vmax)
+            reward = math.two_hot_inv(
+                self.model.reward(z, actions[:, t], task), self.num_bins, self.reward_vmin, self.reward_vmax
+            )
             z = self.model.next(z, actions[:, t], task)
             G = G + discount * (1 - termination) * reward
             discount_update = self.discount[torch.tensor(task)] if self.multitask else self.discount
@@ -460,7 +468,7 @@ class TDMPC2:
         """
         action, info = self.model.pi(zs, task)
         qs = self.model.Q(zs, action, task, return_type="avg", detach=True)
-        self.scale.update(qs[0])
+        self.scale.update(qs.mean(dim=0))
         qs = self.scale(qs)
 
         # Loss is a weighted sum of Q-values
@@ -512,12 +520,13 @@ class TDMPC2:
         consistency_loss = 0
         for t, (_action, _next_z) in enumerate(zip(action.unbind(0), next_z.unbind(0))):
             z = self.model.next(z, _action, task)
-            consistency_loss += F.mse_loss(z, _next_z.detach(), reduction="sum") * (self.rho**t)
+            consistency_loss += F.mse_loss(z, _next_z, reduction="none").mean() * (self.rho**t)
             zs[t + 1] = z
 
         # Predictions
         _zs = zs[:-1]
         qs = self.model.Q(_zs, action, task, return_type="all")
+        qs_value = math.two_hot_inv(qs, self.num_bins, self.vmin, self.vmax)
         reward_preds = self.model.reward(_zs, action, task)
         if self.episodic:
             termination_pred = self.model.termination(zs[:-1], task, unnormalized=True)
@@ -527,19 +536,13 @@ class TDMPC2:
         for t, (rew_pred_unbind, rew_unbind, td_targets_unbind, qs_unbind) in enumerate(
             zip(reward_preds.unbind(0), reward.unbind(0), td_targets.unbind(0), qs.unbind(1))
         ):
-            reward_loss = (
-                reward_loss
-                + math.soft_ce(rew_pred_unbind, rew_unbind, self.num_bins, self.vmin, self.vmax, self.bin_size).mean()
-                * self.rho**t
-            )
+            reward_loss = reward_loss + math.soft_ce(
+                rew_pred_unbind, rew_unbind, self.num_bins, self.reward_vmin, self.reward_vmax, self.reward_bin_size
+            ).mean() * (self.rho**t)
             for _, qs_unbind_unbind in enumerate(qs_unbind.unbind(0)):
-                value_loss = (
-                    value_loss
-                    + math.soft_ce(
-                        qs_unbind_unbind, td_targets_unbind, self.num_bins, self.vmin, self.vmax, self.bin_size
-                    ).mean()
-                    * self.rho**t
-                )
+                value_loss = value_loss + math.soft_ce(
+                    qs_unbind_unbind, td_targets_unbind, self.num_bins, self.vmin, self.vmax, self.bin_size
+                ).mean() * (self.rho**t)
 
         consistency_loss = consistency_loss / self.horizon
         reward_loss = reward_loss / self.horizon
@@ -578,6 +581,7 @@ class TDMPC2:
             self.aggregator.update("loss/total_loss", total_loss.item())
             self.aggregator.update("grad_norm/model_grad_norm", grad_norm.item())
             self.aggregator.update("train/scale", self.scale.value.item())
+            self.aggregator.update("train/pred_value", qs_value.mean().item())
 
     def update(self, data):
         """
@@ -655,7 +659,9 @@ class TDMPC2:
             log_data[key] = value
             if "loss" in key:
                 loss_name = key.split("/")[-1].replace("_", " ").title()
-                log_string += f"""{f"Mean {loss_name}:":>{pad}} {value:.3f}\n"""
+                log_string += f"""{f"Mean {loss_name}:":>{pad}} {value:.4f}\n"""
+            if "pred_value" in key:
+                log_string += f"""{"Mean Predicted Value:":>{pad}} {value:.4f}\n"""
 
         tot_time = time.time() - self.start_time
         log_string += ep_string

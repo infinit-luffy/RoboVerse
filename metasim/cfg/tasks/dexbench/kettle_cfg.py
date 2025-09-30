@@ -11,7 +11,12 @@ from loguru import logger as log
 from rich.logging import RichHandler
 
 from metasim.cfg.objects import ArticulationObjCfg, PrimitiveCubeCfg
-from metasim.cfg.robots import FrankaShadowHandLeftCfg, FrankaShadowHandRightCfg
+from metasim.cfg.robots import (
+    FrankaAllegroHandLeftCfg,
+    FrankaAllegroHandRightCfg,
+    FrankaShadowHandLeftCfg,
+    FrankaShadowHandRightCfg,
+)
 from metasim.cfg.sensors import PinholeCameraCfg
 from metasim.cfg.sensors.contact import ContactForceSensorCfg
 from metasim.cfg.tasks.base_task_cfg import BaseRLTaskCfg, SimParamCfg
@@ -43,6 +48,7 @@ class KettleCfg(BaseRLTaskCfg):
     obs_type = "state"  # "state" or "rgb"
     use_prio = True
     current_object_type = "kettle"
+    current_robot_type = "shadow"
     objects_cfg = {
         "kettle": ArticulationObjCfg(
             name="kettle",
@@ -81,19 +87,7 @@ class KettleCfg(BaseRLTaskCfg):
         ),
     }
     objects = []
-    robots = [
-        FrankaShadowHandRightCfg(use_vhacd=False, friction=1.0, robot_controller="dof_pos", isaacgym_read_mjcf=True),
-        FrankaShadowHandLeftCfg(use_vhacd=False, friction=1.0, robot_controller="dof_pos", isaacgym_read_mjcf=True),
-    ]
-    step_actions_shape = 0
-    for robot in robots:
-        step_actions_shape += robot.num_joints
-    action_shape = 0
-    for robot in robots:
-        if robot.robot_controller == "ik":
-            action_shape += 6 + 6 * robot.num_fingertips
-        elif robot.robot_controller == "dof_pos":
-            action_shape += 6 + robot.num_actuated_joints - robot.num_arm_joints
+    robots = []
     decimation = 1
     env_spacing = 1.5
     sim_params = SimParamCfg(
@@ -115,12 +109,6 @@ class KettleCfg(BaseRLTaskCfg):
     right_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     left_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
     sensors = []
-    for name in robots[0].fingertips:
-        r_name = "right" + name
-        sensors.append(ContactForceSensorCfg(base_link=("franka_shadow_right", name), source_link=None, name=r_name))
-    for name in robots[1].fingertips:
-        l_name = "left" + name
-        sensors.append(ContactForceSensorCfg(base_link=("franka_shadow_left", name), source_link=None, name=l_name))
     vel_obs_scale: float = 0.2  # Scale for velocity observations
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
@@ -137,59 +125,17 @@ class KettleCfg(BaseRLTaskCfg):
         self.objects.append(self.objects_cfg["table"])
         self.objects.append(self.objects_cfg[self.current_object_type])
         self.objects.append(self.objects_cfg["bucket"])
-
-    def set_init_states(self) -> None:
-        """Set the initial states for the shadow hand pour water task."""
-        self.proceptual_shape = 0
-        for robot in self.robots:
-            self.proceptual_shape += robot.observation_shape
-            self.proceptual_shape += robot.num_fingertips * 6  # fingertip forces
-        self.proceptual_shape += self.action_shape
-        self.proprio_shape = self.proceptual_shape + 32
-        self.obs_shape = self.proprio_shape
-        if self.obs_type == "state":
-            self.cameras = []
-            if not self.use_prio:
-                raise ValueError("State observation type requires proprioception to be enabled.")
-        elif self.obs_type == "rgb":
-            self.img_h = 256
-            self.img_w = 256
-            self.cameras = [
-                PinholeCameraCfg(
-                    name="camera_0",
-                    width=self.img_w,
-                    height=self.img_h,
-                    pos=(-1.35, -1.0, 1.05),
-                    look_at=(0.0, -0.75, 0.5),
-                )
-            ]  # TODO
-            if self.use_prio:
-                self.obs_shape = self.proprio_shape + 3 * self.img_h * self.img_w
-            else:
-                self.obs_shape = self.proceptual_shape + 3 * self.img_h * self.img_w
-        self.init_goal_pos = torch.tensor(
-            [0.0, 0.1, 0.625], dtype=torch.float, device=self.device
-        )  # Initial right goal position, shape (3,)
-        self.init_states = {
-            "objects": {
-                "table": {
-                    "pos": torch.tensor([0.0, 0.0, 0.3]),
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                },
-                "kettle": {
-                    "pos": torch.tensor([0.0, 0.0, 0.68]),
-                    "rot": torch.tensor([0.707, 0.0, 0.0, 0.707]),
-                    "dof_pos": {
-                        "joint_0": 0.0,
-                    },
-                },
-                "bucket": {
-                    "pos": torch.tensor([0.0, -0.3, 0.66]),
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                },
-            },
-            "robots": {
-                "franka_shadow_right": {
+        if self.current_robot_type == "shadow":
+            self.robots = [
+                FrankaShadowHandRightCfg(
+                    use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True, name="right_hand"
+                ),
+                FrankaShadowHandLeftCfg(
+                    use_vhacd=False, robot_controller="dof_pos", isaacgym_read_mjcf=True, name="left_hand"
+                ),
+            ]
+            self.robot_init_state = {
+                "right_hand": {
                     "pos": torch.tensor([0.88, 0.2, 0.0]),
                     "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
                     "dof_pos": {
@@ -226,7 +172,7 @@ class KettleCfg(BaseRLTaskCfg):
                         "panda_joint7": 2.35619445,
                     },
                 },
-                "franka_shadow_left": {
+                "left_hand": {
                     "pos": torch.tensor([0.88, -0.2, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
@@ -263,7 +209,142 @@ class KettleCfg(BaseRLTaskCfg):
                         "panda_joint7": -0.785398,
                     },
                 },
+            }
+        elif self.current_robot_type == "allegro":
+            self.robots = [
+                FrankaAllegroHandRightCfg(use_vhacd=False, robot_controller="dof_pos", name="right_hand"),
+                FrankaAllegroHandLeftCfg(use_vhacd=False, robot_controller="dof_pos", name="left_hand"),
+            ]
+            self.robot_init_state = {
+                "right_hand": {
+                    "pos": torch.tensor([0.88, 0.2, 0.0]),
+                    "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
+                    "dof_pos": {
+                        "joint_0": 0.0,
+                        "joint_1": 0.0,
+                        "joint_2": 0.0,
+                        "joint_3": 0.0,
+                        "joint_4": 0.0,
+                        "joint_5": 0.0,
+                        "joint_6": 0.0,
+                        "joint_7": 0.0,
+                        "joint_8": 0.0,
+                        "joint_9": 0.0,
+                        "joint_10": 0.0,
+                        "joint_11": 0.0,
+                        "joint_12": 0.0,
+                        "joint_13": 0.0,
+                        "joint_14": 0.0,
+                        "joint_15": 0.0,
+                        "panda_joint1": 0.0,
+                        "panda_joint2": -0.785398,
+                        "panda_joint3": 0.0,
+                        "panda_joint4": -2.356194,
+                        "panda_joint5": 0.0,
+                        "panda_joint6": 3.1415928,
+                        "panda_joint7": 2.35619445,
+                    },
+                },
+                "left_hand": {
+                    "pos": torch.tensor([0.88, -0.2, 0.0]),
+                    "rot": torch.tensor([0, 0, 0, 1]),
+                    "dof_pos": {
+                        "joint_0": 0.0,
+                        "joint_1": 0.0,
+                        "joint_2": 0.0,
+                        "joint_3": 0.0,
+                        "joint_4": 0.0,
+                        "joint_5": 0.0,
+                        "joint_6": 0.0,
+                        "joint_7": 0.0,
+                        "joint_8": 0.0,
+                        "joint_9": 0.0,
+                        "joint_10": 0.0,
+                        "joint_11": 0.0,
+                        "joint_12": 0.0,
+                        "joint_13": 0.0,
+                        "joint_14": 0.0,
+                        "joint_15": 0.0,
+                        "panda_joint1": 0.0,
+                        "panda_joint2": -0.785398,
+                        "panda_joint3": 0.0,
+                        "panda_joint4": -2.356194,
+                        "panda_joint5": 0.0,
+                        "panda_joint6": 3.1415928,
+                        "panda_joint7": -0.785398,
+                    },
+                },
+            }
+        self.step_actions_shape = 0
+        for robot in self.robots:
+            self.step_actions_shape += robot.num_joints
+        self.action_shape = 0
+        for robot in self.robots:
+            if robot.robot_controller == "ik":
+                self.action_shape += 6 + 6 * robot.num_fingertips
+            elif robot.robot_controller == "dof_pos":
+                self.action_shape += 6 + robot.num_actuated_joints - robot.num_arm_joints
+        for name in self.robots[0].fingertips:
+            r_name = "right" + name
+            self.sensors.append(
+                ContactForceSensorCfg(base_link=(self.robots[0].name, name), source_link=None, name=r_name)
+            )
+        for name in self.robots[1].fingertips:
+            l_name = "left" + name
+            self.sensors.append(
+                ContactForceSensorCfg(base_link=(self.robots[0].name, name), source_link=None, name=l_name)
+            )
+
+    def set_init_states(self) -> None:
+        """Set the initial states for the shadow hand pour water task."""
+        self.state_shape = 0
+        for robot in self.robots:
+            self.state_shape += robot.observation_shape
+            self.state_shape += robot.num_fingertips * 6  # fingertip forces
+        self.state_shape += self.action_shape
+        if self.use_prio:
+            self.state_shape += 32
+        self.obs_shape = {
+            "state": (self.state_shape,),
+        }
+        if self.obs_type == "state":
+            self.cameras = []
+            if not self.use_prio:
+                raise ValueError("State observation type requires proprioception to be enabled.")
+        elif self.obs_type == "rgb":
+            assert hasattr(self, "img_h") and hasattr(self, "img_w"), "Image height and width must be set."
+            self.cameras = [
+                PinholeCameraCfg(
+                    name="camera_0",
+                    width=self.img_w,
+                    height=self.img_h,
+                    pos=(-1.35, -1.0, 1.05),
+                    look_at=(0.0, -0.75, 0.5),
+                )
+            ]  # TODO
+            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+        self.init_goal_pos = torch.tensor(
+            [0.0, 0.1, 0.625], dtype=torch.float, device=self.device
+        )  # Initial right goal position, shape (3,)
+        self.init_states = {
+            "objects": {
+                "table": {
+                    "pos": torch.tensor([0.0, 0.0, 0.3]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                },
+                "kettle": {
+                    "pos": torch.tensor([0.0, 0.0, 0.68]),
+                    "rot": torch.tensor([0.707, 0.0, 0.0, 0.707]),
+                    "dof_pos": {
+                        "joint_0": 0.0,
+                    },
+                },
+                "bucket": {
+                    "pos": torch.tensor([0.0, -0.3, 0.66]),
+                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                },
             },
+            "robots": self.robot_init_state,
         }
         self.robot_dof_default_pos = {}
         self.robot_dof_default_pos_cpu = {}
@@ -351,36 +432,39 @@ class KettleCfg(BaseRLTaskCfg):
         num_envs = envstates.robots[self.robots[0].name].root_state.shape[0]
         if self.num_envs is None:
             self.num_envs = num_envs
-        obs = torch.zeros((num_envs, self.obs_shape), dtype=torch.float, device=device)
+        obs = {
+            "state": torch.zeros((num_envs, self.state_shape), dtype=torch.float32, device=device),
+        }
+        state_obs = obs["state"]
         t = 0
-        obs[:, : self.robots[0].observation_shape] = self.robots[0].observation()
+        state_obs[:, : self.robots[0].observation_shape] = self.robots[0].observation()
         t += self.robots[0].observation_shape
         for name in self.robots[0].fingertips:
             # shape: (num_envs, 3) + (num_envs, 3) => (num_envs, 6)
             r_name = "right" + name
             force = envstates.sensors[r_name].force  # (num_envs, 3)
             torque = envstates.sensors[r_name].torque  # (num_envs, 3)
-            obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
+            state_obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
-        obs[:, t : t + self.action_shape // 2] = actions[:, : self.action_shape // 2]  # actions for right hand
+        state_obs[:, t : t + self.action_shape // 2] = actions[:, : self.action_shape // 2]  # actions for right hand
         t += self.action_shape // 2
-        obs[:, t : t + self.robots[1].observation_shape] = self.robots[1].observation()
+        state_obs[:, t : t + self.robots[1].observation_shape] = self.robots[1].observation()
         t += self.robots[1].observation_shape
         for name in self.robots[1].fingertips:
             # shape: (num_envs, 3) + (num_envs, 3) => (num_envs, 6)
             l_name = "left" + name
             force = envstates.sensors[l_name].force
             torque = envstates.sensors[l_name].torque
-            obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
+            state_obs[:, t : t + 6] = torch.cat([force, torque], dim=1) * self.force_torque_obs_scale  # (num_envs, 6)
             t += 6
-        obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
+        state_obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
         t += self.action_shape // 2
         if self.use_prio:
-            obs[:, t : t + 13] = envstates.objects["kettle"].root_state
-            obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object1 angvel
+            state_obs[:, t : t + 13] = envstates.objects["kettle"].root_state
+            state_obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object1 angvel
             t += 13
-            obs[:, t : t + 13] = envstates.objects["bucket"].root_state
-            obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object2 angvel
+            state_obs[:, t : t + 13] = envstates.objects["bucket"].root_state
+            state_obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object2 angvel
             t += 13
             kettle_handle_pos = envstates.objects["kettle"].root_state[:, :3]
             kettle_handle_rot = envstates.objects["kettle"].root_state[:, 3:7]
@@ -388,17 +472,15 @@ class KettleCfg(BaseRLTaskCfg):
             bucket_handle_pos = envstates.objects["bucket"].root_state[:, :3]
             bucket_handle_rot = envstates.objects["bucket"].root_state[:, 3:7]
             bucket_handle_pos = bucket_handle_pos + math.quat_apply(bucket_handle_rot, self.z_unit_tensor * -0.1)
-            obs[:, t : t + 3] = kettle_handle_pos
+            state_obs[:, t : t + 3] = kettle_handle_pos
             t += 3
-            obs[:, t : t + 3] = bucket_handle_pos
+            state_obs[:, t : t + 3] = bucket_handle_pos
             t += 3
-            if self.obs_type == "rgb":
-                obs[:, t:] = (
-                    envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
-                )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W) -> (num_envs, 3 * H * W)
-        else:
-            if self.obs_type == "rgb":
-                obs[:, t:] = envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2).reshape(num_envs, -1) / 255.0
+        obs["state"] = state_obs
+        if self.obs_type == "rgb":
+            obs["rgb"] = (
+                envstates.cameras["camera_0"].rgb.permute(0, 3, 1, 2) / 255.0
+            )  # (num_envs, H, W, 3) -> (num_envs, 3, H, W)
         return obs
 
     def reward_fn(
@@ -483,35 +565,46 @@ class KettleCfg(BaseRLTaskCfg):
             # If no noise is applied, return the initial states directly
             return deepcopy(init_states)
         if isinstance(init_states, list):
+            if getattr(self, "robot_dof_default_pos_cpu", None) is None:
+                self.robot_dof_default_pos_cpu = {}
+                for robot in self.robots:
+                    self.robot_dof_default_pos_cpu[robot.name] = torch.zeros(
+                        robot.num_joints, dtype=torch.float32, device="cpu"
+                    )
+                    for idx, name in enumerate(robot.dof_names):
+                        self.robot_dof_default_pos_cpu[robot.name][idx] = self.init_states["robots"][robot.name][
+                            "dof_pos"
+                        ][name]
             reset_state = deepcopy(init_states)
-            num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
+            num_dofs = self.robots[0].num_joints + self.robots[1].num_joints
             x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
             y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
 
             # generate random values
-            rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device="cpu")
+            rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_dofs + 5), device="cpu")
 
             new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
-
-            robot_dof_default_pos = self.robot_dof_default_pos_cpu[self.robots[0].name]
-            delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
-            delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
-
+            start_idx = 5
             for i, env_id in enumerate(env_ids):
-                # reset object
                 for obj_name in reset_state[env_id]["objects"].keys():
                     reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
                         self.reset_position_noise * rand_floats[i, :3]
                     )
+                    reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
 
-                # reset shadow hand
-                for robot_name in reset_state[env_id]["robots"].keys():
-                    rand_delta = delta_min + (delta_max - delta_min) * rand_floats[i, 5 : 5 + num_shadow_hand_dofs]
+                # reset hand
+                for robot in self.robots:
+                    robot_dof_default_pos = self.robot_dof_default_pos_cpu[robot.name]
+                    delta_max = robot.joint_limits_upper.cpu() - robot_dof_default_pos
+                    delta_min = robot.joint_limits_lower.cpu() - robot_dof_default_pos
+                    rand_delta = (
+                        delta_min + (delta_max - delta_min) * rand_floats[i, start_idx : start_idx + robot.num_joints]
+                    )
                     dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
-                    reset_state[env_id]["robots"][robot_name]["dof_pos"] = {
-                        name: dof_pos[j].item()
-                        for j, name in enumerate(reset_state[env_id]["robots"][robot_name]["dof_pos"].keys())
+                    reset_state[env_id]["robots"][robot.name]["dof_pos"] = {
+                        name: dof_pos[idx].item() for idx, name in enumerate(robot.dof_names)
                     }
+                    start_idx += robot.num_joints
 
             return reset_state
         elif isinstance(init_states, TensorState):

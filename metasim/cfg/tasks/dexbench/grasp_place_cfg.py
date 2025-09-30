@@ -494,8 +494,8 @@ class GraspPlaceCfg(BaseRLTaskCfg):
         """
         bucket_pos = envstates.objects["bucket"].root_state[:, :3]
         block_pos = envstates.objects[self.current_object_type].root_state[:, :3]
-        right_hand_reward = self.robots[0].reward(bucket_pos)
-        left_hand_reward = self.robots[1].reward(block_pos)
+        right_hand_reward, right_hand_dist = self.robots[0].reward(bucket_pos)
+        left_hand_reward, left_hand_dist = self.robots[1].reward(block_pos)
 
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
@@ -507,6 +507,8 @@ class GraspPlaceCfg(BaseRLTaskCfg):
             block_pos=block_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -634,6 +636,8 @@ def compute_task_reward(
     block_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -659,6 +663,10 @@ def compute_task_reward(
         right_hand_reward (tensor): The reward from the right hand
 
         left_hand_reward (tensor): The reward from the left hand
+
+        right_hand_dist (tensor): The distance from the right hand to the right object
+
+        left_hand_dist (tensor): The distance from the left hand to the left object
 
         action_penalty_scale (float): The scale of the action penalty
 
@@ -695,8 +703,8 @@ def compute_task_reward(
     reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_reward <= -0.3, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(left_hand_reward <= -0.3, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.3, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(left_hand_dist >= 0.3, torch.ones_like(resets), resets)
 
     # penalty = (left_hand_finger_dist >= 1.2) | (right_hand_finger_dist >= 1.2)
     # reward = torch.where(penalty, reward - leave_penalty, reward)

@@ -280,6 +280,7 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
         """
         dists = self.ft_pos - target_pos.unsqueeze(1)  # (num_envs, num_fingertips, 3)
         dists = torch.norm(dists, p=2, dim=-1)  # (num_envs, num_fingertips)
-        dists = torch.sum(dists, dim=-1)  # (num_envs,)
-        reward = 1.2 - dists  # (num_envs,)
-        return reward
+        mean_dists = torch.mean(dists, dim=-1)  # (num_envs,)
+        sum_dists = torch.sum(dists, dim=-1)  # (num_envs,)
+        reward = 1.2 - sum_dists
+        return reward, mean_dists

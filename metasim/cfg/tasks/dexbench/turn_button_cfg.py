@@ -495,10 +495,10 @@ class TurnButtonCfg(BaseRLTaskCfg):
         left_object_pos = left_object_pos + math.quat_apply(left_object_rot, self.y_unit_tensor * -0.02)
         left_object_pos = left_object_pos + math.quat_apply(left_object_rot, self.x_unit_tensor * -0.05)
 
-        right_hand_reward = self.robots[0].reward(
+        right_hand_reward, right_hand_dist = self.robots[0].reward(
             target_pos=right_object_pos,
         )
-        left_hand_reward = self.robots[1].reward(
+        left_hand_reward, left_hand_dist = self.robots[1].reward(
             target_pos=left_object_pos,
         )
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
@@ -511,6 +511,8 @@ class TurnButtonCfg(BaseRLTaskCfg):
             left_object_pos=left_object_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -626,6 +628,8 @@ def compute_task_reward(
     left_object_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -650,6 +654,10 @@ def compute_task_reward(
         right_hand_reward (tensor): The reward from the right hand, shape (num_envs,)
 
         left_hand_reward (tensor): The reward from the left hand, shape (num_envs,)
+
+        right_hand_dist (tensor): The distance from the right hand to the right button, shape (num_envs,)
+
+        left_hand_dist (tensor): The distance from the left hand to the left button, shape (num_envs,)
 
         action_penalty_scale (float): The scale of the action penalty
 

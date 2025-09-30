@@ -480,8 +480,9 @@ class StackBlockCfg(BaseRLTaskCfg):
         """
         right_object_pos = envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3]
         left_object_pos = envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3]
-        right_hand_reward = self.robots[0].reward(right_object_pos)
-        left_hand_reward = self.robots[1].reward(left_object_pos)
+        right_hand_reward, right_hand_dist = self.robots[0].reward(right_object_pos)
+        left_hand_reward, left_hand_dist = self.robots[1].reward(left_object_pos)
+
         # right hand fingertip positions and rotations
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
@@ -494,6 +495,8 @@ class StackBlockCfg(BaseRLTaskCfg):
             target_pos=self.goal_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -611,6 +614,8 @@ def compute_task_reward(
     target_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -638,6 +643,10 @@ def compute_task_reward(
         right_hand_reward (tensor): The reward for the right hand, shape (num_envs,)
 
         left_hand_reward (tensor): The reward for the left hand, shape (num_envs,)
+
+        right_hand_dist (tensor): The distance from the right hand to the right object, shape (num_envs,)
+
+        left_hand_dist (tensor): The distance from the left hand to the left object, shape (num_envs,)
 
         action_penalty_scale (float): The scale of the action penalty
 
@@ -668,8 +677,8 @@ def compute_task_reward(
     # # Total reward is: position distance + orientation alignment + action regularization + success bonus + fall penalty
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
-        right_hand_reward > 0.7,
-        torch.where(left_hand_reward > 0.7, (0.24 - goal_dist1 - goal_dist2) * 2, up_rew),
+        right_hand_dist <= 0.1,
+        torch.where(left_hand_dist <= 0.1, (0.24 - goal_dist1 - goal_dist2) * 2, up_rew),
         up_rew,
     )
 
@@ -696,9 +705,9 @@ def compute_task_reward(
     reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_reward >= 1.2, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_reward <= 0.45, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_reward <= 0.45, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist <= 0, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(right_hand_dist >= 0.15, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_dist >= 0.15, torch.ones_like(resets), resets)
 
     # penalty = (left_hand_finger_dist >= 0.75) | (right_hand_finger_dist >= 0.75)
     # reward = torch.where(penalty, reward - leave_penalty, reward)

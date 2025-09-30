@@ -522,8 +522,8 @@ class KettleCfg(BaseRLTaskCfg):
         bucket_handle_rot = envstates.objects["bucket"].root_state[:, 3:7]
         bucket_handle_pos = bucket_handle_pos + math.quat_apply(bucket_handle_rot, self.z_unit_tensor * -0.1)
 
-        right_hand_reward = self.robots[0].reward(kettle_handle_pos)
-        left_hand_reward = self.robots[1].reward(bucket_handle_pos)
+        right_hand_reward, right_hand_dist = self.robots[0].reward(kettle_handle_pos)
+        left_hand_reward, left_hand_dist = self.robots[1].reward(bucket_handle_pos)
 
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
@@ -536,6 +536,8 @@ class KettleCfg(BaseRLTaskCfg):
             bucket_handle_pos=bucket_handle_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -664,6 +666,8 @@ def compute_task_reward(
     bucket_handle_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -692,6 +696,10 @@ def compute_task_reward(
 
         left_hand_reward (tensor): The reward from the left hand
 
+        right_hand_dist (tensor): The distance from the right hand to the kettle handle
+
+        left_hand_dist (tensor): The distance from the left hand to the bucket handle
+
         action_penalty_scale (float): The scale of the action penalty
 
         actions (tensor): The action buffer of all environments at this time
@@ -710,9 +718,9 @@ def compute_task_reward(
 
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
-        right_hand_reward >= 0.5,
+        right_hand_dist <= 0.14,
         torch.where(
-            left_hand_reward >= 0.5, 0.5 - torch.norm(bucket_handle_pos - kettle_spout_pos, p=2, dim=-1) * 2, up_rew
+            left_hand_dist <= 0.14, 0.5 - torch.norm(bucket_handle_pos - kettle_spout_pos, p=2, dim=-1) * 2, up_rew
         ),
         up_rew,
     )

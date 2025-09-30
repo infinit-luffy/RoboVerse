@@ -513,8 +513,8 @@ class ScissorCfg(BaseRLTaskCfg):
             scissor_left_handle_rot, self.y_unit_tensor * -0.15
         )
 
-        right_hand_reward = self.robots[0].reward(scissor_right_handle_pos)
-        left_hand_reward = self.robots[1].reward(scissor_left_handle_pos)
+        right_hand_reward, right_hand_dist = self.robots[0].reward(scissor_right_handle_pos)
+        left_hand_reward, left_hand_dist = self.robots[1].reward(scissor_left_handle_pos)
 
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
@@ -527,6 +527,8 @@ class ScissorCfg(BaseRLTaskCfg):
             scissor_left_handle_pos=scissor_left_handle_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -641,6 +643,8 @@ def compute_task_reward(
     scissor_left_handle_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -668,6 +672,10 @@ def compute_task_reward(
 
         left_hand_reward (tensor): The reward from the left hand
 
+        right_hand_dist (tensor): The distance from the right hand to the right handle of the object
+
+        left_hand_dist (tensor): The distance from the left hand to the left handle of the object
+
         action_penalty_scale (float): The scale of the action penalty
 
         actions (tensor): The action buffer of all environments at this time
@@ -679,15 +687,15 @@ def compute_task_reward(
 
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
-        right_hand_reward >= 0.5,
-        torch.where(left_hand_reward >= 0.5, (0.59 + object_dof[:, 0]) * 5, up_rew),
+        right_hand_dist <= 0.14,
+        torch.where(left_hand_dist <= 0.14, (0.59 + object_dof[:, 0]) * 5, up_rew),
         up_rew,
     )
 
     reward = right_hand_reward + left_hand_reward + up_rew
 
     # Find out which envs hit the goal and update successes count
-    success = (object_dof[:, 0] > -0.3) & (right_hand_reward >= 0.8) & (left_hand_reward >= 0.8)
+    success = (object_dof[:, 0] > -0.3) & (right_hand_dist <= 0.08) & (left_hand_dist <= 0.08)
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
@@ -703,8 +711,8 @@ def compute_task_reward(
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(up_rew < -0.5, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_reward <= -0.55, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_reward <= -0.55, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.35, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_dist >= 0.35, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

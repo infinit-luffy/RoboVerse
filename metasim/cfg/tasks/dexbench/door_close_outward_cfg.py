@@ -505,8 +505,8 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
 
         door_dof_pos = envstates.objects[self.current_object_type].joint_pos
 
-        right_hand_reward = self.robots[0].reward(door_right_handle_pos)
-        left_hand_reward = self.robots[1].reward(door_left_handle_pos)
+        right_hand_reward, right_hand_dist = self.robots[0].reward(door_right_handle_pos)
+        left_hand_reward, left_hand_dist = self.robots[1].reward(door_left_handle_pos)
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
             reset_goal_buf=reset_goal_buf,
@@ -518,6 +518,8 @@ class DoorCloseOutwardCfg(BaseRLTaskCfg):
             door_dof_pos=door_dof_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -645,6 +647,8 @@ def compute_task_reward(
     door_dof_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -672,6 +676,10 @@ def compute_task_reward(
 
         left_hand_reward (tensor): The reward from the left hand, shape (num_envs,)
 
+        right_hand_dist (tensor): The distance from the right hand to the right handle, shape (num_envs,)
+
+        left_hand_dist (tensor): The distance from the left hand to the left handle, shape (num_envs,)
+
         action_penalty_scale (float): The scale of the action penalty
 
         actions (tensor): The action buffer of all environments at this time
@@ -683,9 +691,9 @@ def compute_task_reward(
     dof_rew = (1.57 * 2 - torch.sum(door_dof_pos, dim=-1)) * 5  # encourage opening the door
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
-        right_hand_reward > 0.7,
+        right_hand_dist < 0.1,
         torch.where(
-            left_hand_reward > 0.7,
+            left_hand_dist < 0.1,
             5 - torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) * 10 + dof_rew,
             up_rew,
         ),
@@ -696,8 +704,8 @@ def compute_task_reward(
 
     success = (
         (torch.abs(door_right_handle_pos[:, 1] - door_left_handle_pos[:, 1]) < 0.5)
-        & (right_hand_reward >= 0.7)
-        & (left_hand_reward >= 0.7)
+        & (right_hand_dist < 0.1)
+        & (left_hand_dist < 0.1)
     )
 
     # Find out which envs hit the goal and update successes count
@@ -715,8 +723,8 @@ def compute_task_reward(
     reward = torch.where(success == 1, reward + reach_goal_bonus, reward)
 
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_reward <= -1.0, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(left_hand_reward <= -1.0, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.44, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(left_hand_dist >= 0.44, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

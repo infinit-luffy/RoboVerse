@@ -496,8 +496,8 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
         pot_left_handle_pos = pot_pos + math.quat_apply(pot_rot, self.y_unit_tensor * -0.15)
         pot_left_handle_pos = pot_left_handle_pos + math.quat_apply(pot_rot, self.z_unit_tensor * 0.06)
 
-        right_hand_reward = self.robots[0].reward(pot_right_handle_pos)
-        left_hand_reward = self.robots[1].reward(pot_left_handle_pos)
+        right_hand_reward, right_hand_dist = self.robots[0].reward(pot_right_handle_pos)
+        left_hand_reward, left_hand_dist = self.robots[1].reward(pot_left_handle_pos)
 
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
@@ -511,6 +511,8 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
             pot_left_handle_pos=pot_left_handle_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -627,6 +629,8 @@ def compute_task_reward(
     pot_left_handle_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -657,6 +661,10 @@ def compute_task_reward(
 
         left_hand_reward (tensor): The reward of the left hand
 
+        right_hand_dist (tensor): The distance from the right hand to the right handle of the pot
+
+        left_hand_dist (tensor): The distance from the left hand to the left handle of the pot
+
         action_penalty_scale (float): The scale of the action penalty
 
         actions (tensor): The action buffer of all environments at this time
@@ -672,7 +680,7 @@ def compute_task_reward(
 
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
-        right_hand_reward >= 0.7, torch.where(left_hand_reward >= 0.7, 5 * (0.25 - goal_dist), up_rew), up_rew
+        right_hand_dist <= 0.1, torch.where(left_hand_dist <= 0.1, 5 * (0.25 - goal_dist), up_rew), up_rew
     )
 
     reward = right_hand_reward + left_hand_reward + up_rew
@@ -698,8 +706,8 @@ def compute_task_reward(
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(object_pos[:, 2] <= 0.3, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_reward <= 0.2, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_reward <= 0.2, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.2, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_dist >= 0.2, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

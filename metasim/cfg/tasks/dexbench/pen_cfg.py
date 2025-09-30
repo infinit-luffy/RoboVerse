@@ -495,8 +495,8 @@ class PenCfg(BaseRLTaskCfg):
         pen_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
         pen_left_handle_pos = pen_left_handle_pos + math.quat_apply(pen_left_handle_rot, self.z_unit_tensor * 0.1)
 
-        right_hand_reward = self.robots[0].reward(pen_right_handle_pos)
-        left_hand_reward = self.robots[1].reward(pen_left_handle_pos)
+        right_hand_reward, right_hand_dist = self.robots[0].reward(pen_right_handle_pos)
+        left_hand_reward, left_hand_dist = self.robots[1].reward(pen_left_handle_pos)
 
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
@@ -508,6 +508,8 @@ class PenCfg(BaseRLTaskCfg):
             pen_left_handle_pos=pen_left_handle_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -621,6 +623,8 @@ def compute_task_reward(
     pen_left_handle_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -657,9 +661,9 @@ def compute_task_reward(
 
     up_rew = torch.zeros_like(right_hand_reward)
     up_rew = torch.where(
-        right_hand_reward >= 0.45,
+        right_hand_dist <= 0.15,
         torch.where(
-            left_hand_reward >= 0.45,
+            left_hand_dist <= 0.15,
             torch.norm(pen_right_handle_pos - pen_left_handle_pos, p=2, dim=-1) * 5 - 0.8,
             up_rew,
         ),
@@ -685,8 +689,8 @@ def compute_task_reward(
 
     # Check env termination conditions, including maximum success number
     reset_buf = torch.zeros_like(reset_buf)
-    resets = torch.where(right_hand_reward <= -0.7, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(left_hand_reward <= -0.7, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.38, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(left_hand_dist >= 0.38, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

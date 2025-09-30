@@ -500,8 +500,9 @@ class PushBlockCfg(BaseRLTaskCfg):
         """
         right_object_pos = envstates.objects[f"{self.current_object_type}_1"].root_state[:, :3]
         left_object_pos = envstates.objects[f"{self.current_object_type}_2"].root_state[:, :3]
-        right_hand_reward = self.robots[0].reward(right_object_pos)
-        left_hand_reward = self.robots[1].reward(left_object_pos)
+        right_hand_reward, right_hand_dist = self.robots[0].reward(right_object_pos)
+        left_hand_reward, left_hand_dist = self.robots[1].reward(left_object_pos)
+
         # right hand fingertip positions and rotations
         (reward, reset_buf, reset_goal_buf, success_buf) = compute_task_reward(
             reset_buf=reset_buf,
@@ -515,6 +516,8 @@ class PushBlockCfg(BaseRLTaskCfg):
             left_target_pos=self.left_goal_pos,
             right_hand_reward=right_hand_reward,
             left_hand_reward=left_hand_reward,
+            right_hand_dist=right_hand_dist,
+            left_hand_dist=left_hand_dist,
             action_penalty_scale=self.action_penalty_scale,
             actions=actions,
             reach_goal_bonus=self.reach_goal_bonus,
@@ -633,6 +636,8 @@ def compute_task_reward(
     left_target_pos,
     right_hand_reward,
     left_hand_reward,
+    right_hand_dist,
+    left_hand_dist,
     action_penalty_scale: float,
     actions,
     reach_goal_bonus: float,
@@ -662,6 +667,10 @@ def compute_task_reward(
         right_hand_reward (tensor): The reward from the right hand, shape (num_envs,)
 
         left_hand_reward (tensor): The reward from the left hand, shape (num_envs,)
+
+        right_hand_dist (tensor): The distance from the right hand to the right object, shape (num_envs,)
+
+        left_hand_dist (tensor): The distance from the left hand to the left object, shape (num_envs,)
 
         action_penalty_scale (float): The scale of the action penalty
 
@@ -704,8 +713,8 @@ def compute_task_reward(
     # reward = torch.where(right_success == 1, reward + reach_goal_bonus // 2, reward)
     reward = torch.where(success, reward + reach_goal_bonus, reward)
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_reward <= 0.0, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(left_hand_reward <= 0.0, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.24, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(left_hand_dist >= 0.24, torch.ones_like(resets), resets)
 
     # penalty = (left_hand_finger_dist >= 1.2) | (right_hand_finger_dist >= 1.2)
     # reward = torch.where(penalty, reward - leave_penalty, reward)

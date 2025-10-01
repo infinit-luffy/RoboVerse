@@ -84,7 +84,7 @@ class ScissorCfg(BaseRLTaskCfg):
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
     )
-    arm_translation_scale = 0.04
+    arm_translation_scale = 0.02
     arm_orientation_scale = 0.05
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
@@ -202,36 +202,7 @@ class ScissorCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([-1.0, 0.2, 0.0]),
-                    "rot": torch.tensor([1, 0, 0, 0]),
-                    "dof_pos": {
-                        "joint_0": 0.0,
-                        "joint_1": 0.0,
-                        "joint_2": 0.0,
-                        "joint_3": 0.0,
-                        "joint_4": 0.0,
-                        "joint_5": 0.0,
-                        "joint_6": 0.0,
-                        "joint_7": 0.0,
-                        "joint_8": 0.0,
-                        "joint_9": 0.0,
-                        "joint_10": 0.0,
-                        "joint_11": 0.0,
-                        "joint_12": 0.0,
-                        "joint_13": 0.0,
-                        "joint_14": 0.0,
-                        "joint_15": 0.0,
-                        "panda_joint1": 0.0,
-                        "panda_joint2": -0.4116,
-                        "panda_joint3": 0.0,
-                        "panda_joint4": -2.0366,
-                        "panda_joint5": -0.02386,
-                        "panda_joint6": 3.1105,
-                        "panda_joint7": 0.76586,
-                    },
-                },
-                "left_hand": {
-                    "pos": torch.tensor([1.0, -0.2, 0.0]),
+                    "pos": torch.tensor([0.75, 0.2, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -248,7 +219,36 @@ class ScissorCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
+                        "joint_15": 0.0,
+                        "panda_joint1": 0.0,
+                        "panda_joint2": -0.4116,
+                        "panda_joint3": 0.0,
+                        "panda_joint4": -2.0366,
+                        "panda_joint5": -0.02386,
+                        "panda_joint6": 3.1105,
+                        "panda_joint7": 0.76586,
+                    },
+                },
+                "left_hand": {
+                    "pos": torch.tensor([0.75, -0.2, 0.0]),
+                    "rot": torch.tensor([0, 0, 0, 1]),
+                    "dof_pos": {
+                        "joint_0": 0.0,
+                        "joint_1": 0.0,
+                        "joint_2": 0.0,
+                        "joint_3": 0.0,
+                        "joint_4": 0.0,
+                        "joint_5": 0.0,
+                        "joint_6": 0.0,
+                        "joint_7": 0.0,
+                        "joint_8": 0.0,
+                        "joint_9": 0.0,
+                        "joint_10": 0.0,
+                        "joint_11": 0.0,
+                        "joint_12": 0.0,
+                        "joint_13": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.4116,
@@ -307,7 +307,7 @@ class ScissorCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_states = {
             "objects": {
                 "table": {
@@ -434,12 +434,14 @@ class ScissorCfg(BaseRLTaskCfg):
             t += 6
         state_obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
         t += self.action_shape // 2
+        if self.r_handle_idx is None:
+            self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
+        if self.l_handle_idx is None:
+            self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
         if self.use_prio:
             state_obs[:, t : t + 13] = envstates.objects[self.current_object_type].root_state
             state_obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object angvel
             t += 13
-            if self.r_handle_idx is None:
-                self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
             scissor_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
             scissor_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
             scissor_right_handle_pos = scissor_right_handle_pos + math.quat_apply(
@@ -448,8 +450,6 @@ class ScissorCfg(BaseRLTaskCfg):
             scissor_right_handle_pos = scissor_right_handle_pos + math.quat_apply(
                 scissor_right_handle_rot, self.z_unit_tensor * -0.1
             )
-            if self.l_handle_idx is None:
-                self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
             scissor_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
             scissor_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
             scissor_left_handle_pos = scissor_left_handle_pos + math.quat_apply(

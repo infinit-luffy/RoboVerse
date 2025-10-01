@@ -202,7 +202,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.0, 0.316, 0.0]),
+                    "pos": torch.tensor([0.0, 0.096, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -219,7 +219,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -231,7 +231,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.506, 0.0]),
+                    "pos": torch.tensor([0.0, -1.286, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -248,7 +248,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -303,7 +303,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)
                 )
             ]
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_goal_pos = torch.tensor(
             [0.0, -0.79, 0.85], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)

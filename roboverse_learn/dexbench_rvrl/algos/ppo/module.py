@@ -197,6 +197,10 @@ class ActorCritic(nn.Module):
 
         actions = distribution.sample()
         actions_log_prob = distribution.log_prob(actions)
+        actions = torch.tanh(actions)
+        actions_log_prob -= torch.sum(
+            torch.log(1 - actions * actions + 1e-6), dim=-1
+        )  # Enforcing Action Bound, see appendix C of SAC paper
 
         value = self.critic(feature)
 
@@ -228,6 +232,7 @@ class ActorCritic(nn.Module):
         feature = torch.cat(feature, dim=-1)
 
         actions_mean = self.actor(feature)
+        actions_mean = torch.tanh(actions_mean)
         return actions_mean
 
     def evaluate(self, observations, actions):
@@ -255,7 +260,12 @@ class ActorCritic(nn.Module):
         covariance = torch.diag(self.log_std.exp() * self.log_std.exp())
         distribution = MultivariateNormal(actions_mean, scale_tril=covariance)
 
-        actions_log_prob = distribution.log_prob(actions)
+        actions = torch.clamp(actions, -1 + 1e-6, 1 - 1e-6)
+        pre_tanh_actions = 0.5 * (torch.log1p(actions) - torch.log1p(-actions))  # atanh
+        actions_log_prob = distribution.log_prob(pre_tanh_actions)
+        actions_log_prob -= torch.sum(
+            torch.log(1 - actions * actions + 1e-6), dim=-1
+        )  # Enforcing Action Bound, see appendix C of SAC paper
         entropy = distribution.entropy()
 
         value = self.critic(feature)

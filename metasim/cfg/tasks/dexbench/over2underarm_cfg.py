@@ -94,8 +94,8 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
-    arm_translation_scale: float = 0.005
-    arm_orientation_scale: float = 0.05
+    arm_translation_scale: float = 0.002
+    arm_orientation_scale: float = 0.025
     hand_translation_scale: float = 0.02
     hand_orientation_scale: float = 0.25 * torch.pi
     dist_reward_scale = 20.0
@@ -159,7 +159,7 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.13, 0.0]),
+                    "pos": torch.tensor([0.0, -1.0, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "FFJ1": 0.0,
@@ -203,7 +203,7 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.0, -0.49, 0.0]),
+                    "pos": torch.tensor([0.0, 0.10, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -220,19 +220,19 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
-                        "panda_joint1": 0.0,
-                        "panda_joint2": -1.5707963,
+                        "panda_joint1": 3.1415926,
+                        "panda_joint2": 0.0,
                         "panda_joint3": 0.0,
-                        "panda_joint4": -1.5707963,
+                        "panda_joint4": 0.0,
                         "panda_joint5": 0.0,
-                        "panda_joint6": 3.1415928,
-                        "panda_joint7": 0.785398,
+                        "panda_joint6": 3.3415928,
+                        "panda_joint7": -2.35619445,
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.13, 0.0]),
+                    "pos": torch.tensor([0.0, -0.83, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -249,7 +249,7 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.65209,
@@ -304,9 +304,9 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)
                 )
             ]
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_goal_pos = torch.tensor(
-            [0.0, -0.4, 0.9], dtype=torch.float32, device=self.device
+            [0.0, -0.35, 0.9], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
         self.init_goal_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
@@ -315,7 +315,7 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
         self.init_states = {
             "objects": {
                 self.current_object_type: {
-                    "pos": torch.tensor([0.0, -0.06, 1.4]),
+                    "pos": torch.tensor([0.0, -0.06, 1.42]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
             },

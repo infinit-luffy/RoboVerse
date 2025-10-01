@@ -87,7 +87,7 @@ class StackBlockCfg(BaseRLTaskCfg):
         friction_offset_threshold=0.04,
     )
     arm_translation_scale = 0.04
-    arm_orientation_scale = 0.25
+    arm_orientation_scale = 0.1
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
     goal_pos = None
@@ -200,7 +200,7 @@ class StackBlockCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.0, 0.93, 0.0]),
+                    "pos": torch.tensor([0.0, 0.7, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -217,7 +217,7 @@ class StackBlockCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -229,7 +229,7 @@ class StackBlockCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -0.93, 0.0]),
+                    "pos": torch.tensor([0.0, -0.7, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -246,7 +246,7 @@ class StackBlockCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -305,7 +305,7 @@ class StackBlockCfg(BaseRLTaskCfg):
                     look_at=(0.0, 0.0, 0.5),
                 )
             ]  # TODO
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_goal_pos = torch.tensor(
             [0.0, 0.1, 0.625], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)
@@ -706,8 +706,8 @@ def compute_task_reward(
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(right_hand_dist <= 0, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_dist >= 0.15, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_dist >= 0.15, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.3, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_dist >= 0.3, torch.ones_like(resets), resets)
 
     # penalty = (left_hand_finger_dist >= 0.75) | (right_hand_finger_dist >= 0.75)
     # reward = torch.where(penalty, reward - leave_penalty, reward)

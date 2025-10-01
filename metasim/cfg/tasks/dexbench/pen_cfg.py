@@ -85,7 +85,7 @@ class PenCfg(BaseRLTaskCfg):
         friction_offset_threshold=0.04,
     )
     arm_translation_scale = 0.04
-    arm_orientation_scale = 0.05
+    arm_orientation_scale = 0.1
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
     sensors = []
@@ -202,7 +202,7 @@ class PenCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([-1.0, 0.2, 0.0]),
+                    "pos": torch.tensor([-0.75, 0.2, 0.0]),
                     "rot": torch.tensor([1, 0, 0, 0]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -219,7 +219,7 @@ class PenCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.4116,
@@ -231,7 +231,7 @@ class PenCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([-1.0, -0.2, 0.0]),
+                    "pos": torch.tensor([-0.75, -0.2, 0.0]),
                     "rot": torch.tensor([1, 0, 0, 0]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -248,7 +248,7 @@ class PenCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.4116,
@@ -307,7 +307,7 @@ class PenCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_states = {
             "objects": {
                 "table": {
@@ -434,19 +434,19 @@ class PenCfg(BaseRLTaskCfg):
             t += 6
         state_obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
         t += self.action_shape // 2
+        if self.r_handle_idx is None:
+            self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
+        if self.l_handle_idx is None:
+            self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
         if self.use_prio:
             state_obs[:, t : t + 13] = envstates.objects[self.current_object_type].root_state
             state_obs[:, t + 10 : t + 13] *= self.vel_obs_scale  # object angvel
             t += 13
-            if self.r_handle_idx is None:
-                self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
             pen_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
             pen_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
             pen_right_handle_pos = pen_right_handle_pos + math.quat_apply(
                 pen_right_handle_rot, self.y_unit_tensor * -0.1
             )
-            if self.l_handle_idx is None:
-                self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
             pen_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
             pen_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
             pen_left_handle_pos = pen_left_handle_pos + math.quat_apply(pen_left_handle_rot, self.z_unit_tensor * 0.1)
@@ -649,6 +649,10 @@ def compute_task_reward(
         right_hand_reward (tensor): The reward from the right hand
 
         left_hand_reward (tensor): The reward from the left hand
+
+        right_hand_dist (tensor): The distance from the right hand to the object
+
+        left_hand_dist (tensor): The distance from the left hand to the object
 
         action_penalty_scale (float): The scale of the action penalty
 

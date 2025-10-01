@@ -92,8 +92,8 @@ class SwingCupCfg(BaseRLTaskCfg):
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
-    arm_translation_scale = 0.06
-    arm_orientation_scale = 0.25
+    arm_translation_scale = 0.04
+    arm_orientation_scale = 0.1
     hand_translation_scale = 0.04
     hand_orientation_scale = 0.25
     dist_reward_scale = 50.0
@@ -201,7 +201,7 @@ class SwingCupCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.68, 0.2, 0.0]),
+                    "pos": torch.tensor([0.45, 0.17, 0.0]),
                     "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -218,19 +218,19 @@ class SwingCupCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
                         "panda_joint3": 0.0,
-                        "panda_joint4": -2.356194,
+                        "panda_joint4": -2.506194,
                         "panda_joint5": 0.0,
                         "panda_joint6": 3.1415928,
                         "panda_joint7": 2.35619445,
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.68, -0.2, 0.0]),
+                    "pos": torch.tensor([0.45, -0.17, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -247,12 +247,12 @@ class SwingCupCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
                         "panda_joint3": 0.0,
-                        "panda_joint4": -2.356194,
+                        "panda_joint4": -2.506194,
                         "panda_joint5": 0.0,
                         "panda_joint6": 3.1415928,
                         "panda_joint7": -0.785398,
@@ -306,7 +306,7 @@ class SwingCupCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_goal_rot = torch.tensor(
             [-0.707, 0.0, 0.0, 0.707], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
@@ -717,8 +717,8 @@ def compute_task_reward(
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(object_pos[:, 2] <= 0.3, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_dist >= 0.2, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_dist >= 0.2, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.25, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_dist >= 0.25, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

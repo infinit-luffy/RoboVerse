@@ -85,7 +85,7 @@ class TurnButtonCfg(BaseRLTaskCfg):
         friction_offset_threshold=0.04,
     )
     arm_translation_scale = 0.04
-    arm_orientation_scale = 0.25
+    arm_orientation_scale = 0.1
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
     sensors = []
@@ -199,7 +199,7 @@ class TurnButtonCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([1.0, 0.2, 0.0]),
+                    "pos": torch.tensor([0.75, 0.2, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -216,7 +216,7 @@ class TurnButtonCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.4116,
@@ -228,7 +228,7 @@ class TurnButtonCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([1.0, -0.2, 0.0]),
+                    "pos": torch.tensor([0.75, -0.2, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -245,7 +245,7 @@ class TurnButtonCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.4116,
@@ -300,7 +300,7 @@ class TurnButtonCfg(BaseRLTaskCfg):
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(-0.8, -0.5, 1.2), look_at=(0.0, 0.0, 0.5)
                 )
             ]  # TODO
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_states = {
             "objects": {
                 "table": {
@@ -431,15 +431,11 @@ class TurnButtonCfg(BaseRLTaskCfg):
             t += 6
         state_obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
         t += self.action_shape // 2
+        if self.r_handle_idx is None:
+            self.r_handle_idx = envstates.objects[f"{self.current_object_type}_1"].body_names.index(self.handle_name)
+        if self.l_handle_idx is None:
+            self.l_handle_idx = envstates.objects[f"{self.current_object_type}_2"].body_names.index(self.handle_name)
         if self.use_prio:
-            if self.r_handle_idx is None:
-                self.r_handle_idx = envstates.objects[f"{self.current_object_type}_1"].body_names.index(
-                    self.handle_name
-                )
-            if self.l_handle_idx is None:
-                self.l_handle_idx = envstates.objects[f"{self.current_object_type}_2"].body_names.index(
-                    self.handle_name
-                )
             right_object_pos = envstates.objects[f"{self.current_object_type}_1"].body_state[:, self.r_handle_idx, :3]
             right_object_rot = envstates.objects[f"{self.current_object_type}_1"].body_state[:, self.r_handle_idx, 3:7]
             right_object_pos = right_object_pos + math.quat_apply(right_object_rot, self.y_unit_tensor * -0.02)

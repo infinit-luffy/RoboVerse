@@ -192,7 +192,7 @@ class ReOrientationCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.0, 0.316, 0.0]),
+                    "pos": torch.tensor([0.0, 0.12, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -209,7 +209,7 @@ class ReOrientationCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -221,7 +221,7 @@ class ReOrientationCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.506, 0.0]),
+                    "pos": torch.tensor([0.0, -1.26, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -238,7 +238,7 @@ class ReOrientationCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -256,9 +256,9 @@ class ReOrientationCfg(BaseRLTaskCfg):
         self.action_shape = 0
         for robot in self.robots:
             if robot.robot_controller == "ik":
-                self.action_shape += 6 + 6 * robot.num_fingertips
+                self.action_shape += 6 * robot.num_fingertips
             elif robot.robot_controller == "dof_pos":
-                self.action_shape += 6 + robot.num_actuated_joints - robot.num_arm_joints
+                self.action_shape += robot.num_actuated_joints - robot.num_arm_joints
         for name in self.robots[0].fingertips:
             r_name = "right" + name
             self.sensors.append(
@@ -293,7 +293,7 @@ class ReOrientationCfg(BaseRLTaskCfg):
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)
                 )
             ]
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_goal_pos = torch.tensor(
             [0.0, -0.39, 0.85], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)

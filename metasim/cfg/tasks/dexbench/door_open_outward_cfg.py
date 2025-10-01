@@ -82,8 +82,8 @@ class DoorOpenOutwardCfg(BaseRLTaskCfg):
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
     )
-    arm_translation_scale = 0.06
-    arm_orientation_scale = 0.25
+    arm_translation_scale = 0.04
+    arm_orientation_scale = 0.1
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
     right_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
@@ -199,7 +199,7 @@ class DoorOpenOutwardCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.88, 0.2, 0.0]),
+                    "pos": torch.tensor([0.6, 0.2, 0.0]),
                     "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -216,7 +216,7 @@ class DoorOpenOutwardCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -228,7 +228,7 @@ class DoorOpenOutwardCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.88, -0.2, 0.0]),
+                    "pos": torch.tensor([0.6, -0.2, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -245,7 +245,7 @@ class DoorOpenOutwardCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -300,7 +300,7 @@ class DoorOpenOutwardCfg(BaseRLTaskCfg):
                     name="camera_0", width=self.img_w, height=self.img_h, pos=(2, -0.2, 1.05), look_at=(0.0, -0.0, 0.5)
                 )
             ]
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_states = {
             "objects": {
                 self.current_object_type: {
@@ -421,9 +421,11 @@ class DoorOpenOutwardCfg(BaseRLTaskCfg):
             t += 6
         state_obs[:, t : t + self.action_shape // 2] = actions[:, self.action_shape // 2 :]  # actions for left hand
         t += self.action_shape // 2
+        if self.r_handle_idx is None:
+            self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
+        if self.l_handle_idx is None:
+            self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
         if self.use_prio:
-            if self.r_handle_idx is None:
-                self.r_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.r_handle_name)
             door_right_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, :3]
             door_right_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.r_handle_idx, 3:7]
             door_right_handle_pos = door_right_handle_pos + math.quat_apply(
@@ -435,8 +437,6 @@ class DoorOpenOutwardCfg(BaseRLTaskCfg):
             door_right_handle_pos = door_right_handle_pos + math.quat_apply(
                 door_right_handle_rot, self.z_unit_tensor * -0.04
             )
-            if self.l_handle_idx is None:
-                self.l_handle_idx = envstates.objects[self.current_object_type].body_names.index(self.l_handle_name)
             door_left_handle_pos = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, :3]
             door_left_handle_rot = envstates.objects[self.current_object_type].body_state[:, self.l_handle_idx, 3:7]
             door_left_handle_pos = door_left_handle_pos + math.quat_apply(

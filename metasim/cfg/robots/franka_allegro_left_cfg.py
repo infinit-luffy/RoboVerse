@@ -120,7 +120,7 @@ class FrankaAllegroHandLeftCfg(BaseDexCfg):
         "joint_11": 0.0,
         "joint_12": 0.0,
         "joint_13": 0.0,
-        "joint_14": 0.0,
+        "joint_14": 1.64,
         "joint_15": 0.0,
         "joint_2": 0.0,
         "joint_3": 0.0,

@@ -89,7 +89,7 @@ class PushBlockCfg(BaseRLTaskCfg):
         friction_offset_threshold=0.04,
     )
     arm_translation_scale = 0.04
-    arm_orientation_scale = 0.25
+    arm_orientation_scale = 0.1
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
     right_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
@@ -220,7 +220,7 @@ class PushBlockCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.4116,
@@ -249,7 +249,7 @@ class PushBlockCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.4116,
@@ -308,7 +308,7 @@ class PushBlockCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_right_goal_pos = torch.tensor(
             [0.2, 0.2, 0.625], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)
@@ -318,7 +318,7 @@ class PushBlockCfg(BaseRLTaskCfg):
         self.init_states = {
             "objects": {
                 "table": {
-                    "pos": torch.tensor([0.2, 0.0, 0.3]),
+                    "pos": torch.tensor([0.0, 0.0, 0.3]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
                 f"{self.current_object_type}_1": {
@@ -713,8 +713,8 @@ def compute_task_reward(
     # reward = torch.where(right_success == 1, reward + reach_goal_bonus // 2, reward)
     reward = torch.where(success, reward + reach_goal_bonus, reward)
     # Check env termination conditions, including maximum success number
-    resets = torch.where(right_hand_dist >= 0.24, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(left_hand_dist >= 0.24, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.3, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(left_hand_dist >= 0.3, torch.ones_like(resets), resets)
 
     # penalty = (left_hand_finger_dist >= 1.2) | (right_hand_finger_dist >= 1.2)
     # reward = torch.where(penalty, reward - leave_penalty, reward)

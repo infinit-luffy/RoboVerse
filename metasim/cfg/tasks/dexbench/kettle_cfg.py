@@ -102,8 +102,8 @@ class KettleCfg(BaseRLTaskCfg):
         friction_correlation_distance=0.025,
         friction_offset_threshold=0.04,
     )
-    arm_translation_scale = 0.06
-    arm_orientation_scale = 0.25
+    arm_translation_scale = 0.04
+    arm_orientation_scale = 0.1
     hand_translation_scale = 0.02
     hand_orientation_scale = 0.25
     right_goal_pos = None  # Placeholder for goal position, to be set later, shape (num_envs, 3)
@@ -136,7 +136,7 @@ class KettleCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.88, 0.2, 0.0]),
+                    "pos": torch.tensor([0.88, 0.25, 0.0]),
                     "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
                     "dof_pos": {
                         "FFJ1": 0.0,
@@ -173,7 +173,7 @@ class KettleCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.88, -0.2, 0.0]),
+                    "pos": torch.tensor([0.88, -0.25, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "FFJ1": 0.0,
@@ -217,7 +217,7 @@ class KettleCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.88, 0.2, 0.0]),
+                    "pos": torch.tensor([0.65, 0.25, 0.0]),
                     "rot": torch.tensor([0.0, 0.0, 0.0, 1.0]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -234,7 +234,7 @@ class KettleCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -246,7 +246,7 @@ class KettleCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.88, -0.2, 0.0]),
+                    "pos": torch.tensor([0.65, -0.2, 0.0]),
                     "rot": torch.tensor([0, 0, 0, 1]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -263,7 +263,7 @@ class KettleCfg(BaseRLTaskCfg):
                         "joint_11": 0.0,
                         "joint_12": 0.0,
                         "joint_13": 0.0,
-                        "joint_14": 0.0,
+                        "joint_14": 1.64,
                         "joint_15": 0.0,
                         "panda_joint1": 0.0,
                         "panda_joint2": -0.785398,
@@ -322,7 +322,7 @@ class KettleCfg(BaseRLTaskCfg):
                     look_at=(0.0, -0.75, 0.5),
                 )
             ]  # TODO
-            self.obs_shape["rgb"] = (3 * self.img_h * self.img_w,)
+            self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
         self.init_goal_pos = torch.tensor(
             [0.0, 0.1, 0.625], dtype=torch.float, device=self.device
         )  # Initial right goal position, shape (3,)
@@ -333,14 +333,14 @@ class KettleCfg(BaseRLTaskCfg):
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
                 "kettle": {
-                    "pos": torch.tensor([0.0, 0.0, 0.68]),
+                    "pos": torch.tensor([0.0, 0.1, 0.68]),
                     "rot": torch.tensor([0.707, 0.0, 0.0, 0.707]),
                     "dof_pos": {
                         "joint_0": 0.0,
                     },
                 },
                 "bucket": {
-                    "pos": torch.tensor([0.0, -0.3, 0.66]),
+                    "pos": torch.tensor([0.0, -0.2, 0.66]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
             },
@@ -742,6 +742,8 @@ def compute_task_reward(
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(bucket_handle_pos[:, 2] <= 0.2, torch.ones_like(reset_buf), reset_buf)
+    resets = torch.where(right_hand_dist >= 0.4, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_dist >= 0.4, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

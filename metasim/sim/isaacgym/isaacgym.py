@@ -322,6 +322,7 @@ class IsaacgymHandler(BaseSimHandler):
             asset_options = gymapi.AssetOptions()
             asset_options.fix_base_link = object.fix_base_link
             asset_options.disable_gravity = object.disable_gravity
+            asset_options.collapse_fixed_joints = object.collapse_fixed_joints
             # For XFORM physics (goal object), disable gravity
             if hasattr(object, "physics") and object.physics == PhysicStateType.XFORM:
                 asset_options.disable_gravity = True

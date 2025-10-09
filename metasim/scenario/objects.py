@@ -173,6 +173,7 @@ class RigidObjCfg(_FileBasedMixin, BaseRigidObjCfg):
     use_mesh_materials: bool = False
     mesh_normal_mode: str | None = None
     vhacd_resolution: int | None = None
+    collapse_fixed_joints: bool = True
     """Rigid object cfg."""
 
 

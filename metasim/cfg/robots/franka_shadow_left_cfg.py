@@ -24,6 +24,7 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
     fix_base_link: bool = True
     urdf_path: str = "roboverse_data/robots/franka_shadow_hand/urdf/franka_shadow_left.urdf"
     mjcf_path: str = "roboverse_data/robots/franka_shadow_hand/mjcf/franka_shadow_left.xml"
+    usd_path: str = "roboverse_data/robots/franka_shadow_hand/usd/franka_shadow_left.usd"
     project_root: Path = Path(__file__).resolve().parents[3]
     hand_urdf_path: Path = (
         project_root / "roboverse_data" / "robots" / "franka_shadow_hand" / "urdf" / "shadow_left.urdf"
@@ -107,7 +108,7 @@ class FrankaShadowHandLeftCfg(BaseDexCfg):
         "THJ2": (-0.524, 0.524),
         "THJ3": (-0.209, 0.209),
         "THJ4": (0, 1.222),
-        "THJ5": (-1.047, 1.047),
+        "THJ5": (-0.2, 1.047),
         "WRJ1": (-0.698, 0.489),
         "WRJ2": (-0.489, 0.14),
         "panda_joint1": (-2.8973, 2.8973),

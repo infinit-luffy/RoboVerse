@@ -27,6 +27,7 @@ from loguru import logger as log
 from metasim.constants import PhysicStateType
 from metasim.scenario.objects import ArticulationObjCfg, PrimitiveCubeCfg, PrimitiveSphereCfg, RigidObjCfg
 from metasim.scenario.scenario import ScenarioCfg
+
 # from metasim.sim.sim_context import HandlerContext
 from metasim.utils.state import state_tensor_to_nested
 
@@ -56,16 +57,16 @@ def test_consistency(sim, num_envs):
                 name="bbq_sauce",
                 scale=(2, 2, 2),
                 physics=PhysicStateType.RIGIDBODY,
-            usd_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/usd/bbq_sauce.usd",
-            urdf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/urdf/bbq_sauce.urdf",
-            mjcf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/mjcf/bbq_sauce.xml",
+                usd_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/usd/bbq_sauce.usd",
+                urdf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/urdf/bbq_sauce.urdf",
+                mjcf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/bbq_sauce/mjcf/bbq_sauce.xml",
             ),
             ArticulationObjCfg(
-            name="box_base",
-            fix_base_link=True,
-            usd_path="roboverse_data/assets/rlbench/close_box/box_base/usd/box_base.usd",
-            urdf_path="roboverse_data/assets/rlbench/close_box/box_base/urdf/box_base_unique.urdf",
-            mjcf_path="roboverse_data/assets/rlbench/close_box/box_base/mjcf/box_base_unique.mjcf",
+                name="box_base",
+                fix_base_link=True,
+                usd_path="roboverse_data/assets/rlbench/close_box/box_base/usd/box_base.usd",
+                urdf_path="roboverse_data/assets/rlbench/close_box/box_base/urdf/box_base_unique.urdf",
+                mjcf_path="roboverse_data/assets/rlbench/close_box/box_base/mjcf/box_base_unique.mjcf",
             ),
         ],
         robots=[FrankaCfg()],

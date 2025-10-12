@@ -81,8 +81,8 @@ def load_actor_from_urdf(
     visual_pose = _get_local_pose(root.find(".//visual/origin"))
     collision_pose = _get_local_pose(root.find(".//collision/origin"))
 
-    visual_file = os.path.join(file_dir, visual_file)
-    collision_file = os.path.join(file_dir, collision_file)
+    visual_file = os.path.join(file_dir, visual_file).replace("package://", "")
+    collision_file = os.path.join(file_dir, collision_file).replace("package://", "")
     mu1 = root.find(".//collision/gazebo/mu1")
     mu2 = root.find(".//collision/gazebo/mu2")
     static_fric = mu1.text if mu1 is not None else 0.5

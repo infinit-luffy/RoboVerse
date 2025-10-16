@@ -21,7 +21,7 @@ poses = {
         "box_base": {
             "pos": torch.tensor([0.500010, 0.200000, 0.075224]),
             "rot": torch.tensor([-0.000005, 0.707104, 0.000001, 0.707109]),
-            "dof_pos": {'box_joint': -0.2539360523223877},
+            "dof_pos": {"box_joint": -0.2539360523223877},
         },
     },
     "robots": {

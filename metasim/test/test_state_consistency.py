@@ -1,5 +1,3 @@
-import math
-
 try:
     import isaacgym  # noqa: F401
 except ImportError:
@@ -24,6 +22,7 @@ except ImportError:
 import pytest
 import rootutils
 import torch
+from loguru import logger as log
 
 from metasim.constants import PhysicStateType
 from metasim.scenario.objects import ArticulationObjCfg, PrimitiveCubeCfg, PrimitiveSphereCfg, RigidObjCfg
@@ -33,28 +32,8 @@ from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils.state import state_tensor_to_nested
 
 rootutils.setup_root(__file__, pythonpath=True)
+from metasim.test.test_utils import assert_close, get_test_parameters
 from roboverse_pack.robots.franka_cfg import FrankaCfg
-
-
-def assert_close(a, b, atol=1e-3):
-    if isinstance(a, torch.Tensor):
-        assert torch.allclose(a, b, atol=atol), f"a: {a} != b: {b}"
-    elif isinstance(a, float):
-        assert math.isclose(a, b, abs_tol=atol), f"a: {a} != b: {b}"
-    else:
-        raise ValueError(f"Unsupported type: {type(a)}")
-
-
-def get_test_parameters():
-    """Generate test parameters with different num_envs for different simulators."""
-    # MuJoCo only supports num_envs=1 due to simulator limitations
-    # Other simulators can test with multiple environments
-    isaacsim_params = [("isaacsim", num_envs) for num_envs in [1, 2, 4]]
-    isaacgym_params = [("isaacgym", num_envs) for num_envs in [1, 2, 4]]
-    genesis_params = [("genesis", num_envs) for num_envs in [1, 2, 4]]
-    mujoco_params = [("mujoco", 1)]
-    sapien3_params = [("sapien3", 1)]
-    return mujoco_params + isaacsim_params + isaacgym_params + genesis_params + sapien3_params
 
 
 @pytest.mark.parametrize("sim,num_envs", get_test_parameters())
@@ -164,20 +143,20 @@ def test_consistency(sim, num_envs):
     # print(f"Testing {sim} with {num_envs} envs passed")
 
 
-# if __name__ == "__main__":
-#     # 直接运行时，可以指定要测试的模拟器和环境数量
-#     import sys
+if __name__ == "__main__":
+    # 直接运行时，可以指定要测试的模拟器和环境数量
+    import sys
 
-#     # 默认参数
-#     sim = "mujoco"
-#     num_envs = 1
+    # 默认参数
+    sim = "mujoco"
+    num_envs = 1
 
-#     # 从命令行获取参数
-#     if len(sys.argv) > 1:
-#         sim = sys.argv[1]
-#     if len(sys.argv) > 2:
-#         num_envs = int(sys.argv[2])
+    # 从命令行获取参数
+    if len(sys.argv) > 1:
+        sim = sys.argv[1]
+    if len(sys.argv) > 2:
+        num_envs = int(sys.argv[2])
 
-#     print(f"Testing {sim} with {num_envs} envs...")
-#     test_consistency(sim, num_envs)
-#     print(f"✅ Test passed for {sim} with {num_envs} envs!")
+    log.info(f"Testing {sim} with {num_envs} envs...")
+    test_consistency(sim, num_envs)
+    log.success(f"✅ Test passed for {sim} with {num_envs} envs!")

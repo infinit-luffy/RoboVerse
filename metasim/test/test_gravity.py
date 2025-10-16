@@ -25,16 +25,16 @@ import torch
 from loguru import logger as log
 
 from metasim.constants import PhysicStateType
-from metasim.scenario.objects import ArticulationObjCfg, PrimitiveCubeCfg, PrimitiveSphereCfg, RigidObjCfg
+from metasim.scenario.objects import PrimitiveCubeCfg
 from metasim.scenario.scenario import ScenarioCfg
 
 # from metasim.sim.sim_context import HandlerContext
-from metasim.utils.state import state_tensor_to_nested
 
 rootutils.setup_root(__file__, pythonpath=True)
+from metasim.scenario.simulator_params import SimParamCfg
 from metasim.test.test_utils import assert_close, get_test_parameters
 from roboverse_pack.robots.franka_cfg import FrankaCfg
-from metasim.scenario.simulator_params import SimParamCfg
+
 
 @pytest.mark.parametrize("sim,num_envs", get_test_parameters())
 def test_consistency(sim, num_envs):
@@ -48,13 +48,13 @@ def test_consistency(sim, num_envs):
                 size=(0.1, 0.1, 0.1),
                 color=[1.0, 0.0, 0.0],
                 physics=PhysicStateType.RIGIDBODY,
-                default_position=[0, 0, 10.0]
+                default_position=[0, 0, 10.0],
             ),
         ],
         robots=[FrankaCfg()],
-        sim_params=SimParamCfg(
-            dt=0.001
-        ),
+        sim_params=SimParamCfg(dt=0.001),
+        gravity=(0, 0, -1),
+        decimation=100,
     )
 
     from metasim.constants import SimType
@@ -63,6 +63,28 @@ def test_consistency(sim, num_envs):
     env_class = get_sim_handler_class(SimType(sim))
     env = env_class(scenario)
     env.launch()
+
+    state = env.get_states(mode="dict")
+    pos = state[0]["objects"]["cube"]["pos"]
+    assert_close(pos, torch.Tensor([0, 0, 10.0]), atol=0.001, message="gravity")
+
+    env.simulate()
+
+    state = env.get_states(mode="dict")
+    pos = state[0]["objects"]["cube"]["pos"]
+    assert_close(pos, torch.Tensor([0, 0, 9.9950]), atol=0.001, message="gravity")
+
+    env.simulate()
+
+    state = env.get_states(mode="dict")
+    pos = state[0]["objects"]["cube"]["pos"]
+    assert_close(pos, torch.Tensor([0, 0, 9.9800]), atol=0.001, message="gravity")
+
+    env.simulate()
+
+    state = env.get_states(mode="dict")
+    pos = state[0]["objects"]["cube"]["pos"]
+    assert_close(pos, torch.Tensor([0, 0, 9.9551]), atol=0.001, message="gravity")
 
     env.close()
 

@@ -88,7 +88,7 @@ def test_consistency(sim, num_envs):
         ]
         * scenario.num_envs
     )
-    handler.simulate()  # need step once to update the kinematics in sapien
+    # handler.simulate()  # need step once to update the kinematics in sapien
     state = handler.get_states(mode="dict")
     dof_pos = state[0]["robots"]["franka"]["dof_pos"]
     dof_vel = state[0]["robots"]["franka"]["dof_vel"]

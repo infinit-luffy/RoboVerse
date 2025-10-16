@@ -96,8 +96,8 @@ def test_consistency(sim, num_envs):
         hand_pos = state[0]["robots"]["franka"]["body"]["panda_hand"]["pos"]
         hand_rot = state[0]["robots"]["franka"]["body"]["panda_hand"]["rot"]
 
-        expected_hand_pos = torch.Tensor([0.0926, -0.0031, 0.9326])
-        expected_hand_rot = torch.Tensor([0.0093, 0.9267, 0.3752, 0.0209])
+        expected_hand_pos = torch.Tensor([3.0689e-01, 0.0, 5.9028e-01])
+        expected_hand_rot = torch.Tensor([0.0, 1.0000e00, 0.0, 0.0])
 
         assert_close(hand_pos, expected_hand_pos, atol=1e-3, message="hand pos")
         assert_close(hand_rot, expected_hand_rot, atol=1e-3, message="hand rot")

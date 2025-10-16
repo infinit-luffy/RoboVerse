@@ -2018,7 +2018,7 @@ class ViserVisualizer:
 
                 traceback.print_exc()
 
-    def setup_ik_solver(self, robot_name: str, robot_config, env_handler=None, solver="curobo"):
+    def setup_ik_solver(self, robot_name: str, robot_config, env_handler=None, solver="pyroki"):
         """
         Setup IK solver for a specific robot.
 

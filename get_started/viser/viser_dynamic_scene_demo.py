@@ -13,7 +13,6 @@ except ImportError:
 import rootutils
 import torch
 import tyro
-from curobo.types.math import Pose
 from loguru import logger as log
 from rich.logging import RichHandler
 
@@ -31,7 +30,8 @@ from metasim.scenario.objects import (
 )
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils import configclass
-from metasim.utils.kinematics import get_curobo_models
+from metasim.utils.hf_util import check_and_download_recursive
+from metasim.utils.ik_solver import process_gripper_command, setup_ik_solver
 from metasim.utils.obs_utils import ObsSaver
 from metasim.utils.setup_util import get_handler
 from metasim.utils.state import state_tensor_to_nested
@@ -58,6 +58,7 @@ class Args:
     ## Others
     num_envs: int = 1
     headless: bool = True  # Use viser for visualization, not simulator's viewer
+    solver: Literal["curobo", "pyroki"] = "pyroki"
 
     def __post_init__(self):
         """Post-initialization configuration."""
@@ -118,6 +119,7 @@ scenario.objects = [
 
 
 log.info(f"Using simulator: {args.sim}")
+log.info(f"Using IK solver: {args.solver}")
 handler = get_handler(scenario)
 
 init_states = [
@@ -162,13 +164,40 @@ init_states = [
 ]
 
 robot = scenario.robots[0]
-*_, robot_ik = get_curobo_models(robot)
-curobo_n_dof = len(robot_ik.robot_config.cspace.joint_names)
-ee_n_dof = len(robot.gripper_open_q)
+
+# Setup unified IK solver
+ik_solver = setup_ik_solver(robot, args.solver)
 
 handler.set_states(init_states * scenario.num_envs)
 obs = handler.get_states(mode="tensor")
 
+
+# ========================================================================
+# Download URDF files before visualization
+# ========================================================================
+def download_urdf_files(scenario):
+    """Download URDF files for all objects and robots in the scenario."""
+    urdf_paths = []
+
+    # Collect URDF paths from objects
+    for obj in scenario.objects:
+        if hasattr(obj, "urdf_path") and obj.urdf_path:
+            urdf_paths.append(obj.urdf_path)
+
+    # Collect URDF paths from robots
+    for robot in scenario.robots:
+        if hasattr(robot, "urdf_path") and robot.urdf_path:
+            urdf_paths.append(robot.urdf_path)
+
+    # Download URDF files and all related mesh files recursively
+    if urdf_paths:
+        log.info(f"Downloading {len(urdf_paths)} URDF files and all related meshes...")
+        check_and_download_recursive(urdf_paths, n_processes=16)
+        log.info("URDF files and meshes download completed!")
+
+
+# Download URDF files before visualization
+download_urdf_files(scenario)
 
 # ========================================================================
 # viser visuallization
@@ -247,9 +276,7 @@ robot_joint_limits = scenario.robots[0].joint_limits
 for step in range(200):
     log.debug(f"Step {step}")
     states = handler.get_states(mode="tensor")
-    curr_robot_q = states.robots[robot.name].joint_pos.cuda()
 
-    seed_config = curr_robot_q[:, :curobo_n_dof].unsqueeze(1).tile([1, robot_ik._num_seeds, 1])
     if scenario.robots[0].name == "franka":
         x_target = 0.3 + 0.1 * (step / 100)
         y_target = 0.5 - 0.5 * (step / 100)
@@ -273,17 +300,17 @@ for step in range(200):
             device="cuda:0",
         )
 
-    result = robot_ik.solve_batch(Pose(ee_pos_target, ee_quat_target), seed_config=seed_config)
+    # Get current robot state for curobo seeding
+    curr_robot_q = states.robots[robot.name].joint_pos.cuda()
 
-    q = torch.zeros((scenario.num_envs, robot.num_joints), device="cuda:0")
-    ik_succ = result.success.squeeze(1)
-    q[ik_succ, :curobo_n_dof] = result.solution[ik_succ, 0].clone()
-    q[:, -ee_n_dof:] = 0.04
-    robot = scenario.robots[0]
-    actions = [
-        {robot.name: {"dof_pos_target": dict(zip(robot.actuators.keys(), q[i_env].tolist()))}}
-        for i_env in range(scenario.num_envs)
-    ]
+    # Solve IK
+    q_solution, ik_succ = ik_solver.solve_ik_batch(ee_pos_target, ee_quat_target, curr_robot_q)
+
+    # Process gripper command (fixed open position)
+    gripper_binary = torch.ones(scenario.num_envs, device="cuda:0")  # all open
+    gripper_widths = process_gripper_command(gripper_binary, robot, "cuda:0")
+    # Compose full joint command
+    actions = ik_solver.compose_joint_action(q_solution, gripper_widths, curr_robot_q, return_dict=True)
 
     handler.set_dof_targets(actions)
     handler.simulate()

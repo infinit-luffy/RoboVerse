@@ -21,6 +21,7 @@ from metasim.scenario.objects import (
     RigidObjCfg,
 )
 from metasim.scenario.scenario import ScenarioCfg
+from metasim.utils.hf_util import check_and_download_recursive
 
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
@@ -137,6 +138,32 @@ def main():
             },
         }
     ]
+
+    # ========================================================================
+    # Download URDF files before visualization
+    # ========================================================================
+    def download_urdf_files(scenario):
+        """Download URDF files for all objects and robots in the scenario."""
+        urdf_paths = []
+
+        # Collect URDF paths from objects
+        for obj in scenario.objects:
+            if hasattr(obj, "urdf_path") and obj.urdf_path:
+                urdf_paths.append(obj.urdf_path)
+
+        # Collect URDF paths from robots
+        for robot in scenario.robots:
+            if hasattr(robot, "urdf_path") and robot.urdf_path:
+                urdf_paths.append(robot.urdf_path)
+
+        # Download URDF files and all related mesh files recursively
+        if urdf_paths:
+            log.info(f"Downloading {len(urdf_paths)} URDF files and all related meshes...")
+            check_and_download_recursive(urdf_paths, n_processes=16)
+            log.info("URDF files and meshes download completed!")
+
+    # Download URDF files before visualization
+    download_urdf_files(scenario)
 
     # extract states from objects and robots
     default_object_states = extract_states_from_init(init_states, "objects")

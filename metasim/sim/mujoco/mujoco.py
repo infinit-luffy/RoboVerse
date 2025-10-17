@@ -23,6 +23,8 @@ from metasim.sim import BaseSimHandler
 from metasim.types import Action
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, state_tensor_to_nested
 
+import threading, tempfile, os, glob
+
 
 class MujocoHandler(BaseSimHandler):
     def __init__(self, scenario: ScenarioCfg, optional_queries: dict[str, BaseQueryType] | None = None):
@@ -60,10 +62,50 @@ class MujocoHandler(BaseSimHandler):
         self._current_action = None
         self._current_vel_target = None  # Track velocity targets
 
+        # === Added: GL/physics serialization + native renderer state ===
+        self._mj_lock = threading.RLock()
+        self._mj_model = None      # native mujoco.MjModel for offscreen rendering
+        self._mj_data = None       # native mujoco.MjData  for offscreen rendering
+        self.renderer = None       # mujoco.Renderer (offscreen)
+        # === End added ===
+
     def launch(self) -> None:
         model = self._init_mujoco()
         self.physics = mjcf.Physics.from_mjcf_model(model)
         self.data = self.physics.data
+
+        # === Export MJCF + assets to a temp dir. Handle filename variability (dm_control 1.0.34). ===
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write assets + XML to disk (this version returns None and writes files)
+            try:
+                # model_name is not guaranteed to be respected by all versions, so we’ll glob later.
+                mjcf.export_with_assets(model, out_dir=tmpdir)
+            except TypeError:
+                # Some older signatures don’t accept keywords; try positional.
+                mjcf.export_with_assets(model, tmpdir)
+
+
+            # Find the XML the exporter actually wrote (e.g., 'model.xml' or 'unnamed_model.xml')
+            xml_candidates = sorted(glob.glob(os.path.join(tmpdir, "*.xml")))
+            if not xml_candidates:
+                # Fallback: write the raw XML (note: this may reference hashed asset names already).
+                xml_fallback = os.path.join(tmpdir, "model.xml")
+                with open(xml_fallback, "w") as f:
+                    f.write(model.to_xml_string())
+                xml_candidates = [xml_fallback]
+
+
+            xml_path = xml_candidates[0]
+
+
+            # Load the model from the XML *in the same directory as the exported assets*
+            # so hashed filenames resolve correctly.
+            self._mj_model = mujoco.MjModel.from_xml_path(xml_path)
+            self._mj_data = mujoco.MjData(self._mj_model)
+
+
+        # Create a default-sized renderer (camera sizes can be applied on demand)
+        self.renderer = mujoco.Renderer(self._mj_model, width=640, height=480)
 
         self.body_names = [self.physics.model.body(i).name for i in range(self.physics.model.nbody)]
         self.robot_body_names = []
@@ -405,6 +447,13 @@ class MujocoHandler(BaseSimHandler):
         root_np = full[0]
         return root_np, full[1:]  # root, bodies
 
+    # === Added helper: mirror dm_control -> native mujoco state for renderer ===
+    def _mirror_state_to_native(self):
+        self._mj_data.qpos[:] = self.physics.data.qpos
+        self._mj_data.qvel[:] = self.physics.data.qvel
+        mujoco.mj_forward(self._mj_model, self._mj_data)
+    # === End added ===
+
     def _get_states(self, env_ids: list[int] | None = None) -> list[dict]:
         """Get states of all objects and robots."""
         object_states = {}
@@ -478,12 +527,52 @@ class MujocoHandler(BaseSimHandler):
             camera_states[camera.name] = {}
             depth = None
             if "rgb" in camera.data_types:
-                rgb = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=False)
-                rgb = torch.from_numpy(rgb.copy()).unsqueeze(0)
+                with self._mj_lock:  # optional but safer
+                    # match renderer size to camera if needed
+                    if self.renderer is None or (self.renderer.width, self.renderer.height) != (camera.width, camera.height):
+                        self.renderer = mujoco.Renderer(self._mj_model, width=camera.width, height=camera.height)
+                    # mirror state and render
+                    self._mirror_state_to_native()
+                    self.renderer.update_scene(self._mj_data, camera=camera_id)
+                    rgb_np = self.renderer.render()
+                rgb = torch.from_numpy(rgb_np.copy()).unsqueeze(0)
             if "depth" in camera.data_types:
-                depth = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=True)
-                depth = torch.from_numpy(depth.copy()).unsqueeze(0)
-            state = CameraState(rgb=rgb, depth=depth)
+                with self._mj_lock:
+                    # Ensure renderer matches the camera size
+                    if (self.renderer is None or
+                        (self.renderer.width, self.renderer.height) != (camera.width, camera.height)):
+                        self.renderer = mujoco.Renderer(self._mj_model, width=camera.width, height=camera.height)
+
+
+                    # Keep native model/data in sync with dm_control physics
+                    self._mirror_state_to_native()
+                    self.renderer.update_scene(self._mj_data, camera=camera_id)
+
+
+                    # --- Cross-version depth rendering for mujoco.Renderer ---
+                    if hasattr(self.renderer, "enable_depth_rendering"):
+                        # Newer MuJoCo (>= 3.2/3.3): enable depth mode, render(), then disable.
+                        self.renderer.enable_depth_rendering()
+                        depth_np = self.renderer.render()
+                        self.renderer.disable_depth_rendering()
+                    elif hasattr(mujoco, "RenderMode"):
+                        # Some 3.x builds expose RenderMode enum on mujoco
+                        depth_np = self.renderer.render(render_mode=mujoco.RenderMode.DEPTH)
+                    else:
+                        # Very old fallback: some builds returned (rgb, depth) as a tuple.
+                        # If this still fails in your env, we’ll need a dedicated mjr_readPixels path.
+                        maybe = self.renderer.render()
+                        if isinstance(maybe, tuple) and len(maybe) == 2:
+                            _, depth_np = maybe
+                        else:
+                            raise RuntimeError(
+                                "Depth rendering not supported by this mujoco.Renderer build."
+                            )
+                depth = torch.from_numpy(depth_np.copy()).unsqueeze(0)
+
+
+            # depth = torch.from_numpy(depth_np.copy()).unsqueeze(0)
+            state = CameraState(rgb=locals().get("rgb", None), depth=locals().get("depth", None))
             camera_states[camera.name] = state
         extras = self.get_extra()
         return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
@@ -571,7 +660,8 @@ class MujocoHandler(BaseSimHandler):
         self.physics.forward()
 
     def _disable_robotgravity(self):
-        gravity_vec = np.array(self.scenario.gravity)
+        gravity_vec = np.array([0.0, 0.0, -9.81])
+
 
         self.physics.data.xfrc_applied[:] = 0
         for body_name in self.robot_body_names:
@@ -719,6 +809,14 @@ class MujocoHandler(BaseSimHandler):
     def close(self):
         if self.viewer is not None:
             self.viewer.close()
+        # === Added: close offscreen renderer too ===
+        if self.renderer is not None:
+            try:
+                self.renderer.close()
+            except Exception:
+                pass
+            self.renderer = None
+        # === End added ===
 
     ############################################################
     ## Utils

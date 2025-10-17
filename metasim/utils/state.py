@@ -8,13 +8,12 @@ import numpy as np
 import torch
 from loguru import logger as log
 
-from metasim.types import Action, CameraState, SensorState, DictEnvState, ObjectState, RobotState, TensorState
+from metasim.types import Action, CameraState, DictEnvState, ObjectState, RobotState, SensorState, TensorState
 
 try:
     from metasim.sim.base import BaseSimHandler
 except:
     pass
-
 
 
 def join_tensor_states(tensor_states: list[TensorState]) -> TensorState:
@@ -220,7 +219,9 @@ def state_tensor_to_nested(handler: BaseSimHandler, tensor_state: TensorState) -
         sensor_states = {}
         for sensor_name, sensor_state in tensor_state.sensors.items():
             # Note: SensorState structure is not defined, so this is a placeholder
-            sensor_states[sensor_name] = sensor_state  # This would need to be implemented based on SensorState structure
+            sensor_states[sensor_name] = (
+                sensor_state  # This would need to be implemented based on SensorState structure
+            )
 
         extra_states = {}
         if isinstance(tensor_state.extras, dict):
@@ -350,7 +351,7 @@ def list_state_to_tensor(
                     jvel[e, i] = s["dof_vel"][jn]
                 if "dof_force" in s and s["dof_force"] is not None and jn in s["dof_force"]:
                     jforce[e, i] = s["dof_force"][jn]
-                if "dof_pos_target" in s and s["dof_pos_target"] is not Noneand jn in s["dof_pos_target"]:
+                if "dof_pos_target" in s and s["dof_pos_target"] is not None and jn in s["dof_pos_target"]:
                     jpos_t[e, i] = s["dof_pos_target"][jn]
                 if "dof_vel_target" in s and s["dof_vel_target"] is not None and jn in s["dof_vel_target"]:
                     jvel_t[e, i] = s["dof_vel_target"][jn]
@@ -422,7 +423,7 @@ def list_state_to_tensor(
         ).to(dev)
         extras[extra_key] = extra_vec
 
-    return TensorState(objects=objects, robots=robots, cameras=cameras, extras=extras)
+    return TensorState(objects=objects, robots=robots, cameras=cameras, sensors=sensors, extras=extras)
 
 
 def adapt_actions_to_dict(
@@ -438,19 +439,16 @@ def adapt_actions_to_dict(
         if len(actions.shape) == 2:
             actions = actions[0]
         actions = {
-            robot.name: {
-                "dof_pos_target": _dof_tensor_to_dict(actions, handler.get_joint_names(robot.name))
-            } for robot in handler.robots
+            robot.name: {"dof_pos_target": _dof_tensor_to_dict(actions, handler.get_joint_names(robot.name))}
+            for robot in handler.robots
         }
     elif isinstance(actions, np.ndarray):
         if len(actions.shape) == 2:
             actions = actions[0]
         actions = {
-            robot.name: {
-                "dof_pos_target": _dof_array_to_dict(actions, handler.get_joint_names(robot.name))
-            } for robot in handler.robots
+            robot.name: {"dof_pos_target": _dof_array_to_dict(actions, handler.get_joint_names(robot.name))}
+            for robot in handler.robots
         }
     elif isinstance(actions, list):
         actions = actions[0]
     return actions
-

@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from metasim.scenario.scenario import ScenarioCfg
 from copy import deepcopy
 
-
 from metasim.queries.base import BaseQueryType
 from metasim.types import Action, DictEnvState, TensorState
 from metasim.utils.state import list_state_to_tensor, state_tensor_to_nested
@@ -29,6 +28,7 @@ class BaseSimHandler(ABC):
         ## For quick reference
         self.robots = scenario.robots
         self.cameras = scenario.cameras
+        self.sensors = scenario.sensors if hasattr(scenario, "sensors") else []
         self.objects = scenario.objects
         self.lights = scenario.lights if hasattr(scenario, "lights") else []
         self._num_envs = scenario.num_envs

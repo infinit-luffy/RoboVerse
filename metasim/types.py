@@ -33,6 +33,7 @@ class DictObjectState(TypedDict):
     ang_vel: torch.Tensor | None
     dof_pos: Dof | None
     dof_vel: Dof | None
+    dof_force: Dof | None
 
 
 class DictRobotState(DictObjectState):
@@ -40,7 +41,7 @@ class DictRobotState(DictObjectState):
 
     dof_pos: Dof | None
     dof_vel: Dof | None
-
+    dof_force: Dof | None
     dof_pos_target: Dof | None
     dof_vel_target: Dof | None
     dof_torque: Dof | None
@@ -52,6 +53,7 @@ class DictEnvState(TypedDict):
     objects: dict[str, DictObjectState]
     robots: dict[str, DictRobotState]
     cameras: dict[str, dict[str, torch.Tensor]]
+    sensors: dict[str, dict[str, torch.Tensor]]
     extras: dict[str, Any]  # States of Extra information
 
 
@@ -153,8 +155,9 @@ class CameraState:
         """
         return convert_camera_frame_orientation_convention(self.quat_world, origin="world", target="opengl")
 
+
 @dataclass
-class ContactForceState:
+class ForceTorqueState:
     """State of a single contact force sensor."""
 
     force: torch.Tensor
@@ -165,7 +168,7 @@ class ContactForceState:
     """
 
 
-SensorState = ContactForceState
+SensorState = ForceTorqueState
 
 
 @dataclass

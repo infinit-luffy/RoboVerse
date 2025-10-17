@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import MISSING
-from copy import deepcopy
 
 import numpy as np
 import torch
@@ -24,9 +22,7 @@ from metasim.scenario.objects import (
 # FIXME: fix this
 # from metasim.scenario.randomization import FrictionRandomCfg, MassRandomCfg
 from metasim.scenario.scenario import ScenarioCfg
-from metasim.cfg.sensors import ContactForceSensorCfg
-from metasim.constants import PhysicStateType
-from metasim.queries.base import BaseQueryType
+from metasim.scenario.sensors import ForceTorqueSensorCfg
 from metasim.sim import BaseSimHandler
 from metasim.types import Action, DictEnvState
 from metasim.utils.dict import class_to_dict
@@ -48,15 +44,10 @@ class IsaacgymHandler(BaseSimHandler):
         self.sim = None
         self.viewer = None
         self._enable_viewer_sync: bool = True  # sync viewer flag
-        if hasattr(scenario.task, "device"):
-            self._device = torch.device(scenario.task.device)
+        if hasattr(scenario, "device"):
+            self._device = torch.device(scenario.device)
         else:
             self._device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-        if hasattr(scenario.task, "max_agg_bodies"):
-            self._max_agg_bodies = scenario.task.max_agg_bodies
-        if hasattr(scenario.task, "max_agg_shapes"):
-            self._max_agg_shapes = scenario.task.max_agg_shapes
 
         self._num_envs: int = scenario.num_envs
         self._episode_length_buf = [0 for _ in range(self.num_envs)]
@@ -100,8 +91,6 @@ class IsaacgymHandler(BaseSimHandler):
             None  # for the configuration: desire_pos = action_scale * action + default_pos
         )
         self._action_offset: bool = False  # for configuration: desire_pos = action_scale * action + default_pos
-        self._p_gains: torch.Tensor | None = None  # parameter for PD controller in for pd effort control
-        self._d_gains: torch.Tensor | None = None
         self._torque_limits: torch.Tensor | None = None
         self._effort: torch.Tensor | None = None  # output of pd controller, used for effort control
         self._pos_ctrl_dof_dix = []  # joint index in dof state, built-in position control mode
@@ -129,16 +118,7 @@ class IsaacgymHandler(BaseSimHandler):
         self._contact_forces = gymtorch.wrap_tensor(self.gym.acquire_net_contact_force_tensor(self.sim))
 
         # Refresh tensors
-        if not self._manual_pd_on:
-            self.gym.refresh_dof_state_tensor(self.sim)
-        self.gym.refresh_rigid_body_state_tensor(self.sim)
-        self.gym.refresh_actor_root_state_tensor(self.sim)
-        self.gym.refresh_jacobian_tensors(self.sim)
-        self.gym.refresh_mass_matrix_tensors(self.sim)
-        self.gym.refresh_force_sensor_tensor(self.sim)
-        self.gym.refresh_dof_force_tensor(self.sim)
-        self.gym.refresh_net_contact_force_tensor(self.sim)
-
+        self.refresh_tensors()
 
         if self.optional_queries is None:
             self.optional_queries = {}
@@ -406,7 +386,13 @@ class IsaacgymHandler(BaseSimHandler):
             robot_mids = 0.3 * (robot_upper_limits + robot_lower_limits)
             num_actions = 0
             _default_dof_pos = []
-            self._manual_pd_on = any(mode == "effort" for mode in robot.control_type.values())
+
+            _manual_pd_on = (
+                any(mode == "effort" for mode in robot.control_type.values())
+                if robot.control_type
+                else self._manual_pd_on
+            )
+            self._manual_pd_on = _manual_pd_on or self._manual_pd_on
 
             # set robot tendon properties
             num_tendons = self.gym.get_asset_tendon_count(robot_asset)
@@ -420,13 +406,10 @@ class IsaacgymHandler(BaseSimHandler):
                     for i in range(num_tendons):
                         tendon_props[i].damping = robot.tendon_damping
 
-            self.gym.set_asset_tendon_properties(robot_asset, tendon_props)
-
-            assert robot.control_type is not None, "Control type is required for robot"
-            self._manual_pd_on = any(mode == "effort" for mode in robot.control_type.values()) or self._manual_pd_on
+                self.gym.set_asset_tendon_properties(robot_asset, tendon_props)
 
             dof_names = self.gym.get_asset_dof_names(robot_asset)
-            
+
             for i, dof_name in enumerate(dof_names):
                 # get config
                 i_actuator_cfg = robot.actuators[dof_name]
@@ -448,8 +431,12 @@ class IsaacgymHandler(BaseSimHandler):
                 if i_control_mode == "effort":
                     # FIXME: hard code for 0-1 action space, should remove all the scale stuff later
                     robot_dof_props["driveMode"][i] = gymapi.DOF_MODE_EFFORT
-                    robot_dof_props["stiffness"][i] = i_actuator_cfg.stiffness if i_actuator_cfg.stiffness is not None else 800.0
-                    robot_dof_props["damping"][i] = i_actuator_cfg.damping if i_actuator_cfg.damping is not None else 40.0
+                    robot_dof_props["stiffness"][i] = (
+                        i_actuator_cfg.stiffness if i_actuator_cfg.stiffness is not None else 800.0
+                    )
+                    robot_dof_props["damping"][i] = (
+                        i_actuator_cfg.damping if i_actuator_cfg.damping is not None else 40.0
+                    )
 
                 # built-in position mode
                 elif i_control_mode == "position":
@@ -484,9 +471,7 @@ class IsaacgymHandler(BaseSimHandler):
 
     def _load_contact_sensor(self) -> None:
         for sensor in self._sensors:
-            sensor: ContactForceSensorCfg
-            if sensor.source_link is not None:
-                raise NotImplementedError
+            sensor: ForceTorqueSensorCfg
             robot_name = sensor.base_link if isinstance(sensor.base_link, str) else sensor.base_link[0]
             handle = 0
             if robot_name not in self._robot_names:
@@ -863,7 +848,6 @@ class IsaacgymHandler(BaseSimHandler):
 
         camera_states = {}
 
-        self.refresh_render()
         self.gym.start_access_image_tensors(self.sim)
 
         for cam_id, cam in enumerate(self.cameras):
@@ -877,14 +861,16 @@ class IsaacgymHandler(BaseSimHandler):
         # sensor states
         sensor_states = {}
         for i, sensor in enumerate(self.sensors):
-            if isinstance(sensor, ContactForceSensorCfg):
+            if isinstance(sensor, ForceTorqueSensorCfg):
                 sensor_states[sensor.name] = SensorState(
                     force=self._vec_sensor_tensor[:, i, :3], torque=self._vec_sensor_tensor[:, i, 3:]
                 )
             else:
                 raise ValueError(f"Unknown sensor type: {type(sensor)}")
         extras = self.get_extra()  # extra observations
-        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, sensors=sensor_states, extras=extras)
+        return TensorState(
+            objects=object_states, robots=robot_states, cameras=camera_states, sensors=sensor_states, extras=extras
+        )
 
     @property
     def episode_length_buf(self) -> list[int]:
@@ -944,7 +930,7 @@ class IsaacgymHandler(BaseSimHandler):
         )  # shape: (num_envs, robot_root_torque_num, 3)
         return action_tensor_all, root_force_tensor_all, root_torque_tensor_all
 
-    def set_dof_targets(self, obj_name: list[str], actions: list[Action] | torch.Tensor):
+    def set_dof_targets(self, actions: list[Action] | torch.Tensor):
         self._actions_cache = actions
         action_input = torch.zeros_like(self._dof_states[:, 0])  # shape: (num_envs * total_dof_num)
         applied_force = torch.zeros_like(
@@ -1048,21 +1034,16 @@ class IsaacgymHandler(BaseSimHandler):
 
     def refresh_render(self) -> None:
         # Step the physics
-        self.gym.simulate(self.sim)
         self.gym.fetch_results(self.sim, True)
+        self.refresh_tensors()
         self._render()
 
     def _simulate_one_physics_step(self):
         self.gym.simulate(self.sim)
-        if self.device == "cpu":
-            self.gym.fetch_results(self.sim, True)
-        self.gym.refresh_dof_state_tensor(self.sim)
+        self.gym.fetch_results(self.sim, True)
 
-    def _simulate(self) -> None:
-        # Step the physics
-        for _ in range(self.decimation):
-            self._simulate_one_physics_step()
-        self.fetch_results()
+    def refresh_tensors(self) -> None:
+        self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_rigid_body_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_jacobian_tensors(self.sim)
@@ -1070,6 +1051,13 @@ class IsaacgymHandler(BaseSimHandler):
         self.gym.refresh_force_sensor_tensor(self.sim)
         self.gym.refresh_dof_force_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
+
+    def _simulate(self) -> None:
+        # Step the physics
+        for _ in range(self.decimation):
+            self._simulate_one_physics_step()
+
+        self.refresh_tensors()
         # Refresh cameras and viewer
         self._render()
 
@@ -1180,7 +1168,7 @@ class IsaacgymHandler(BaseSimHandler):
                     new_dof_states[env_ids_tensor.unsqueeze(1), joint_ids_reindex.unsqueeze(0), 0] = joint_pos[
                         env_ids, :
                     ].clone()
-                    new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[
+                    new_dof_states[env_ids_tensor.unsqueeze(1), joint_ids_reindex.unsqueeze(0), 1] = joint_vel[
                         env_ids, :
                     ].clone()
             for robot_id, robot in enumerate(self.robots):
@@ -1195,7 +1183,7 @@ class IsaacgymHandler(BaseSimHandler):
                 new_dof_states[env_ids_tensor.unsqueeze(1), joint_ids_reindex.unsqueeze(0), 0] = joint_pos[
                     env_ids, :
                 ].clone()
-                new_dof_states[env_ids_tensor.unsqueeze(1), global_dof_indices.unsqueeze(0), 1] = joint_vel[
+                new_dof_states[env_ids_tensor.unsqueeze(1), joint_ids_reindex.unsqueeze(0), 1] = joint_vel[
                     env_ids, :
                 ].clone()
 
@@ -1216,16 +1204,6 @@ class IsaacgymHandler(BaseSimHandler):
 
         else:
             raise Exception("Unsupported state type, must be DictEnvState or TensorState")
-
-        # Refresh tensors
-        self.gym.refresh_rigid_body_state_tensor(self.sim)
-        self.gym.refresh_actor_root_state_tensor(self.sim)
-        self.gym.refresh_dof_state_tensor(self.sim)
-        self.gym.refresh_jacobian_tensors(self.sim)
-        self.gym.refresh_mass_matrix_tensors(self.sim)
-        self.gym.refresh_force_sensor_tensor(self.sim)
-        self.gym.refresh_dof_force_tensor(self.sim)
-        self.gym.refresh_net_contact_force_tensor(self.sim)
 
         # reset all env_id action to default
         self.actions[env_ids] = 0.0
@@ -1316,7 +1294,7 @@ class IsaacgymHandler(BaseSimHandler):
     ############################################################
     def _get_joint_names(self, obj_name: str, sort: bool = True) -> list[str]:
         if isinstance(self.object_dict[obj_name], ArticulationObjCfg):
-            joint_names = deepcopy(list(self._joint_info[obj_name]["names"]))
+            joint_names = list(self._joint_info[obj_name]["names"])
             if sort:
                 joint_names.sort()
             return joint_names
@@ -1325,7 +1303,7 @@ class IsaacgymHandler(BaseSimHandler):
 
     def _get_body_names(self, obj_name: str, sort: bool = True) -> list[str]:
         if isinstance(self.object_dict[obj_name], ArticulationObjCfg):
-            body_names = deepcopy(self._body_info[obj_name]["names"])
+            body_names = self._body_info[obj_name]["names"]
             if sort:
                 body_names.sort()
             return body_names

@@ -10,10 +10,11 @@ import torch
 from gymnasium import spaces
 from loguru import logger as log
 
-from metasim.cfg.scenario import ScenarioCfg
+from metasim.scenario.scenario import ScenarioCfg
 from metasim.constants import SimType
-from metasim.types import EnvState
-from metasim.utils.setup_util import get_sim_env_class, get_task
+from metasim.types import DictEnvState
+from metasim.utils.setup_util import get_handler
+from roboverse_pack.tasks.dexbench.get_task import get_task
 from metasim.utils.state import list_state_to_tensor
 from roboverse_learn.dexbench_rvrl.envs.base import BaseVecEnv
 
@@ -38,35 +39,36 @@ class DexEnv(BaseVecEnv):
             task.img_h = env_cfg.get("img_h", 256)
             task.img_w = env_cfg.get("img_w", 256)
         task.use_prio = not args.no_prio  # Use proprioception in state observation
+        task.set_sim_params(sim_type=args.sim)
         task.set_objects()
         task.set_init_states()
+        self.task = task
         cameras = [] if not hasattr(task, "cameras") else task.cameras
         sensors = [] if not hasattr(task, "sensors") else task.sensors
         scenario = ScenarioCfg(
-            task=task,
             robots=task.robots,
             objects=task.objects,
             sensors=sensors,
             cameras=cameras,
-            sim=args.sim,
+            simulator=args.sim,
             headless=args.headless,
             num_envs=args.num_envs,
             sim_params=task.sim_params,
+            decimation=task.decimation,
+            env_spacing=task.env_spacing,
         )
-        scenario.task.robots = scenario.robots
-        scenario.task.objects = scenario.objects
+        scenario.device = args.device
+        self.task.robots = scenario.robots
+        self.task.objects = scenario.objects
         self.sim_device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-        assert SimType(scenario.sim) == SimType.ISAACGYM, "Currently only support IsaacGym simulator."
         self._num_envs = scenario.num_envs
         self.robots = scenario.robots
-        self.task = scenario.task
 
-        env_class = get_sim_env_class(SimType(scenario.sim))
-        self.env = env_class(scenario)
+        self.handler = get_handler(scenario)
 
-        self.init_states = [copy.deepcopy(scenario.task.init_states) for _ in range(self.num_envs)]
+        self.init_states = [copy.deepcopy(self.task.init_states) for _ in range(self.num_envs)]
         self.init_states_tensor = list_state_to_tensor(
-            handler=self.env.handler, env_states=self.init_states, device=self.sim_device
+            handler=self.handler, env_states=self.init_states, device=self.sim_device
         )
 
         # action space is normalized to [-1, 1]
@@ -78,7 +80,7 @@ class DexEnv(BaseVecEnv):
 
         # observation space
         # Create an observation space (398 dimensions) for a single environment, instead of the entire batch (num_envs,398).
-        self.obs_type = getattr(scenario.task, "obs_type", "state")
+        self.obs_type = getattr(self.task, "obs_type", "state")
         obs_shape = self.task.obs_shape
         self._observation_space = spaces.Dict({
             key: spaces.Box(low=-5.0, high=5.0, shape=shape, dtype=np.float32) for key, shape in obs_shape.items()
@@ -128,7 +130,10 @@ class DexEnv(BaseVecEnv):
 
     def reset(self):
         """Reset the environment."""
-        obs, _ = self.env.reset(states=self.init_states_tensor)
+        env_ids = list(range(self.num_envs))
+        self.handler.set_states(self.init_states_tensor, env_ids=env_ids)
+        self.handler.refresh_render()
+        obs = self.handler.get_states()
         self.task.update_state(obs)
         env_ids = torch.arange(self.num_envs, device=self.sim_device)
         self.tensor_states = obs
@@ -162,10 +167,9 @@ class DexEnv(BaseVecEnv):
         step_action = self.scale_action(actions)
         return step_action
 
-    def post_physics_step(self, envstates: list[EnvState], actions: torch.Tensor):
+    def post_physics_step(self, envstates: list[DictEnvState], actions: torch.Tensor):
         """Post physics step processing."""
         self.episode_lengths += 1
-        self.env._episode_length_buf += 1
         (self.episode_rewards, self.episode_reset, self.episode_goal_reset, self.episode_success) = self.task.reward_fn(
             envstates=envstates,
             actions=actions,
@@ -193,7 +197,9 @@ class DexEnv(BaseVecEnv):
         """
         actions = torch.clamp(actions, -1.0, 1.0)  # Ensure actions are within [-1, 1]
         step_action = self.pre_physics_step(actions)
-        envstates, _, _, _, _ = self.env.step(step_action)
+        self.handler.set_dof_targets(step_action)
+        self.handler.simulate()
+        envstates = self.handler.get_states()
         self.task.update_state(envstates)
         self.post_physics_step(envstates, actions)
 
@@ -254,7 +260,9 @@ class DexEnv(BaseVecEnv):
         self.episode_reset[env_ids] = 0
         self.reset_goal_pose(env_ids)
         reset_states = self.task.reset_init_pose_fn(self.init_states_tensor, env_ids=env_ids)
-        env_states, _ = self.env.reset(states=reset_states, env_ids=env_ids.tolist())
+        self.handler.set_states(reset_states, env_ids=env_ids.tolist())
+        self.handler.refresh_render()
+        env_states = self.handler.get_states()
         return env_states
 
     def reset_goal_pose(self, env_ids: torch.Tensor):
@@ -267,7 +275,7 @@ class DexEnv(BaseVecEnv):
 
     def close(self):
         """Clean up environment resources."""
-        self.env.close()
+        self.handler.close()
 
     def seed(self, seed):
         """Set random seed for reproducibility."""
@@ -281,10 +289,10 @@ class DexEnv(BaseVecEnv):
                 torch.cuda.manual_seed_all(seed)
                 torch.backends.cudnn.deterministic = True
                 torch.backends.cudnn.benchmark = False
-        if hasattr(self.env.handler, "seed"):
-            self.env.handler.seed(seed)
-        elif hasattr(self.env.handler, "set_seed"):
-            self.env.handler.set_seed(seed)
+        if hasattr(self.handler, "seed"):
+            self.handler.seed(seed)
+        elif hasattr(self.handler, "set_seed"):
+            self.handler.set_seed(seed)
         else:
             log.warning("Could not set seed on underlying handler.")
         return seed

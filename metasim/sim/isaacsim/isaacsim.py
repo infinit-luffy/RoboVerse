@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import random
 from copy import deepcopy
 
 import torch
@@ -22,10 +23,12 @@ from metasim.scenario.objects import (
     RigidObjCfg,
 )
 from metasim.scenario.scenario import ScenarioCfg
+from metasim.scenario.sensors import ForceTorqueSensorCfg
 from metasim.sim import BaseSimHandler
 from metasim.types import DictEnvState
 from metasim.utils.dict import deep_get
-from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState
+from metasim.utils.math import quat_apply, quat_inv
+from metasim.utils.state import CameraState, ObjectState, RobotState, SensorState, TensorState
 
 
 class IsaacsimHandler(BaseSimHandler):
@@ -38,12 +41,18 @@ class IsaacsimHandler(BaseSimHandler):
         super().__init__(scenario_cfg, optional_queries)
 
         # self._actions_cache: list[Action] = []
-        self._robot_names = {robot.name for robot in self.robots}
-        self._robot_init_pos = {robot.name: robot.default_position for robot in self.robots}
-        self._robot_init_quat = {robot.name: robot.default_orientation for robot in self.robots}
+        self._robot_names = [robot.name for robot in self.robots]
+        self._robot_init_pos = [robot.default_position for robot in self.robots]
+        self._robot_init_quat = [robot.default_orientation for robot in self.robots]
+        self._objects_names = [obj.name for obj in self.objects]
         self._cameras = scenario_cfg.cameras
+        self._sensors = scenario_cfg.sensors
 
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if hasattr(scenario_cfg, "device"):
+            self._device = torch.device(scenario_cfg.device)
+        else:
+            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self._num_envs: int = scenario_cfg.num_envs
         self._episode_length_buf = [0 for _ in range(self.num_envs)]
 
@@ -51,7 +60,9 @@ class IsaacsimHandler(BaseSimHandler):
         self.dt = self.scenario.sim_params.dt if self.scenario.sim_params.dt is not None else 0.01
         self._step_counter = 0
         self._is_closed = False
-        self.render_interval = 4  # TODO: fix hardcode
+
+        self.render_interval = self.scenario.decimation
+        log.info(f"Set render interval to {self.render_interval}, same as control decimation")
 
         if self.headless:
             self._render_viewport = False
@@ -78,13 +89,14 @@ class IsaacsimHandler(BaseSimHandler):
 
         sim_config: SimulationCfg = SimulationCfg(
             device=args.device,
-            render_interval=self.scenario.decimation,  # TTODO divide into render interval and control decimation
+            render_interval=self.render_interval,
             physx=PhysxCfg(
                 bounce_threshold_velocity=self.scenario.sim_params.bounce_threshold_velocity,
                 solver_type=self.scenario.sim_params.solver_type,
                 max_position_iteration_count=self.scenario.sim_params.num_position_iterations,
                 max_velocity_iteration_count=self.scenario.sim_params.num_velocity_iterations,
                 friction_correlation_distance=self.scenario.sim_params.friction_correlation_distance,
+                friction_offset_threshold=self.scenario.sim_params.friction_offset_threshold,
             ),
         )
         if self.scenario.sim_params.dt is not None:
@@ -100,8 +112,11 @@ class IsaacsimHandler(BaseSimHandler):
             self._init_keyboard()
 
     def _load_robots(self) -> None:
+        self.actuated_root = False  # whether a robot has an actuated root joint
         for robot in self.robots:
             self._add_robot(robot)
+            if hasattr(robot, "actuated_root") and robot.actuated_root:
+                self.actuated_root = True
 
     def _load_objects(self) -> None:
         for obj_cfg in self.objects:
@@ -113,6 +128,20 @@ class IsaacsimHandler(BaseSimHandler):
                 self._add_pinhole_camera(camera)
             else:
                 raise ValueError(f"Unsupported camera type: {type(camera)}")
+
+    def _load_sensors(self) -> None:
+        for sensor in self.sensors:
+            if isinstance(sensor, ForceTorqueSensorCfg):
+                if not hasattr(self, "ft_link_mass"):
+                    self.ft_link_mass = {}
+                    self.ft_link_inertia = {}
+                    self.ft_link_idxs = {}
+                self._add_ft_sensor(sensor)
+            else:
+                raise ValueError(f"Unsupported sensor type: {type(sensor)}")
+        if hasattr(self, "ft_link_mass"):
+            self.ft_link_mass = {k: torch.stack(v, dim=1).to(self.device) for k, v in self.ft_link_mass.items()}
+            self.ft_link_inertia = {k: torch.stack(v, dim=1).to(self.device) for k, v in self.ft_link_inertia.items()}
 
     def _init_keyboard(self) -> None:
         import weakref
@@ -147,7 +176,6 @@ class IsaacsimHandler(BaseSimHandler):
     def launch(self) -> None:
         self._init_scene()
         self._load_robots()
-        self._load_sensors()
         self._load_cameras()
         self._load_terrain()
         self._load_objects()
@@ -156,6 +184,7 @@ class IsaacsimHandler(BaseSimHandler):
         self.scene.clone_environments(copy_from_source=False)
         self.scene.filter_collisions(global_prim_paths=["/World/ground"])
         self.sim.reset()
+        self._load_sensors()
         indices = torch.arange(self.num_envs, dtype=torch.int64, device=self.device)
         self.scene.reset(indices)
 
@@ -287,14 +316,18 @@ class IsaacsimHandler(BaseSimHandler):
         if env_ids is None:
             env_ids = list(range(self.num_envs))
 
-        # Special handling for the first frame to ensure camera is properly positioned
-        if self._step_counter == 0:
-            self._update_camera_pose()
-            # Force render and sensor update for first frame
-            if self.sim.has_gui() or self.sim.has_rtx_sensors():
-                self.sim.render()
-            for sensor in self.scene.sensors.values():
-                sensor.update(dt=0)
+        for robot in self.robots:
+            robot_inst = self.scene.articulations[robot.name]
+            jacobian_tensor = robot_inst.root_physx_view.get_jacobians()
+            body_reindex = self.get_body_reindex(robot.name)
+            joint_reindex = self.get_joint_reindex(robot.name)
+            if robot.fix_base_link:
+                body_reindex = [i - 1 for i in body_reindex if i > 0]  # reindex after removing the fixed base
+            else:
+                joint_reindex = [i + 6 for i in joint_reindex]  # reindex after adding the free root
+            robot.jacobian = jacobian_tensor
+            robot.jacobian_body_reindex = body_reindex
+            robot.jacobian_joint_reindex = joint_reindex
 
         object_states = {}
         for obj in self.objects:
@@ -338,6 +371,7 @@ class IsaacsimHandler(BaseSimHandler):
                 body_state=body_state,
                 joint_pos=obj_inst.data.joint_pos[:, joint_reindex],
                 joint_vel=obj_inst.data.joint_vel[:, joint_reindex],
+                joint_force=obj_inst._root_physx_view.get_dof_projected_joint_forces()[:, joint_reindex],
                 joint_pos_target=obj_inst.data.joint_pos_target[:, joint_reindex],
                 joint_vel_target=obj_inst.data.joint_vel_target[:, joint_reindex],
                 joint_effort_target=obj_inst.data.joint_effort_target[:, joint_reindex],
@@ -345,9 +379,6 @@ class IsaacsimHandler(BaseSimHandler):
             robot_states[obj.name] = state
 
         camera_states = {}
-        # Force camera sensor update to ensure correct position data
-        for sensor in self.scene.sensors.values():
-            sensor.update(dt=0)
 
         for camera in self.cameras:
             camera_inst = self.scene.sensors[camera.name]
@@ -373,7 +404,43 @@ class IsaacsimHandler(BaseSimHandler):
                 intrinsics=torch.tensor(camera.intrinsics, device=self.device)[None, ...].repeat(self.num_envs, 1, 1),
             )
 
-        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states)
+        sensor_states = {}
+
+        if hasattr(self, "ft_link_idxs"):
+            force = []
+            torque = []
+            for robot in self.robots:
+                robot_inst = self.scene.articulations[robot.name]
+                link_idxs = self.ft_link_idxs[robot.name]
+                # Get linear acceleration and angular velocity of the link in world frame
+                lin_acc_w = robot_inst.data.body_com_acc_w[:, link_idxs, :3]  # (num_envs, num_links, 3)
+                ang_acc_w = robot_inst.data.body_com_acc_w[:, link_idxs, 3:]  # (num_envs, num_links, 3)
+                ang_vel_w = robot_inst.data.body_com_state_w[:, link_idxs, 10:13]  # (num_envs, num_links, 3)
+                link_mass = self.ft_link_mass[robot.name]  # (num_envs, num_links)
+                link_inertia = self.ft_link_inertia[robot.name]  # (num_envs, num_links, 3, 3)
+
+                # Compute acceleration in link frame
+                link_rot = robot_inst.data.body_state_w[:, link_idxs, 3:7]
+                lin_acc = quat_apply(quat_inv(link_rot), lin_acc_w)
+                ang_acc = quat_apply(quat_inv(link_rot), ang_acc_w)
+                ang_vel = quat_apply(quat_inv(link_rot), ang_vel_w)
+
+                # Compute force and torque using Newton-Euler equations
+                force.append(link_mass[:, :, None] * lin_acc)
+                torque.append(
+                    torch.matmul(link_inertia, ang_acc[:, :, :, None]).squeeze(-1)
+                    + torch.cross(ang_vel, torch.matmul(link_inertia, ang_vel[..., None]).squeeze(-1), dim=-1)
+                )
+            force = torch.cat(force, dim=1)
+            torque = torch.cat(torque, dim=1)  # (num_envs, num_ft_links, 3)
+            for i, sensor in enumerate(self.sensors):
+                if isinstance(sensor, ForceTorqueSensorCfg):
+                    sensor_states[sensor.name] = SensorState(
+                        force=force[:, i],
+                        torque=torque[:, i],
+                    )
+
+        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, sensors=sensor_states)
 
     def _on_keyboard_event(self, event, *args, **kwargs):
         import carb
@@ -392,50 +459,115 @@ class IsaacsimHandler(BaseSimHandler):
                 self.sim.set_render_mode(SimulationContext.RenderMode.FULL_RENDERING)
 
     def set_dof_targets(self, actions: torch.Tensor) -> None:
-        # TODO: support set torque
+        if not hasattr(self, "actionable_joint_ids"):
+            self.actionable_joint_ids = {}
+            self.robot_actionable_joint_num = 0
+            self.action_actuated_joint_ids = []
+            self.action_joint_num = 0
+            for robot in self.robots:
+                robot_inst = self.scene.articulations[robot.name]
+                self.actionable_joint_ids[robot.name] = [
+                    robot_inst.joint_names.index(jn) for jn in robot.actuators if robot.actuators[jn].fully_actuated
+                ]
+                self.robot_actionable_joint_num += len(self.actionable_joint_ids[robot.name])
+                for i, jn in enumerate(robot.actuators):
+                    if robot.actuators[jn].fully_actuated:
+                        self.action_actuated_joint_ids.append(i + self.action_joint_num)
+                self.action_joint_num += len(robot.actuators)
+
+            log.info(f"Total actionable joints: {self.robot_actionable_joint_num}")
+
+        if self.actuated_root and not hasattr(self, "_force_body_index"):
+            # create a list of robot root body indices for each env
+            self._force_body_index = {}
+            for robot in self.robots:
+                if not hasattr(robot, "actuated_root") or not robot.actuated_root:
+                    continue
+                robot_inst = self.scene.articulations[robot.name]
+                self._force_body_index[robot.name] = robot_inst.body_names.index(robot.actuated_link)
+
+        action_tensor_all = torch.zeros((self.num_envs, self.robot_actionable_joint_num), device=self.device)
+        # action ordered in the same way as robot.actuators.keys()
+
         if isinstance(actions, torch.Tensor):
-            reverse_reindex = self.get_joint_reindex(self.robots[0].name, inverse=True)
-            action_tensor_all = actions[:, reverse_reindex]
+            if actions.shape[-1] == self.robot_actionable_joint_num:
+                action_tensor_all = actions
+            elif actions.shape[-1] == self.action_joint_num:
+                action_tensor_all = actions[:, self.action_actuated_joint_ids]
+            elif self.actuated_root:
+                action_tensor_all = actions[:, self.action_actuated_joint_ids]
+                root_action_dim = actions.shape[-1] - self.action_joint_num
+                root_force_tensor_all = actions[:, self.action_joint_num : self.action_joint_num + root_action_dim // 2]
+                root_torque_tensor_all = actions[
+                    :, self.action_joint_num + root_action_dim // 2 : self.action_joint_num + root_action_dim
+                ]
         else:
             # Process dictionary-based actions
             action_tensors = []
+            root_force_tensors = []
+            root_torque_tensors = []
             for robot in self.robots:
+                actuated_root = hasattr(self, "actuated_root") and robot.actuated_root
                 actuator_names = [k for k, v in robot.actuators.items() if v.fully_actuated]
                 action_tensor = torch.zeros((self.num_envs, len(actuator_names)), device=self.device)
+                root_force_tensor = torch.zeros((self.num_envs, 3), device=self.device)
+                root_torque_tensor = torch.zeros((self.num_envs, 3), device=self.device)
                 for env_id in range(self.num_envs):
                     for i, actuator_name in enumerate(actuator_names):
-                        action_tensor[env_id, i] = torch.tensor(
-                            actions[env_id][robot.name]["dof_pos_target"][actuator_name], device=self.device
-                        )
+                        if actuator_name in actions[env_id][robot.name]["dof_pos_target"]:
+                            action_tensor[env_id, i] = torch.tensor(
+                                actions[env_id][robot.name]["dof_pos_target"][actuator_name], device=self.device
+                            )
+                    if actuated_root:
+                        if "root_force" in actions[env_id][robot.name]:
+                            root_force_tensor[env_id] = torch.tensor(
+                                actions[env_id][robot.name]["root_force"], device=self.device
+                            )
+                        if "root_torque" in actions[env_id][robot.name]:
+                            root_torque_tensor[env_id] = torch.tensor(
+                                actions[env_id][robot.name]["root_torque"], device=self.device
+                            )
                 action_tensors.append(action_tensor)
+                root_force_tensors.append(root_force_tensor)
+                root_torque_tensors.append(root_torque_tensor)
             action_tensor_all = torch.cat(action_tensors, dim=-1)
+            root_force_tensor_all = torch.cat(root_force_tensors, dim=-1)
+            root_torque_tensor_all = torch.cat(root_torque_tensors, dim=-1)
 
         # Apply actions to all robots
         start_idx = 0
+        force_start_idx = 0
         for robot in self.robots:
             robot_inst = self.scene.articulations[robot.name]
-            actionable_joint_ids = [
-                robot_inst.joint_names.index(jn) for jn in robot.actuators if robot.actuators[jn].fully_actuated
-            ]
+            actionable_joint_ids = self.actionable_joint_ids[robot.name]
             robot_inst.set_joint_position_target(
                 action_tensor_all[:, start_idx : start_idx + len(actionable_joint_ids)],
                 joint_ids=actionable_joint_ids,
             )
             start_idx += len(actionable_joint_ids)
+            if self.actuated_root and hasattr(robot, "actuated_root") and robot.actuated_root:
+                body_index = self._force_body_index[robot.name]
+                robot_inst.set_external_force_and_torque(
+                    forces=root_force_tensor_all[:, force_start_idx : force_start_idx + 3].unsqueeze(1),
+                    torques=root_torque_tensor_all[:, force_start_idx + 3 : force_start_idx + 6].unsqueeze(1),
+                    body_ids=[body_index],
+                )
+                force_start_idx += 3
 
     def _simulate(self):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
-        self.scene.write_data_to_sim()
-        self.sim.step(render=False)
-        if self._step_counter % self.render_interval == 0 and is_rendering:
-            self.sim.render()
-        self.scene.update(dt=self.dt)
+        for _ in range(self.scenario.decimation):
+            self.scene.write_data_to_sim()
+            self.sim.step(render=False)
+            if self._step_counter % self.render_interval == 0 and is_rendering:
+                self.sim.render()
+            self.scene.update(dt=self.dt)
 
-        # Ensure camera pose is correct, especially for the first few frames
-        if self._step_counter < 5:
-            self._update_camera_pose()
+            # Ensure camera pose is correct, especially for the first few frames
+            if self._step_counter < 5:
+                self._update_camera_pose()
 
-        self._step_counter += 1
+            self._step_counter += 1
 
     def _add_robot(self, robot: ArticulationObjCfg) -> None:
         import isaaclab.sim as sim_utils
@@ -448,6 +580,8 @@ class IsaacsimHandler(BaseSimHandler):
                 activate_contact_sensors=True,
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(),
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(fix_root_link=robot.fix_base_link),
+                fixed_tendons_props=sim_utils.FixedTendonPropertiesCfg(),
+                joint_drive_props=sim_utils.JointDrivePropertiesCfg(drive_type="force"),
             ),
             actuators={
                 jn: ImplicitActuatorCfg(
@@ -456,12 +590,19 @@ class IsaacsimHandler(BaseSimHandler):
                     damping=actuator.damping,
                 )
                 for jn, actuator in robot.actuators.items()
+                if actuator.fully_actuated
             },
         )
         cfg.prim_path = f"/World/envs/env_.*/{robot.name}"
         cfg.spawn.usd_path = os.path.abspath(robot.usd_path)
         cfg.spawn.rigid_props.disable_gravity = not robot.enabled_gravity
         cfg.spawn.articulation_props.enabled_self_collisions = robot.enabled_self_collisions
+        if hasattr(robot, "tendon_limit_stiffness"):
+            cfg.spawn.fixed_tendons_props.limit_stiffness = robot.tendon_limit_stiffness
+        if hasattr(robot, "tendon_damping"):
+            cfg.spawn.fixed_tendons_props.damping = robot.tendon_damping
+        if hasattr(robot, "actuated_root") and robot.actuated_root:
+            self.actuated_root = True
         init_state = ArticulationCfg.InitialStateCfg(
             pos=[0.0, 0.0, 0.0],
             joint_pos=robot.default_joint_positions,
@@ -469,7 +610,8 @@ class IsaacsimHandler(BaseSimHandler):
         )
         cfg.init_state = init_state
         for joint_name, actuator in robot.actuators.items():
-            cfg.actuators[joint_name].velocity_limit = actuator.velocity_limit
+            if actuator.velocity_limit is not None:
+                cfg.actuators[joint_name].velocity_limit_sim = actuator.velocity_limit
         robot_inst = Articulation(cfg)
         self.scene.articulations[robot.name] = robot_inst
 
@@ -481,25 +623,20 @@ class IsaacsimHandler(BaseSimHandler):
         assert isinstance(obj, BaseObjCfg)
         prim_path = f"/World/envs/env_.*/{obj.name}"
 
-        ## Articulation object
-        if isinstance(obj, ArticulationObjCfg):
-            self.scene.articulations[obj.name] = Articulation(
-                ArticulationCfg(
-                    prim_path=prim_path,
-                    spawn=sim_utils.UsdFileCfg(usd_path=obj.usd_path, scale=obj.scale),
-                    actuators={},
-                )
-            )
-            return
-
         if obj.fix_base_link:
-            rigid_props = sim_utils.RigidBodyPropertiesCfg(disable_gravity=True, kinematic_enabled=True)
+            rigid_props = sim_utils.RigidBodyPropertiesCfg(disable_gravity=obj.disable_gravity, kinematic_enabled=True)
         else:
-            rigid_props = sim_utils.RigidBodyPropertiesCfg()
+            rigid_props = sim_utils.RigidBodyPropertiesCfg(disable_gravity=obj.disable_gravity)
+        rigid_props.max_depenetration_velocity = self.scenario.sim_params.max_depenetration_velocity
         if obj.collision_enabled:
             collision_props = sim_utils.CollisionPropertiesCfg(collision_enabled=True)
         else:
             collision_props = None
+
+        if hasattr(obj, "default_density") and obj.default_density is not None:
+            mass_props = sim_utils.MassPropertiesCfg(density=obj.default_density)
+        else:
+            mass_props = sim_utils.MassPropertiesCfg()
 
         ## Primitive object
         if isinstance(obj, PrimitiveCubeCfg):
@@ -561,6 +698,7 @@ class IsaacsimHandler(BaseSimHandler):
                             disable_gravity=True, kinematic_enabled=True
                         ),  # fixed
                         collision_props=None,  # no collision
+                        mass_props=mass_props,
                         scale=obj.scale,
                     ),
                 )
@@ -573,14 +711,59 @@ class IsaacsimHandler(BaseSimHandler):
                 usd_path=obj.usd_path,
                 rigid_props=rigid_props,
                 collision_props=collision_props,
+                mass_props=mass_props,
                 scale=obj.scale,
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(articulation_enabled=False),
             )
-            if isinstance(obj, RigidObjCfg):
-                self.scene.rigid_objects[obj.name] = RigidObject(
-                    RigidObjectCfg(prim_path=prim_path, spawn=usd_file_cfg)
+            if obj.color is not None:
+                usd_file_cfg.visual_material = sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(obj.color[0], obj.color[1], obj.color[2])
                 )
-                return
+            elif obj.randomize_color:
+                usd_file_cfg.visual_material = sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(
+                        random.uniform(0.0, 1.0),
+                        random.uniform(0.0, 1.0),
+                        random.uniform(0.0, 1.0),
+                    )
+                )
+            self.scene.rigid_objects[obj.name] = RigidObject(RigidObjectCfg(prim_path=prim_path, spawn=usd_file_cfg))
+            return
+
+        ## Articulation object
+        if isinstance(obj, ArticulationObjCfg):
+            usd_file_cfg = sim_utils.UsdFileCfg(
+                usd_path=obj.usd_path,
+                rigid_props=rigid_props,
+                collision_props=collision_props,
+                mass_props=mass_props,
+                scale=obj.scale,
+                articulation_props=sim_utils.ArticulationRootPropertiesCfg(fix_root_link=obj.fix_base_link),
+            )
+            if obj.color is not None:
+                usd_file_cfg.visual_material = sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(obj.color[0], obj.color[1], obj.color[2])
+                )
+            elif obj.randomize_color:
+                usd_file_cfg.visual_material = sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(
+                        random.uniform(0.0, 1.0),
+                        random.uniform(0.0, 1.0),
+                        random.uniform(0.0, 1.0),
+                    )
+                )
+            self.scene.articulations[obj.name] = Articulation(
+                ArticulationCfg(
+                    prim_path=prim_path,
+                    spawn=usd_file_cfg,
+                    actuators={},
+                )
+            )
+            if obj.stiffness is not None:
+                self.scene.articulations[obj.name].write_joint_stiffness_to_sim(obj.stiffness)
+            if obj.damping is not None:
+                self.scene.articulations[obj.name].write_joint_damping_to_sim(obj.damping)
+            return
 
         raise ValueError(f"Unsupported object type: {type(obj)}")
 
@@ -631,18 +814,6 @@ class IsaacsimHandler(BaseSimHandler):
         log.info(f"Render spp: {settings.get('/rtx/pathtracing/spp')}")
         log.info(f"Render adaptiveSampling/enabled: {settings.get('/rtx/pathtracing/adaptiveSampling/enabled')}")
         log.info(f"Render maxBounces: {settings.get('/rtx/pathtracing/maxBounces')}")
-
-    def _load_sensors(self) -> None:
-        from isaaclab.sensors import ContactSensor, ContactSensorCfg
-
-        contact_sensor_config: ContactSensorCfg = ContactSensorCfg(
-            prim_path=f"/World/envs/env_.*/{self.robots[0].name}/.*",
-            history_length=3,
-            update_period=0.005,
-            track_air_time=True,
-        )
-        self.contact_sensor = ContactSensor(contact_sensor_config)
-        self.scene.sensors["contact_sensor"] = self.contact_sensor
 
     def _load_lights(self) -> None:
         import isaaclab.sim as sim_utils
@@ -990,7 +1161,29 @@ class IsaacsimHandler(BaseSimHandler):
         self.scene.sensors[camera.name] = camera_inst
         log.debug(f"Added camera {camera.name} to scene with prim_path: {prim_path}")
 
+    def _add_ft_sensor(self, sensor: ForceTorqueSensorCfg) -> None:
+        robot_name = sensor.base_link if isinstance(sensor.base_link, str) else sensor.base_link[0]
+        if robot_name not in self.scene.articulations:
+            raise ValueError(f"Robot {robot_name} not found for FT sensor {sensor.name}")
+        robot_inst = self.scene.articulations[robot_name]
+        if robot_name not in self.ft_link_idxs:
+            self.ft_link_idxs[robot_name] = []
+            self.ft_link_mass[robot_name] = []
+            self.ft_link_inertia[robot_name] = []
+        if isinstance(sensor.base_link, tuple):
+            link_idx = self.get_body_names(sensor.base_link[0], sort=False).index(sensor.base_link[1])
+            self.ft_link_mass[robot_name].append(robot_inst.data.default_mass[:, link_idx].clone())
+            self.ft_link_inertia[robot_name].append(
+                robot_inst.data.default_inertia[:, link_idx].reshape(-1, 3, 3).clone()
+            )
+            self.ft_link_idxs[robot_name].append(link_idx)
+        else:
+            self.ft_link_mass[robot_name].append(robot_inst.data.default_mass[:, 0].clone())
+            self.ft_link_inertia[robot_name].append(robot_inst.data.default_inertia[:, 0].reshape(-1, 3, 3).clone())
+            self.ft_link_idxs[robot_name].append(0)
+
     def refresh_render(self) -> None:
-        for sensor in self.scene.sensors.values():
-            sensor.update(dt=0)
-        self.sim.render()
+        self.scene.update(dt=0)
+        self._update_camera_pose()
+        if self.sim.has_gui() or self.sim.has_rtx_sensors():
+            self.sim.render()

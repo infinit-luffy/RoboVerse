@@ -224,7 +224,7 @@ class MJXHandler(BaseSimHandler):
                 )
         # self._print_ncon_geoms()
         extras = self.get_extra()  # extra observations
-        return TensorState(objects=objects, robots=robots, cameras=camera_states, extras=extras)
+        return TensorState(objects=objects, robots=robots, cameras=camera_states, sensors=None, extras=extras)
 
     def _set_states(
         self,

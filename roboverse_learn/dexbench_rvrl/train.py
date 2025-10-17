@@ -66,7 +66,7 @@ def seed_everything(seed):
 @dataclass
 class Args:
     env_id: str = "dexbench/HandOver"
-    sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
+    sim: Literal["isaacsim", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
     num_envs: int = 1
@@ -159,9 +159,9 @@ def main():
     print("Algorithm: ", args.algo)
     ## set device
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    jax.config.update("jax_platform_name", "gpu")
-    device_num = int(args.device.split(":")[-1])
-    jax.config.update("jax_default_device", jax.devices()[device_num])
+    # jax.config.update("jax_platform_name", "gpu")
+    # device_num = int(args.device.split(":")[-1])
+    # jax.config.update("jax_default_device", jax.devices()[device_num])
     log.info(f"Using device: {device}" + (f" (GPU {torch.cuda.current_device()})" if torch.cuda.is_available() else ""))
 
     ## set seed

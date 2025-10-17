@@ -1,0 +1,14 @@
+<mujoco model="MuJoCo Model">
+  <compiler angle="radian" meshdir="../stls/hand/" texturedir="../textures/"/>
+
+  <option apirate="200" iterations="20"/>
+
+  <worldbody>
+    <light name="light0" pos="0 1 4" dir="0 0 -1" type="directional" castshadow="false" ambient="0.2 0.2 0.2" diffuse="0.8 0.8 0.8"/>
+    <body name="egg" pos="1 0.87 0.2">
+      <joint name="egg:joint" type="free" damping="0.01"/>
+      <geom name="egg" size="0.03 0.03 0.04" type="ellipsoid" condim="4"/>
+      <site name="egg:center" pos="0 0 0" size="0.01" rgba="1 0 0 0"/>
+    </body>
+  </worldbody>
+</mujoco>

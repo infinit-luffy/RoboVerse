@@ -465,7 +465,9 @@ class Sapien3Handler(BaseSimHandler):
             state = CameraState(rgb=rgb.unsqueeze(0), depth=depth.unsqueeze(0))
             camera_states[camera.name] = state
         extras = self.get_extra()  # extra observations
-        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
+        return TensorState(
+            objects=object_states, robots=robot_states, cameras=camera_states, sensors=None, extras=extras
+        )
 
     def refresh_render(self):
         self.scene.update_render()

@@ -14,6 +14,7 @@ from .objects import BaseObjCfg
 from .render import RenderCfg
 from .robot import RobotCfg
 from .scene import SceneCfg
+from .sensors import BaseSensorCfg
 from .simulator_params import SimParamCfg
 
 
@@ -26,6 +27,7 @@ class ScenarioCfg:
     robots: list[RobotCfg] = []
     lights: list[BaseLightCfg] = [DistantLightCfg()]
     objects: list[BaseObjCfg] = []
+    sensors: list[BaseSensorCfg] = []
     cameras: list[BaseCameraCfg] = []
 
     # runtime

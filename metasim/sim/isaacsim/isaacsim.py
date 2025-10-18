@@ -188,6 +188,14 @@ class IsaacsimHandler(BaseSimHandler):
         indices = torch.arange(self.num_envs, dtype=torch.int64, device=self.device)
         self.scene.reset(indices)
 
+        # set obj stiffness
+        for obj in self.objects:
+            if isinstance(obj, ArticulationObjCfg):
+                if obj.stiffness is not None:
+                    self.scene.articulations[obj.name].write_joint_stiffness_to_sim(obj.stiffness)
+                if obj.damping is not None:
+                    self.scene.articulations[obj.name].write_joint_damping_to_sim(obj.damping)
+
         # Update camera pose after scene reset to avoid being overridden
         self._update_camera_pose()
 
@@ -273,8 +281,6 @@ class IsaacsimHandler(BaseSimHandler):
                 env_ids = torch.tensor(env_ids, device=self.device)
 
             for _, obj in enumerate(self.objects):
-                if obj.fix_base_link:
-                    continue
                 if isinstance(obj, ArticulationObjCfg):
                     obj_inst = self.scene.articulations[obj.name]
                 else:
@@ -628,7 +634,7 @@ class IsaacsimHandler(BaseSimHandler):
         else:
             rigid_props = sim_utils.RigidBodyPropertiesCfg(disable_gravity=obj.disable_gravity)
         rigid_props.max_depenetration_velocity = self.scenario.sim_params.max_depenetration_velocity
-        if obj.collision_enabled:
+        if hasattr(obj, "collision_enabled") and obj.collision_enabled:
             collision_props = sim_utils.CollisionPropertiesCfg(collision_enabled=True)
         else:
             collision_props = None
@@ -734,7 +740,6 @@ class IsaacsimHandler(BaseSimHandler):
         if isinstance(obj, ArticulationObjCfg):
             usd_file_cfg = sim_utils.UsdFileCfg(
                 usd_path=obj.usd_path,
-                rigid_props=rigid_props,
                 collision_props=collision_props,
                 mass_props=mass_props,
                 scale=obj.scale,
@@ -759,10 +764,6 @@ class IsaacsimHandler(BaseSimHandler):
                     actuators={},
                 )
             )
-            if obj.stiffness is not None:
-                self.scene.articulations[obj.name].write_joint_stiffness_to_sim(obj.stiffness)
-            if obj.damping is not None:
-                self.scene.articulations[obj.name].write_joint_damping_to_sim(obj.damping)
             return
 
         raise ValueError(f"Unsupported object type: {type(obj)}")

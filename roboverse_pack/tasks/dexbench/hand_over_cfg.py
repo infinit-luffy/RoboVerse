@@ -69,6 +69,7 @@ class HandOverCfg(BaseRLTaskCfg):
     }
     objects = []
     robots = []
+    env_spacing = 1.5
     sim_params = SimParamCfg(
         dt=1.0 / 60.0,
         contact_offset=0.002,

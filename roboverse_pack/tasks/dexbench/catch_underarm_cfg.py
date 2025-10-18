@@ -382,7 +382,6 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                 actions_start += 6
             elif robot.arm_controller in ["ik_abs"]:
                 pose_action = actions[:, actions_start : actions_start + 7]
-                pose_action[:, :3] = 0
                 arm_dof_targets = robot.control_arm(pose_action, pose_action.shape[0], pose_action.device)
                 actions_start += 7
             step_actions[:, step_actions_start + robot.arm_dof_idx] = arm_dof_targets

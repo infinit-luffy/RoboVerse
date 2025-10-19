@@ -25,6 +25,7 @@ from metasim.randomization import (
     MaterialRandomizer,
     ObjectPresets,
     ObjectRandomizer,
+    SceneRandomizer,
 )
 from metasim.randomization.presets.light_presets import LightScenarios
 from metasim.scenario.cameras import PinholeCameraCfg
@@ -77,6 +78,53 @@ def run_domain_randomization(args):
     """Demonstrate domain randomization with specified simulator."""
     log.info(f"=== {args.sim.upper()} Domain Randomization Demo ===")
 
+    # Configure based on evaluation level (RoboVerse paper)
+    if args.eval_level != "none":
+        log.info(f"Evaluation Level: {args.eval_level.upper()}")
+
+        if args.eval_level == "level0":
+            # Level 0: Task space only (fixed visuals)
+            log.info("  Task space generalization only - all visuals fixed")
+            args.enable_floor = False
+            args.enable_walls = False
+            args.enable_ceiling = False
+            args.enable_table = False
+            disable_all_randomizers = True
+
+        elif args.eval_level == "level1":
+            # Level 1: + Environment randomization
+            log.info("  + Environment randomization (scene geometry & materials)")
+            args.enable_floor = True
+            args.enable_walls = True
+            args.enable_ceiling = False  # Ceiling optional, default off
+            args.enable_table = True
+            disable_all_randomizers = False
+
+        elif args.eval_level == "level2":
+            # Level 2: + Camera randomization
+            log.info("  + Camera randomization (position, orientation, intrinsics)")
+            args.enable_floor = True
+            args.enable_walls = True
+            args.enable_ceiling = False
+            args.enable_table = True
+            args.camera_scenario = "combined"  # Use all camera randomization features
+            disable_all_randomizers = False
+
+        elif args.eval_level == "level3":
+            # Level 3: + Lighting & reflection (full visual domain)
+            log.info("  + Lighting & reflection randomization (intensity, color, direction)")
+            args.enable_floor = True
+            args.enable_walls = True
+            args.enable_ceiling = False
+            args.enable_table = True
+            args.lighting_scenario = "indoor_room"  # Rich lighting variations
+            args.camera_scenario = "combined"
+            disable_all_randomizers = False
+
+        log.info("  Note: 9:1 train/test asset split configured externally")
+    else:
+        disable_all_randomizers = False
+
     # Set up reproducible randomization
     if args.seed is not None:
         log.info(f"Reproducibility: Using seed {args.seed}")
@@ -89,9 +137,9 @@ def run_domain_randomization(args):
     # Create scenario and update simulator
     scenario = ScenarioCfg(
         robots=["franka"],
-        num_handlers=args.num_handlers,  # Multiple handlerironments for parallel testing
-        simulator=args.sim,  # Will be overridden
-        headless=args.headless,  # Will be overridden
+        num_envs=args.num_envs,  # Multiple environments for parallel testing
+        simulator=args.sim,
+        headless=args.headless,
     )
 
     # Add single camera for video recording and randomization
@@ -258,28 +306,85 @@ def run_domain_randomization(args):
         ),
     ]
 
-    # Get handler based on simulator
+    # Configure table settings if enabled (used for object/robot placement)
+    args._table_config = None
+    if args.enable_table:
+        args._table_config = {
+            "width": 2.4,
+            "depth": 2.4,
+            "height": 0.5,
+            "x_pos": 0.5,
+            "y_pos": 0.0,
+        }
+
     handler = get_handler(scenario)
+
+    # Calculate initial positions based on table configuration
+    cube_size = 0.1
+    sphere_radius = 0.1
+    box_base_height = 0.15
+
+    if args.enable_table:
+        table_cfg = args._table_config
+        table_surface_z = table_cfg["height"]
+
+        # Object XY positions
+        objects_xy = {
+            "cube": (0.3, -0.2),
+            "sphere": (0.4, -0.6),
+            "box_base": (0.5, 0.2),
+        }
+
+        # Check if object is within table boundaries
+        def is_on_table(obj_x, obj_y):
+            x_min = table_cfg["x_pos"] - table_cfg["width"] / 2
+            x_max = table_cfg["x_pos"] + table_cfg["width"] / 2
+            y_min = table_cfg["y_pos"] - table_cfg["depth"] / 2
+            y_max = table_cfg["y_pos"] + table_cfg["depth"] / 2
+            return x_min <= obj_x <= x_max and y_min <= obj_y <= y_max
+
+        # Calculate Z positions (object bottom touches surface)
+        cube_x, cube_y = objects_xy["cube"]
+        sphere_x, sphere_y = objects_xy["sphere"]
+        box_x, box_y = objects_xy["box_base"]
+
+        cube_z = (table_surface_z + cube_size / 2) if is_on_table(cube_x, cube_y) else (cube_size / 2)
+        sphere_z = (table_surface_z + sphere_radius) if is_on_table(sphere_x, sphere_y) else sphere_radius
+        box_base_z = (table_surface_z + box_base_height / 2) if is_on_table(box_x, box_y) else (box_base_height / 2)
+
+        # Robot position on table
+        robot_x = table_cfg["x_pos"] - 0.3
+        robot_y = table_cfg["y_pos"]
+        robot_z = table_cfg["height"]
+        log.info(f"Table mode: Objects and robot placed on table surface (z={table_surface_z}m)")
+    else:
+        # All on ground
+        cube_z = cube_size / 2
+        sphere_z = sphere_radius
+        box_base_z = box_base_height / 2
+        robot_x, robot_y, robot_z = 0.0, 0.0, 0.0
+        log.info("Ground mode: All objects and robot on ground")
+
     init_states = [
         {
             "objects": {
                 "cube": {
-                    "pos": torch.tensor([0.3, -0.2, 0.05]),
+                    "pos": torch.tensor([0.3, -0.2, cube_z]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
                 "sphere": {
-                    "pos": torch.tensor([0.4, -0.6, 0.05]),
+                    "pos": torch.tensor([0.4, -0.6, sphere_z]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
                 "box_base": {
-                    "pos": torch.tensor([0.5, 0.2, 0.1]),
+                    "pos": torch.tensor([0.5, 0.2, box_base_z]),
                     "rot": torch.tensor([0.0, 0.7071, 0.0, 0.7071]),
                     "dof_pos": {"box_joint": 0.0},
                 },
             },
             "robots": {
                 "franka": {
-                    "pos": torch.tensor([0.0, 0.0, 0.0]),
+                    "pos": torch.tensor([robot_x, robot_y, robot_z]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     "dof_pos": {
                         "panda_joint1": 0.0,
@@ -295,9 +400,15 @@ def run_domain_randomization(args):
                 },
             },
         }
-    ] * scenario.num_handlers
+    ] * scenario.num_envs
 
     handler.set_states(init_states)
+
+    # Let physics stabilize before randomization (important for table setup)
+    log.info("Letting physics stabilize...")
+    for _ in range(10):
+        handler.simulate()
+    log.info("Physics stable, starting randomization")
 
     # Initialize video recording
     os.makedirs("get_started/output", exist_ok=True)
@@ -471,6 +582,99 @@ def run_domain_randomization(args):
 
     camera_randomizer.bind_handler(handler)
     camera_randomizers = [camera_randomizer]
+
+    # Initialize scene randomizer if requested
+    scene_randomizer = None
+
+    if args.enable_floor or args.enable_walls or args.enable_ceiling or args.enable_table:
+        from metasim.randomization import SceneGeometryCfg, SceneMaterialPoolCfg, SceneRandomCfg
+        from metasim.randomization.presets.scene_presets import SceneMaterialCollections
+
+        log.info("Initializing Scene Randomizer")
+
+        floor_cfg = walls_cfg = ceiling_cfg = table_cfg = None
+        floor_materials_cfg = wall_materials_cfg = ceiling_materials_cfg = table_materials_cfg = None
+
+        room_size = 10.0
+        wall_height = 5.0
+        wall_thickness = 0.2
+
+        if args.enable_floor:
+            floor_cfg = SceneGeometryCfg(
+                enabled=True,
+                size=(room_size, room_size, 0.01),
+                position=(0.0, 0.0, 0.005),
+                material_randomization=True,
+            )
+            floor_materials_cfg = SceneMaterialPoolCfg(
+                material_paths=SceneMaterialCollections.floor_materials(),
+                selection_strategy="random",
+            )
+            log.info("  - Floor enabled (~150 materials)")
+
+        if args.enable_walls:
+            walls_cfg = SceneGeometryCfg(
+                enabled=True,
+                size=(room_size, wall_thickness, wall_height),
+                position=(0.0, 0.0, wall_height / 2),
+                material_randomization=True,
+            )
+            wall_materials_cfg = SceneMaterialPoolCfg(
+                material_paths=SceneMaterialCollections.wall_materials(),
+                selection_strategy="random",
+            )
+            log.info("  - Walls enabled (~150 materials)")
+
+        if args.enable_ceiling and args.enable_walls:
+            ceiling_cfg = SceneGeometryCfg(
+                enabled=True,
+                size=(room_size, room_size, wall_thickness),
+                position=(0.0, 0.0, wall_height + wall_thickness / 2),
+                material_randomization=True,
+            )
+            ceiling_materials_cfg = SceneMaterialPoolCfg(
+                material_paths=SceneMaterialCollections.ceiling_materials(),
+                selection_strategy="random",
+            )
+            log.info("  - Ceiling enabled")
+        elif args.enable_ceiling and not args.enable_walls:
+            log.warning("  - Ceiling disabled (requires --enable-walls)")
+
+        if args.enable_table and args._table_config:
+            table_cfg_dict = args._table_config
+            table_thickness = 0.1
+            table_center_z = table_cfg_dict["height"] - table_thickness / 2
+
+            table_cfg = SceneGeometryCfg(
+                enabled=True,
+                size=(table_cfg_dict["width"], table_cfg_dict["depth"], table_thickness),
+                position=(table_cfg_dict["x_pos"], table_cfg_dict["y_pos"], table_center_z),
+                material_randomization=True,
+            )
+            table_materials_cfg = SceneMaterialPoolCfg(
+                material_paths=SceneMaterialCollections.table_materials(),
+                selection_strategy="random",
+            )
+            log.info(
+                f"  - Table enabled ({table_cfg_dict['width']}x{table_cfg_dict['depth']}m at z={table_cfg_dict['height']}m, ~300 materials)"
+            )
+
+        # Create scene configuration
+        scene_cfg = SceneRandomCfg(
+            floor=floor_cfg,
+            walls=walls_cfg,
+            ceiling=ceiling_cfg,
+            table=table_cfg,
+            floor_materials=floor_materials_cfg,
+            wall_materials=wall_materials_cfg,
+            ceiling_materials=ceiling_materials_cfg,
+            table_materials=table_materials_cfg,
+            only_if_no_scene=True,
+        )
+
+        scene_randomizer = SceneRandomizer(scene_cfg, seed=args.seed)
+        scene_randomizer.bind_handler(handler)
+        log.info("Scene randomizer initialized successfully")
 
     # Get initial object properties for comparison
     cube_properties = cube_randomizer.get_properties()
@@ -647,6 +851,23 @@ def run_domain_randomization(args):
         log.warning(f"  Metal material randomization failed: {e}")
         log.info("  This is expected if MDL files are not available")
 
+    # Run scene randomization if enabled
+    if scene_randomizer is not None:
+        scene_elements = []
+        if args.enable_floor:
+            scene_elements.append("floor")
+        if args.enable_walls:
+            scene_elements.append("walls")
+        if args.enable_ceiling and args.enable_walls:
+            scene_elements.append("ceiling")
+        if args.enable_table:
+            scene_elements.append("table")
+
+        log.info(f"Scene Randomization: {', '.join(scene_elements)}")
+        scene_randomizer()
+        scene_props = scene_randomizer.get_scene_properties()
+        log.info(f"  Created {scene_props['num_elements']} scene elements")
+
     # run light randomization for all lights in the scenario
     log_randomization_header(
         "LIGHT RANDOMIZATION",
@@ -764,28 +985,41 @@ def run_domain_randomization(args):
 
         # Apply randomization every 10 steps to show material and lighting changes very frequently
         if step % 10 == 0 and step > 0:
-            log.info(f"Step {step}: Re-applying all randomizations")
+            log.info(f"Step {step}: Re-applying randomizations")
             try:
-                # Randomize objects using unified approach
-                for i, randomizer in enumerate(object_randomizers):
-                    randomizer()
-                    log.info(f"  Applied ObjectRandomizer {i + 1}")
+                # Apply randomizations based on eval level
+                if not disable_all_randomizers:
+                    # Object randomization (always enabled except level0)
+                    for i, randomizer in enumerate(object_randomizers):
+                        randomizer()
+                        log.info(f"  Applied ObjectRandomizer {i + 1}")
 
-                # Randomize materials
-                cube_material_randomizer()
-                sphere_material_randomizer()
-                box_material_randomizer()
-                log.info("  Applied material randomization (3 objects)")
+                    # Material randomization (always enabled except level0)
+                    cube_material_randomizer()
+                    sphere_material_randomizer()
+                    box_material_randomizer()
+                    log.info("  Applied material randomization (3 objects)")
 
-                # Randomize all lights in the scenario
-                for randomizer in light_randomizers:
-                    randomizer()
-                log.info(f"  Applied light randomization ({len(light_randomizers)} lights)")
+                    # Scene randomization (level1+)
+                    if scene_randomizer is not None:
+                        scene_randomizer()
+                        log.info("  Applied scene material randomization")
 
-                # Randomize all cameras in the scenario
-                for randomizer in camera_randomizers:
-                    randomizer()
-                log.info(f"  Applied camera randomization ({len(camera_randomizers)} cameras)")
+                    # Lighting randomization (level3 only)
+                    if args.eval_level == "level3" or (
+                        args.eval_level == "none" and args.lighting_scenario != "default"
+                    ):
+                        for randomizer in light_randomizers:
+                            randomizer()
+                        log.info(f"  Applied light randomization ({len(light_randomizers)} lights)")
+
+                    # Camera randomization (level2+)
+                    if args.eval_level in ["level2", "level3"] or (args.eval_level == "none"):
+                        for randomizer in camera_randomizers:
+                            randomizer()
+                        log.info(f"  Applied camera randomization ({len(camera_randomizers)} cameras)")
+                else:
+                    log.info("  Level 0: Skipping all visual randomization")
 
             except Exception as e:
                 log.warning(f"  Randomization failed at step {step}: {e}")
@@ -823,8 +1057,32 @@ def main():
         ] = "combined"
         """Choose camera randomization mode: combined, position_only, orientation_only, look_at_only, intrinsics_only, or image_only"""
 
+        ## Evaluation Level (RoboVerse paper)
+        eval_level: Literal["none", "level0", "level1", "level2", "level3"] = "none"
+        """Evaluation level for systematic domain randomization (RoboVerse paper):
+        - none: Manual control (use individual flags below)
+        - level0: Task space only (fixed visuals, for 90/10 task split baseline)
+        - level1: + Environment randomization (scene geometry/materials with 9:1 split)
+        - level2: + Camera randomization (viewpoint changes from 59-pose pool with 9:1 split)
+        - level3: + Lighting & reflection randomization (full visual domain with 9:1 split)
+        When set to level0-3, automatically configures randomizers and overrides individual flags.
+        """
+
+        ## Scene randomization (only used when eval_level='none')
+        enable_walls: bool = False
+        """Add walls (optionally with ceiling) as background geometry"""
+
+        enable_ceiling: bool = False
+        """Add ceiling (requires enable_walls=True to be visible)"""
+
+        enable_floor: bool = False
+        """Add floor as background geometry"""
+
+        enable_table: bool = False
+        """Add customizable tabletop for manipulation tasks"""
+
         ## Others
-        num_handlers: int = 1
+        num_envs: int = 1
         headless: bool = False
         seed: int | None = None
         """Random seed for reproducible randomization. If None, uses random seed."""
@@ -834,75 +1092,51 @@ def main():
             log.info(f"Args: {self}")
 
     args = tyro.cli(Args)
-    """Main function to run the domain randomization demo."""
-    log.info("Starting Domain Randomization Demo")
-    log.info("This demo showcases:")
 
-    # Object randomization info
-    log.info("  - ObjectRandomizer approach:")
-    log.info("    * Cube: Grasping target (mass + friction + position + rotation)")
-    log.info("    * Sphere: Bouncy object (mass + restitution + varied position)")
-    log.info("    * Franka: Robot base (mass + friction + minimal pose adjustment)")
+    log.info("=" * 70)
+    log.info("Domain Randomization Demo - RoboVerse")
+    log.info("=" * 70)
 
-    log.info("  - Advanced material randomization with combined mode:")
-    log.info("    * Cube: Wood (MDL + physics)")
-    log.info("    * Sphere: Rubber (PBR + physics, high bounce)")
-    log.info("    * Box: Metal (MDL + physics)")
-    log.info("  - Advanced lighting randomization using LightScenarios:")
-    log.info(f"    * Scenario: {args.lighting_scenario}")
-    if args.lighting_scenario == "indoor_room":
-        log.info("    * 3 lights: ceiling_light, window_light, desk_lamp")
-    elif args.lighting_scenario == "outdoor_scene":
-        log.info("    * 2 lights: sun_light, sky_light")
-    elif args.lighting_scenario == "studio":
-        log.info("    * 3 lights: key_light, fill_light, rim_light")
-    elif args.lighting_scenario == "demo":
-        log.info("    * 3 lights: rainbow_light (COLORS), disco_light (SHADOWS), shadow_light (MORE SHADOWS)")
-    else:
-        log.info("    * 2 lights: main_light, ambient_light")
-    log.info("  - Camera randomization (micro-adjustment mode):")
-    log.info(f"    * Mode: {args.camera_scenario}")
-    if args.camera_scenario == "combined":
-        log.info("    * ALL: position + orientation + intrinsics (small adjustments from current)")
-    elif args.camera_scenario == "position_only":
-        log.info("    * POSITION: small camera position adjustments")
-    elif args.camera_scenario == "orientation_only":
-        log.info("    * ORIENTATION: small rotation adjustments (pitch/yaw/roll deltas)")
-    elif args.camera_scenario == "look_at_only":
-        log.info("    * LOOK-AT: small target point adjustments (where camera looks)")
-    elif args.camera_scenario == "intrinsics_only":
-        log.info("    * INTRINSICS: focal length, aperture changes")
-    elif args.camera_scenario == "image_only":
-        log.info("    * IMAGE: resolution and aspect ratio changes")
-    else:
-        log.info("    * DEFAULT: combined randomization (micro-adjustments)")
-    log.info("  - Flexible and extensible configuration system")
-    log.info("  - Video recording and comprehensive logging")
-    log.info("  - Reproducible results with --seed argument")
-    log.info("")
-    log.info("Try different lighting scenarios:")
-    log.info("  --lighting-scenario demo        # For testing with maximum visual changes")
-    log.info("  --lighting-scenario indoor_room # 3-light indoor setup")
-    log.info("  --lighting-scenario outdoor_scene # 2-light outdoor setup")
-    log.info("  --lighting-scenario studio      # 3-light studio setup")
-    log.info("")
-    log.info("Try different camera randomization modes (micro-adjustment by default):")
-    log.info("  --camera-scenario position_only    # Small position adjustments from current")
-    log.info("  --camera-scenario orientation_only # Small rotation adjustments (pitch/yaw/roll deltas)")
-    log.info("  --camera-scenario look_at_only     # Small target point adjustments (where camera looks)")
-    log.info("  --camera-scenario intrinsics_only  # Only randomize focal length/aperture")
-    log.info("  --camera-scenario image_only       # Only randomize resolution/aspect ratio")
-    log.info("  --camera-scenario combined         # All micro-adjustments (default)")
-    log.info("Note: Camera uses micro-adjustment mode (delta-based) to avoid jarring position changes")
+    if args.eval_level != "none":
+        log.info(f"\nEvaluation Level: {args.eval_level.upper()}")
+        level_descriptions = {
+            "level0": "Task space only (fixed visuals)",
+            "level1": "+ Environment (scene geometry & materials)",
+            "level2": "+ Camera (position, orientation, intrinsics)",
+            "level3": "+ Lighting & Reflection (full visual domain)",
+        }
+        log.info(f"   {level_descriptions.get(args.eval_level, '')}")
 
-    log.info("For reproducible results:")
-    log.info("  --seed 42                       # Use specific seed for reproducibility")
-    log.info("  --seed 123                      # Different seed for different random sequences")
+    log.info("\nConfiguration:")
+    log.info(f"   Simulator: {args.sim}")
+    log.info(f"   Seed: {args.seed if args.seed is not None else 'Random'}")
+    log.info(f"   Lighting: {args.lighting_scenario}")
+    log.info(f"   Camera: {args.camera_scenario}")
+
+    scene_elements = []
+    if args.enable_floor:
+        scene_elements.append("floor")
+    if args.enable_walls:
+        scene_elements.append("walls")
+    if args.enable_ceiling:
+        scene_elements.append("ceiling")
+    if args.enable_table:
+        scene_elements.append("table")
+    if scene_elements:
+        log.info(f"   Scene: {', '.join(scene_elements)}")
+
+    log.info("\nQuick Start:")
+    log.info("   Level 0: --eval-level level0")
+    log.info("   Level 1: --eval-level level1")
+    log.info("   Level 2: --eval-level level2")
+    log.info("   Level 3: --eval-level level3")
+    log.info("   Manual:  --enable-floor --enable-walls --enable-table")
     log.info("")
 
-    # Run IsaacSim demo
+    # Run simulation
     run_domain_randomization(args)
-    log.info("\nRandomization demo completed! Check the logs above for detailed results.")
+
+    log.info("\nDemo completed!")
     log.info(f"Video saved to: get_started/output/12_domain_randomization_{args.sim}.mp4")
 
 

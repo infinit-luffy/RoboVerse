@@ -439,54 +439,56 @@ class MaterialRandomizer(BaseRandomizerType):
             raise ValueError(f"Unknown selection strategy: {self.cfg.mdl.selection_strategy}")
 
     def _apply_mdl_to_prim(self, mdl_path: str, prim_path: str) -> None:
-        """Apply MDL material to a specific prim using project's proven method."""
-        try:
-            # Use the existing utility function from the project
-            from metasim.sim.isaaclab.utils.material_util import apply_mdl_to_prim
+        """Apply MDL material to a specific prim.
 
-            # Ensure UV coordinates first
-            prim = prim_utils.get_prim_at_path(prim_path)
-            if prim:
-                self._ensure_uv_for_hierarchy(prim)
+        This is the internal implementation that was originally in material_util.py
+        """
+        # Convert to absolute path for IsaacSim
+        mdl_path = os.path.abspath(mdl_path)
 
-            # Apply using the proven utility
-            apply_mdl_to_prim(mdl_path, prim_path)
+        if not os.path.exists(mdl_path):
+            raise FileNotFoundError(f"Material file {mdl_path} does not exist")
+        if not mdl_path.endswith(".mdl"):
+            raise ValueError(f"Material file {mdl_path} must have .mdl extension")
 
-        except ImportError:
-            # Fallback to our implementation if utility is not available
-            self._apply_mdl_fallback(mdl_path, prim_path)
-        except Exception as e:
-            logger.warning(f"Failed to apply MDL {mdl_path} to {prim_path}: {e}")
-
-    def _apply_mdl_fallback(self, mdl_path: str, prim_path: str) -> None:
-        """Fallback MDL application method."""
         prim = prim_utils.get_prim_at_path(prim_path)
         if not prim:
             raise ValueError(f"Prim not found at path {prim_path}")
 
-        mtl_base_name = os.path.basename(mdl_path).removesuffix(".mdl")
-        mtl_name = f"{mtl_base_name}_mat"
+        # Ensure UV coordinates first
+        self._ensure_uv_for_hierarchy(prim)
+
+        # Material name should match the MDL file basename (without .mdl extension)
+        # Don't add _mat or timestamp - let IsaacSim use the exported material name from MDL
+        mtl_name = os.path.basename(mdl_path).removesuffix(".mdl")
         _, mtl_prim_path = get_material_prim_path(mtl_name)
 
-        success, _ = omni.kit.commands.execute(
+        logger.debug(f"Creating MDL material: {mtl_name} from {mdl_path}")
+
+        success, result = omni.kit.commands.execute(
             "CreateMdlMaterialPrim",
             mtl_url=mdl_path,
             mtl_name=mtl_name,
             mtl_path=mtl_prim_path,
             select_new_prim=False,
         )
+        if not success:
+            logger.error(f"Failed to create material {mtl_name} at {mtl_prim_path}")
+            raise RuntimeError(f"Failed to create material {mtl_name} at {mtl_prim_path}")
 
-        if success:
-            success_bind, _ = omni.kit.commands.execute(
-                "BindMaterial",
-                prim_path=prim.GetPath(),
-                material_path=mtl_prim_path,
-                strength=UsdShade.Tokens.strongerThanDescendants,
-            )
-            if not success_bind:
-                logger.warning(f"Failed to bind MDL material {mtl_name}")
-        else:
-            logger.warning(f"Failed to create MDL material {mtl_name}")
+        logger.debug(f"Binding material {mtl_prim_path} to {prim.GetPath()}")
+
+        success, result = omni.kit.commands.execute(
+            "BindMaterial",
+            prim_path=prim.GetPath(),
+            material_path=mtl_prim_path,
+            strength=UsdShade.Tokens.strongerThanDescendants,
+        )
+        if not success:
+            logger.error(f"Failed to bind material at {mtl_prim_path} to {prim.GetPath()}")
+            raise RuntimeError(f"Failed to bind material at {mtl_prim_path} to {prim.GetPath()}")
+
+        logger.debug(f"Successfully applied MDL material {mtl_name} to {prim_path}")
 
     def _ensure_uv_for_hierarchy(self, prim) -> None:
         """Ensure UV coordinates for all meshes in the prim hierarchy."""

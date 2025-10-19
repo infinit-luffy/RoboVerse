@@ -168,6 +168,8 @@ class IsaacsimHandler(BaseSimHandler):
                     position_tensor = position_tensor.repeat(self.num_envs, 1)
                     camera_lookat_tensor = torch.tensor(camera.look_at, device=self.device).unsqueeze(0)
                     camera_lookat_tensor = camera_lookat_tensor.repeat(self.num_envs, 1)
+                    position_tensor += self.scene.env_origins
+                    camera_lookat_tensor += self.scene.env_origins
                     camera_inst.set_world_poses_from_view(position_tensor, camera_lookat_tensor)
                     # log.debug(f"Updated camera {camera.name} pose: pos={camera.pos}, look_at={camera.look_at}")
             else:

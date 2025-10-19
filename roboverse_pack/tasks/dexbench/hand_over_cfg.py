@@ -115,7 +115,7 @@ class HandOverCfg(BaseRLTaskCfg):
             self.sim_params.substeps = 2
             self.sim_params.num_threads = 4
             self.decimation = 1
-            self.env_spacing = 2.5
+            self.env_spacing = 10
         else:
             raise ValueError(f"Unknown simulator type: {self.sim}")
         self.dt = self.sim_params.dt

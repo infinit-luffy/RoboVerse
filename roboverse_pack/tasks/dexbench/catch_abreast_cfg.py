@@ -132,6 +132,7 @@ class CatchAbreastCfg(BaseRLTaskCfg):
                     hand_translation_scale=0.02,
                     hand_orientation_scale=0.25 * torch.pi,
                     arm_controller="ik",
+                    arm_orientation_scale=0.05,
                 ),
                 FrankaShadowHandLeftCfg(
                     use_vhacd=False,
@@ -141,6 +142,7 @@ class CatchAbreastCfg(BaseRLTaskCfg):
                     hand_translation_scale=0.02,
                     hand_orientation_scale=0.25 * torch.pi,
                     arm_controller="ik",
+                    arm_orientation_scale=0.05,
                 ),
             ]
             self.robot_init_state = {
@@ -336,7 +338,7 @@ class CatchAbreastCfg(BaseRLTaskCfg):
                 self.img_w,
             )
         self.init_goal_pos = torch.tensor(
-            [-0.37, -1.15, 0.85], dtype=torch.float32, device=self.device
+            [-0.355, -1.15, 0.85], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
         self.init_goal_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
@@ -772,14 +774,14 @@ def compute_task_reward(
 
     # Find out which envs hit the goal and update successes count
     goal_resets = torch.where(
-        torch.abs(goal_dist) <= 0.03,
+        torch.abs(goal_dist) <= 0.05,
         torch.ones_like(reset_goal_buf),
         reset_goal_buf,
     )
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            torch.abs(goal_dist) <= 0.03,
+            torch.abs(goal_dist) <= 0.05,
             torch.ones_like(success_buf),
             success_buf,
         ),

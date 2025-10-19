@@ -94,7 +94,7 @@ class HandOverCfg(BaseRLTaskCfg):
     action_penalty_scale = 0
     success_tolerance = 0.1
     reach_goal_bonus = 250.0
-    throw_bonus = 15.0
+    throw_bonus = 10.0
     fall_penalty = 0.0
     reset_position_noise = 0.01
     reset_dof_pos_noise = 0.2
@@ -146,7 +146,7 @@ class HandOverCfg(BaseRLTaskCfg):
             ]
             self.robot_init_state = {
                 "right_hand": {
-                    "pos": torch.tensor([0.0, 0.306, 0.0]),
+                    "pos": torch.tensor([0.0, 0.316, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, -0.7071]),
                     "dof_pos": {
                         "FFJ1": 0.0,
@@ -749,14 +749,14 @@ def compute_task_reward(
 
     # Find out which envs hit the goal and update successes count
     goal_resets = torch.where(
-        torch.abs(goal_dist) <= 0.03,
+        torch.abs(goal_dist) <= 0.05,
         torch.ones_like(reset_goal_buf),
         reset_goal_buf,
     )
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            torch.abs(goal_dist) <= 0.03,
+            torch.abs(goal_dist) <= 0.05,
             torch.ones_like(success_buf),
             success_buf,
         ),
@@ -764,7 +764,7 @@ def compute_task_reward(
     )
 
     # Reward for throwing the object
-    thrown = (diff_xy[:, 1] >= -0.1) & (diff_xy[:, 1] <= -0.06) & (object_pos[:, 2] >= 0.7) & env_throw_bonus
+    thrown = (diff_xy[:, 1] >= -0.1) & (object_pos[:, 2] >= 0.7) & env_throw_bonus
     reward = torch.where(thrown, reward + throw_bonus, reward)
     false_tensor = torch.tensor([False] * reward.shape[0], dtype=torch.bool, device=object_pos.device)
     env_throw_bonus = torch.where(thrown, false_tensor, env_throw_bonus)

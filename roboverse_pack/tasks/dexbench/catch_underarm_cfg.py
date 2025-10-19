@@ -758,7 +758,7 @@ def compute_task_reward(
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            torch.abs(goal_dist) <= 0.03,
+            torch.abs(goal_dist) <= 0.05,
             torch.ones_like(success_buf),
             success_buf,
         ),

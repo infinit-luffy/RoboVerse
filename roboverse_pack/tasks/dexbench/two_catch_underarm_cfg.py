@@ -796,8 +796,8 @@ def compute_task_reward(
 
     goal_resets = torch.zeros_like(reset_buf)
 
-    right_success = goal_dist < 0.03
-    left_success = goal_another_dist < 0.03
+    right_success = goal_dist < 0.05
+    left_success = goal_another_dist < 0.05
     success = right_success & left_success
 
     success_buf = torch.where(

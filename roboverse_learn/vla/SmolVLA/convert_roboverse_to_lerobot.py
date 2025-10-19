@@ -1,7 +1,7 @@
 """Convert RoboVerse demonstrations into the LeRobot dataset format for SmolVLA.
 
-This converter is compatible with LeRobot 0.3+ API. It walks every episode directory 
-under a RoboVerse demo root, reads `metadata.json` and the accompanying `rgb.mp4`, 
+This converter is compatible with LeRobot 0.3+ API. It walks every episode directory
+under a RoboVerse demo root, reads `metadata.json` and the accompanying `rgb.mp4`,
 and writes trajectories to `$HF_LEROBOT_HOME/<repo_id>` using LeRobot's storage layout.
 
 Each frame stores:
@@ -234,4 +234,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

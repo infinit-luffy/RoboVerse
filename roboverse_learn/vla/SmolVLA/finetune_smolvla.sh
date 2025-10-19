@@ -2,7 +2,7 @@
 
 # Fine-tuning script for SmolVLA on RoboVerse dataset
 # Supports single-GPU, multi-GPU, and multi-node training via Hugging Face Accelerate
-# 
+#
 # Usage:
 #   Single GPU:   bash finetune_smolvla.sh
 #   Multi-GPU:    accelerate launch --num_processes=<N> finetune_smolvla.sh
@@ -173,14 +173,14 @@ Multi-GPU Training Instructions:
 
 2. Single Machine, Multiple GPUs:
    accelerate launch --num_processes=<NUM_GPUS> finetune_smolvla.sh
-   
+
    Example for 4 GPUs:
    accelerate launch --num_processes=4 finetune_smolvla.sh
 
 3. Multiple Machines (Multi-node):
    a) First, configure accelerate on each node:
       accelerate config
-      
+
    b) Then launch on each node:
       accelerate launch --num_machines=<N> \
                        --machine_rank=<RANK> \

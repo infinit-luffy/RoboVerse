@@ -641,7 +641,9 @@ class IsaacsimHandler(BaseSimHandler):
         else:
             collision_props = None
 
-        if hasattr(obj, "default_density") and obj.default_density is not None:
+        if obj.mass is not None:
+            mass_props = sim_utils.MassPropertiesCfg(mass=obj.mass)
+        elif hasattr(obj, "default_density") and obj.default_density is not None:
             mass_props = sim_utils.MassPropertiesCfg(density=obj.default_density)
         else:
             mass_props = sim_utils.MassPropertiesCfg()

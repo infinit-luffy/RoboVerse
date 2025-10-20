@@ -61,30 +61,30 @@ class FrankaShadowHandRightCfg(BaseDexCfg):
     force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
 
     actuators: dict[str, BaseActuatorCfg] = {
-        "FFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "FFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "LFJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "MFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "RFJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ1": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ2": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ3": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ4": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "THJ5": BaseActuatorCfg(stiffness=shadow_hand_finger_stiffness, damping=shadow_hand_finger_damping),
-        "WRJ1": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
-        "WRJ2": BaseActuatorCfg(stiffness=shadow_hand_wrist_stiffness, damping=shadow_hand_wrist_damping),
+        "FFJ1": BaseActuatorCfg(),
+        "FFJ2": BaseActuatorCfg(),
+        "FFJ3": BaseActuatorCfg(),
+        "FFJ4": BaseActuatorCfg(),
+        "LFJ1": BaseActuatorCfg(),
+        "LFJ2": BaseActuatorCfg(),
+        "LFJ3": BaseActuatorCfg(),
+        "LFJ4": BaseActuatorCfg(),
+        "LFJ5": BaseActuatorCfg(),
+        "MFJ1": BaseActuatorCfg(),
+        "MFJ2": BaseActuatorCfg(),
+        "MFJ3": BaseActuatorCfg(),
+        "MFJ4": BaseActuatorCfg(),
+        "RFJ1": BaseActuatorCfg(),
+        "RFJ2": BaseActuatorCfg(),
+        "RFJ3": BaseActuatorCfg(),
+        "RFJ4": BaseActuatorCfg(),
+        "THJ1": BaseActuatorCfg(),
+        "THJ2": BaseActuatorCfg(),
+        "THJ3": BaseActuatorCfg(),
+        "THJ4": BaseActuatorCfg(),
+        "THJ5": BaseActuatorCfg(),
+        "WRJ1": BaseActuatorCfg(),
+        "WRJ2": BaseActuatorCfg(),
         "panda_joint1": BaseActuatorCfg(stiffness=1e5, damping=1e4, velocity_limit=2.175),
         "panda_joint2": BaseActuatorCfg(stiffness=1e4, damping=1e3, velocity_limit=2.175),
         "panda_joint3": BaseActuatorCfg(stiffness=1e5, damping=5e3, velocity_limit=2.175),
@@ -182,6 +182,35 @@ class FrankaShadowHandRightCfg(BaseDexCfg):
             self.actuators["RFJ1"].fully_actuated = False
             self.actuators["MFJ1"].fully_actuated = False
             self.actuators["FFJ1"].fully_actuated = False
+        for name in ["WRJ1", "WRJ2"]:
+            self.actuators[name].stiffness = self.shadow_hand_wrist_stiffness
+            self.actuators[name].damping = self.shadow_hand_wrist_damping
+        for name in [
+            "FFJ1",
+            "FFJ2",
+            "FFJ3",
+            "FFJ4",
+            "LFJ1",
+            "LFJ2",
+            "LFJ3",
+            "LFJ4",
+            "LFJ5",
+            "MFJ1",
+            "MFJ2",
+            "MFJ3",
+            "MFJ4",
+            "RFJ1",
+            "RFJ2",
+            "RFJ3",
+            "RFJ4",
+            "THJ1",
+            "THJ2",
+            "THJ3",
+            "THJ4",
+            "THJ5",
+        ]:
+            self.actuators[name].stiffness = self.shadow_hand_finger_stiffness
+            self.actuators[name].damping = self.shadow_hand_finger_damping
         super().__post_init__()
         self.load_robot_for_ik()
 

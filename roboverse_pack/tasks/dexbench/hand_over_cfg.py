@@ -65,6 +65,7 @@ class HandOverCfg(BaseRLTaskCfg):
             isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
             use_vhacd=True,
             color=(1.0, 0.0, 0.0),
+            mass=0.122,
         ),
     }
     objects = []
@@ -91,7 +92,7 @@ class HandOverCfg(BaseRLTaskCfg):
         "isaacgym"
     )
     dist_reward_scale = 50.0
-    action_penalty_scale = 0
+    action_penalty_scale = 0.002
     success_tolerance = 0.1
     reach_goal_bonus = 250.0
     throw_bonus = 10.0
@@ -128,6 +129,7 @@ class HandOverCfg(BaseRLTaskCfg):
                 FrankaShadowHandRightCfg(
                     use_vhacd=False,
                     hand_controller="dof_pos",
+                    shadow_hand_wrist_stiffness=10 if self.sim == "isaacsim" else 5.0,
                     isaacgym_read_mjcf=True,
                     name="right_hand",
                     hand_translation_scale=0.02,
@@ -137,6 +139,7 @@ class HandOverCfg(BaseRLTaskCfg):
                 FrankaShadowHandLeftCfg(
                     use_vhacd=False,
                     hand_controller="dof_pos",
+                    shadow_hand_wrist_stiffness=10 if self.sim == "isaacsim" else 5.0,
                     isaacgym_read_mjcf=True,
                     name="left_hand",
                     hand_translation_scale=0.02,
@@ -749,14 +752,14 @@ def compute_task_reward(
 
     # Find out which envs hit the goal and update successes count
     goal_resets = torch.where(
-        torch.abs(goal_dist) <= 0.05,
+        torch.abs(goal_dist) <= 0.03,
         torch.ones_like(reset_goal_buf),
         reset_goal_buf,
     )
     success_buf = torch.where(
         success_buf == 0,
         torch.where(
-            torch.abs(goal_dist) <= 0.05,
+            torch.abs(goal_dist) <= 0.03,
             torch.ones_like(success_buf),
             success_buf,
         ),

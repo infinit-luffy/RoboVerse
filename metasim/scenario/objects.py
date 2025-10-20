@@ -35,6 +35,8 @@ class _FileBasedMixin:
     scale: float | tuple[float, float, float] = 1.0
     """Object scaling (in scalar) for the object, default is 1.0"""
 
+    mass: float | None = None
+
     isaacgym_read_mjcf: bool = False
     """By default, Isaac Gym will read from URDF files. If this is set to True, Isaac Gym will read from MJCF files."""
 

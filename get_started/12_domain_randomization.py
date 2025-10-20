@@ -74,7 +74,7 @@ def log_randomization_header(randomizer_name: str, description: str = ""):
         log.info(randomizer_name)
 
 
-def run_domain_randomization(args):
+def run_domain_randomization(args, file_name):
     """Demonstrate domain randomization with specified simulator."""
     log.info(f"=== {args.sim.upper()} Domain Randomization Demo ===")
 
@@ -107,7 +107,7 @@ def run_domain_randomization(args):
             args.enable_walls = True
             args.enable_ceiling = False
             args.enable_table = True
-            args.camera_scenario = "combined"  # Use all camera randomization features
+            args.lighting_scenario = "indoor_room"
             disable_all_randomizers = False
 
         elif args.eval_level == "level3":
@@ -117,7 +117,7 @@ def run_domain_randomization(args):
             args.enable_walls = True
             args.enable_ceiling = False
             args.enable_table = True
-            args.lighting_scenario = "indoor_room"  # Rich lighting variations
+            args.lighting_scenario = "indoor_room" 
             args.camera_scenario = "combined"
             disable_all_randomizers = False
 
@@ -412,9 +412,12 @@ def run_domain_randomization(args):
 
     # Initialize video recording
     os.makedirs("get_started/output", exist_ok=True)
-    obs_saver = ObsSaver(video_path=f"get_started/output/12_domain_randomization_{args.sim}.mp4")
+    
+
+    obs_saver = ObsSaver(video_path=f"get_started/output/{file_name}")
+
     obs = handler.get_states(mode="tensor")
-    obs_saver.add(obs)
+    # obs_saver.add(obs)
 
     # Initialize object randomizers using unified approach
     log.info("================================================")
@@ -981,6 +984,7 @@ def run_domain_randomization(args):
         log.debug(f"Simulation step {step}")
         handler.simulate()
         obs = handler.get_states(mode="tensor")
+
         obs_saver.add(obs)
 
         # Apply randomization every 10 steps to show material and lighting changes very frequently
@@ -1006,7 +1010,7 @@ def run_domain_randomization(args):
                         log.info("  Applied scene material randomization")
 
                     # Lighting randomization (level3 only)
-                    if args.eval_level == "level3" or (
+                    if args.eval_level in ["level2", "level3"] or (
                         args.eval_level == "none" and args.lighting_scenario != "default"
                     ):
                         for randomizer in light_randomizers:
@@ -1014,7 +1018,7 @@ def run_domain_randomization(args):
                         log.info(f"  Applied light randomization ({len(light_randomizers)} lights)")
 
                     # Camera randomization (level2+)
-                    if args.eval_level in ["level2", "level3"] or (args.eval_level == "none"):
+                    if args.eval_level in ["level3"] or (args.eval_level == "none"):
                         for randomizer in camera_randomizers:
                             randomizer()
                         log.info(f"  Applied camera randomization ({len(camera_randomizers)} cameras)")
@@ -1133,11 +1137,18 @@ def main():
     log.info("   Manual:  --enable-floor --enable-walls --enable-table")
     log.info("")
 
+
+    if args.eval_level == "none":
+        file_name = f"12_domain_randomization_{args.sim}.mp4"
+    else:
+        file_name = f"12_domain_randomization_{args.sim}_{args.eval_level}.mp4"
+
     # Run simulation
-    run_domain_randomization(args)
+    run_domain_randomization(args, file_name)
 
     log.info("\nDemo completed!")
-    log.info(f"Video saved to: get_started/output/12_domain_randomization_{args.sim}.mp4")
+    # log.info(f"Video saved to: get_started/output/{file_name}")
+    log.info(f"Video saved to: get_started/output/{file_name}")
 
 
 if __name__ == "__main__":

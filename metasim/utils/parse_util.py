@@ -9,7 +9,7 @@ from pathlib import Path
 
 def extract_mesh_paths_from_urdf(urdf_file_path):
     """Extract all mesh file paths from a URDF XML file and convert them to absolute paths.
-    
+
     Also recursively extracts material (.mtl) and texture files referenced by OBJ meshes.
 
     Args:
@@ -51,65 +51,65 @@ def extract_mesh_paths_from_urdf(urdf_file_path):
     # Extract material and texture files from OBJ meshes
     additional_paths = []
     for mesh_path in mesh_paths:
-        if mesh_path.endswith('.obj'):
+        if mesh_path.endswith(".obj"):
             additional_paths.extend(_extract_obj_dependencies(mesh_path))
-    
+
     mesh_paths.extend(additional_paths)
     return mesh_paths
 
 
 def _extract_obj_dependencies(obj_file_path):
     """Extract material (.mtl) and texture file paths referenced by an OBJ file.
-    
+
     Returns paths even if files don't exist locally - the download system will handle it.
-    
+
     Args:
         obj_file_path (str): Path to the OBJ file
-        
+
     Returns:
         list: List of absolute paths to material and texture files
     """
     dependencies = []
-    
+
     if not os.path.exists(obj_file_path):
         return dependencies
-    
+
     obj_dir = os.path.dirname(obj_file_path)
-    
+
     try:
-        with open(obj_file_path, 'r') as f:
+        with open(obj_file_path) as f:
             for line in f:
                 line = line.strip()
-                if line.startswith('mtllib '):
+                if line.startswith("mtllib "):
                     mtl_filename = line[7:].strip()
                     mtl_path = os.path.normpath(os.path.join(obj_dir, mtl_filename))
                     dependencies.append(mtl_path)
-                    
+
                     if os.path.exists(mtl_path):
                         dependencies.extend(_extract_mtl_textures(mtl_path))
     except Exception:
         pass
-    
+
     return dependencies
 
 
 def _extract_mtl_textures(mtl_file_path):
     """Extract texture file paths referenced by an MTL file.
-    
+
     Args:
         mtl_file_path (str): Path to the MTL file
-        
+
     Returns:
         list: List of absolute paths to texture files
     """
     textures = []
     mtl_dir = os.path.dirname(mtl_file_path)
-    
+
     try:
-        with open(mtl_file_path, 'r') as f:
+        with open(mtl_file_path) as f:
             for line in f:
                 line = line.strip()
-                if line.startswith('map_'):
+                if line.startswith("map_"):
                     parts = line.split(None, 1)
                     if len(parts) == 2:
                         texture_filename = parts[1].strip()
@@ -117,7 +117,7 @@ def _extract_mtl_textures(mtl_file_path):
                         textures.append(texture_path)
     except Exception:
         pass
-    
+
     return textures
 
 

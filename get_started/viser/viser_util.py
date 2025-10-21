@@ -59,7 +59,7 @@ def normalize_quaternion(quat: list[float]) -> list[float]:
 
 def patch_urdf_mesh_paths_to_absolute(urdf_path: str) -> str:
     """Convert relative mesh paths in URDF to absolute paths.
-    
+
     Also removes non-mesh visual geometries (box, sphere, cylinder) from visual elements
     when a mesh visual exists, to avoid rendering collision approximations as visuals.
 
@@ -73,7 +73,7 @@ def patch_urdf_mesh_paths_to_absolute(urdf_path: str) -> str:
     tree = ET.parse(urdf_path_obj)
     root = tree.getroot()
     changed = False
-    
+
     # Convert mesh paths to absolute paths first
     for mesh in root.findall(".//mesh"):
         filename = mesh.get("filename")
@@ -106,7 +106,7 @@ def patch_urdf_mesh_paths_to_absolute(urdf_path: str) -> str:
             changed = True
         else:
             logger.warning(f"[URDF-patch] mesh file not found for {filename}")
-    
+
     # Remove non-mesh visual geometries ONLY if a mesh visual exists in the same link
     # This avoids rendering collision approximations while keeping them as fallback
     for link in root.findall(".//link"):
@@ -118,7 +118,7 @@ def patch_urdf_mesh_paths_to_absolute(urdf_path: str) -> str:
             if geometry is not None and geometry.find("mesh") is not None:
                 has_mesh_visual = True
                 break
-        
+
         # Only remove non-mesh visuals if we have at least one mesh visual
         if has_mesh_visual:
             visuals_to_remove = []
@@ -126,18 +126,22 @@ def patch_urdf_mesh_paths_to_absolute(urdf_path: str) -> str:
                 geometry = visual.find("geometry")
                 if geometry is not None:
                     # Check if geometry contains box, sphere, or cylinder (not mesh)
-                    if (geometry.find("box") is not None or 
-                        geometry.find("sphere") is not None or 
-                        geometry.find("cylinder") is not None):
+                    if (
+                        geometry.find("box") is not None
+                        or geometry.find("sphere") is not None
+                        or geometry.find("cylinder") is not None
+                    ):
                         visuals_to_remove.append(visual)
-            
+
             # Remove the identified visual elements
             if visuals_to_remove:
-                logger.info(f"[URDF-patch] Link '{link_name}': Has mesh visual, removing {len(visuals_to_remove)} non-mesh visual(s)")
+                logger.info(
+                    f"[URDF-patch] Link '{link_name}': Has mesh visual, removing {len(visuals_to_remove)} non-mesh visual(s)"
+                )
                 for visual in visuals_to_remove:
                     link.remove(visual)
                     changed = True
-    
+
     if changed:
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".urdf")
         tree.write(tmp.name)
@@ -228,7 +232,7 @@ class ViserVisualizer:
             from viser.extras import ViserUrdf
 
             urdf_obj, patched_urdf_path = load_urdf_with_patch(urdf_path)
-            
+
             if root_node_name is None:
                 root_node_name = f"/{name}"
             urdf_handle = ViserUrdf(
@@ -421,7 +425,7 @@ class ViserVisualizer:
                 logger.debug(f"[Viser] {name} joint order: {joint_names}")
                 logger.debug(f"[Viser] {name} dof_pos: {dof_pos_list}")
                 urdf_handle.update_cfg(np.array(dof_pos_list, dtype=np.float32))
-                
+
                 # Store initial configuration for robots (for reset functionality)
                 if isinstance(cfg, BaseRobotCfg):
                     if isinstance(dof_pos, dict):
@@ -664,7 +668,7 @@ class ViserVisualizer:
         has_saved_positions = robot_name in self._current_joint_positions and len(
             self._current_joint_positions[robot_name]
         ) == len(joint_limits)
-        
+
         # Check if we have initial config from demo (should preserve this!)
         has_demo_initial_config = robot_name in self._initial_configs
 
@@ -818,7 +822,7 @@ class ViserVisualizer:
                 upper = upper if upper is not None else np.pi
                 value = max(lower, min(upper, value))
                 sliders[i].value = float(value)
-    
+
     def update_robot_joint_config_direct(self, robot_name: str, joint_config: dict):
         """
         Update robot joint configuration directly without sliders.
@@ -831,16 +835,16 @@ class ViserVisualizer:
         if robot_name not in self._urdf_handles:
             logger.warning(f"Robot {robot_name} not found in URDF handles")
             return False
-        
+
         urdf_handle = self._urdf_handles[robot_name]
         if urdf_handle is None:
             logger.warning(f"URDF handle for {robot_name} is None")
             return False
-        
+
         try:
             # Get joint names from URDF
             joint_names = urdf_handle.get_actuated_joint_names()
-            
+
             # Convert dict config to list
             joint_values = []
             for joint_name in joint_names:
@@ -849,15 +853,16 @@ class ViserVisualizer:
                 else:
                     # If joint not in config, use 0.0 as default
                     joint_values.append(0.0)
-            
+
             # Update URDF directly
             urdf_handle.update_cfg(np.array(joint_values, dtype=np.float32))
             logger.info(f"Updated robot {robot_name} joints directly: {len(joint_values)} joints")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error updating robot joints directly: {e}")
             import traceback
+
             traceback.print_exc()
             return False
 
@@ -2608,7 +2613,7 @@ class ViserVisualizer:
                                 self.update_ik_target_marker(selected_robot, default_pos, default_quat)
 
                                 ik_solve_status.value = "Target reset to default"
-                            
+
                             def reset_robot_joints():
                                 """Reset robot joints to initial configuration."""
                                 try:

@@ -41,10 +41,10 @@ def check_and_download_single(filepath: str):
         hf_exists = hf_api.file_exists(REPO_ID, os.path.relpath(filepath, LOCAL_DIR), repo_type="dataset")
 
         if not hf_exists:
-            if filepath.endswith(('.mtl', '.png', '.jpg', '.jpeg', '.bmp', '.tga')):
+            if filepath.endswith((".mtl", ".png", ".jpg", ".jpeg", ".bmp", ".tga")):
                 log.warning(f"Optional file {filepath} not found in HuggingFace dataset, skipping.")
                 return
-            
+
             raise Exception(
                 f"File {filepath} neither exists in the local directory nor exists in the huggingface dataset. Please"
                 " report this issue to the developers."

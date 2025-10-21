@@ -3,7 +3,7 @@
 This unified demo replaces multiple separate demos and supports:
 - Static/Dynamic scene visualization
 - Joint control
-- IK control  
+- IK control
 - Trajectory playback
 - Camera controls
 
@@ -69,30 +69,30 @@ class Args:
 
     num_envs: int = 1
     """Number of parallel environments."""
-    
+
     headless: bool = True
     """Use viser for visualization, not simulator's viewer."""
 
     ## Control modes
     dynamic: bool = False
     """Enable dynamic simulation with IK motion."""
-    
+
     enable_joint_control: bool = False
     """Enable interactive joint control GUI."""
-    
+
     enable_ik_control: bool = False
     """Enable interactive IK control GUI."""
-    
+
     enable_trajectory: bool = False
     """Enable trajectory playback GUI."""
-    
+
     trajectory_path: str | None = None
     """Path to trajectory file to load (e.g., .pkl.gz file). If None, no trajectory is loaded."""
-    
+
     ## IK solver (only used if dynamic=True)
     solver: Literal["curobo", "pyroki"] = "pyroki"
     """IK solver to use for dynamic motion."""
-    
+
     ## Recording (only used if dynamic=True)
     save_video: bool = False
     """Save video of dynamic simulation."""
@@ -104,12 +104,12 @@ class Args:
 
 def extract_states_from_obs(obs, handler, key):
     """Extract states from observation tensor.
-    
+
     Args:
         obs: TensorState observation
         handler: Simulator handler
         key: "objects" or "robots"
-        
+
     Returns:
         dict[name] = {"pos": ..., "rot": ..., "dof_pos": ...}
     """
@@ -323,10 +323,11 @@ def main():
     if args.enable_trajectory:
         visualizer.enable_trajectory_playback()
         log.info("Trajectory playback enabled")
-        
+
         # Load trajectory if path is provided
         if args.trajectory_path:
             import os
+
             if os.path.exists(args.trajectory_path):
                 log.info(f"Loading trajectory from: {args.trajectory_path}")
                 success = visualizer.load_trajectory(args.trajectory_path)
@@ -352,7 +353,7 @@ def main():
     # ========================================================================
     if args.dynamic:
         log.info("Starting dynamic simulation with IK motion...")
-        
+
         # Setup video recording if requested
         obs_saver = None
         if args.save_video:
@@ -360,7 +361,7 @@ def main():
             obs_saver.add(obs)
 
         robot = scenario.robots[0]
-        
+
         for step in range(200):
             states = handler.get_states(mode="tensor")
 
@@ -403,7 +404,7 @@ def main():
             # Process gripper command (fixed open position)
             gripper_binary = torch.ones(scenario.num_envs, device="cuda:0")  # all open
             gripper_widths = process_gripper_command(gripper_binary, robot, "cuda:0")
-            
+
             # Compose full joint command
             actions = ik_solver.compose_joint_action(q_solution, gripper_widths, curr_robot_q, return_dict=True)
 
@@ -444,32 +445,32 @@ def main():
     log.info("=" * 70)
     log.info("Viser Demo Ready! Open http://localhost:8080 in your browser")
     log.info("=" * 70)
-    
+
     mode_description = "Static Scene" if not args.dynamic else "Dynamic Scene (simulation completed)"
     log.info(f"Mode: {mode_description}")
-    
+
     log.info("\nEnabled Features:")
-    log.info(f"  • Camera Controls: Always enabled")
+    log.info("  • Camera Controls: Always enabled")
     if args.enable_joint_control:
-        log.info(f"  • Joint Control: Use sliders to control robot joints")
+        log.info("  • Joint Control: Use sliders to control robot joints")
     if args.enable_ik_control:
-        log.info(f"  • IK Control: Use target position/orientation controls")
+        log.info("  • IK Control: Use target position/orientation controls")
     if args.enable_trajectory:
-        log.info(f"  • Trajectory Playback: Load and play trajectories")
-    
+        log.info("  • Trajectory Playback: Load and play trajectories")
+
     if not any([args.enable_joint_control, args.enable_ik_control, args.enable_trajectory]):
         log.info("  • No interactive controls enabled")
         log.info("    Tip: Use --enable-joint-control, --enable-ik-control, or --enable-trajectory")
-    
+
     log.info("\nUseful Commands:")
     log.info("  • Rotate view: Left mouse drag")
     log.info("  • Pan view: Right mouse drag or Shift+Left drag")
     log.info("  • Zoom: Scroll wheel")
-    
+
     if args.enable_trajectory:
         log.info("\nTo load trajectory:")
         log.info("  visualizer.load_trajectory('path/to/trajectory.pkl.gz')")
-    
+
     log.info("=" * 70)
 
     # Keep running
@@ -482,4 +483,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

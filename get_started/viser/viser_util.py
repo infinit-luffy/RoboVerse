@@ -59,6 +59,9 @@ def normalize_quaternion(quat: list[float]) -> list[float]:
 
 def patch_urdf_mesh_paths_to_absolute(urdf_path: str) -> str:
     """Convert relative mesh paths in URDF to absolute paths.
+    
+    Also removes non-mesh visual geometries (box, sphere, cylinder) from visual elements
+    when a mesh visual exists, to avoid rendering collision approximations as visuals.
 
     Args:
         urdf_path: Path to the URDF file
@@ -70,6 +73,8 @@ def patch_urdf_mesh_paths_to_absolute(urdf_path: str) -> str:
     tree = ET.parse(urdf_path_obj)
     root = tree.getroot()
     changed = False
+    
+    # Convert mesh paths to absolute paths first
     for mesh in root.findall(".//mesh"):
         filename = mesh.get("filename")
         if not filename:
@@ -101,6 +106,38 @@ def patch_urdf_mesh_paths_to_absolute(urdf_path: str) -> str:
             changed = True
         else:
             logger.warning(f"[URDF-patch] mesh file not found for {filename}")
+    
+    # Remove non-mesh visual geometries ONLY if a mesh visual exists in the same link
+    # This avoids rendering collision approximations while keeping them as fallback
+    for link in root.findall(".//link"):
+        link_name = link.get("name", "unnamed")
+        # Check if this link has any mesh visual
+        has_mesh_visual = False
+        for visual in link.findall("visual"):
+            geometry = visual.find("geometry")
+            if geometry is not None and geometry.find("mesh") is not None:
+                has_mesh_visual = True
+                break
+        
+        # Only remove non-mesh visuals if we have at least one mesh visual
+        if has_mesh_visual:
+            visuals_to_remove = []
+            for visual in link.findall("visual"):
+                geometry = visual.find("geometry")
+                if geometry is not None:
+                    # Check if geometry contains box, sphere, or cylinder (not mesh)
+                    if (geometry.find("box") is not None or 
+                        geometry.find("sphere") is not None or 
+                        geometry.find("cylinder") is not None):
+                        visuals_to_remove.append(visual)
+            
+            # Remove the identified visual elements
+            if visuals_to_remove:
+                logger.info(f"[URDF-patch] Link '{link_name}': Has mesh visual, removing {len(visuals_to_remove)} non-mesh visual(s)")
+                for visual in visuals_to_remove:
+                    link.remove(visual)
+                    changed = True
+    
     if changed:
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".urdf")
         tree.write(tmp.name)
@@ -191,6 +228,7 @@ class ViserVisualizer:
             from viser.extras import ViserUrdf
 
             urdf_obj, patched_urdf_path = load_urdf_with_patch(urdf_path)
+            
             if root_node_name is None:
                 root_node_name = f"/{name}"
             urdf_handle = ViserUrdf(
@@ -317,9 +355,6 @@ class ViserVisualizer:
         # URDF visualization
         if isinstance(cfg, (RigidObjCfg, ArticulationObjCfg, BaseRobotCfg)) and getattr(cfg, "urdf_path", None):
             scale = cfg.scale
-            # if isinstance(scale, tuple):
-            #     scale = scale[0]
-
             urdf_obj, patched_urdf_path = load_urdf_with_patch(cfg.urdf_path)
 
             # base link offset
@@ -386,6 +421,15 @@ class ViserVisualizer:
                 logger.debug(f"[Viser] {name} joint order: {joint_names}")
                 logger.debug(f"[Viser] {name} dof_pos: {dof_pos_list}")
                 urdf_handle.update_cfg(np.array(dof_pos_list, dtype=np.float32))
+                
+                # Store initial configuration for robots (for reset functionality)
+                if isinstance(cfg, BaseRobotCfg):
+                    if isinstance(dof_pos, dict):
+                        self._initial_configs[name] = dof_pos.copy()
+                    else:
+                        # Convert list to dict using joint names
+                        self._initial_configs[name] = {jn: val for jn, val in zip(joint_names, dof_pos_list)}
+                    logger.info(f"Stored initial config for robot {name}")
 
         # primitive item visualization
         elif isinstance(cfg, PrimitiveCubeCfg):
@@ -620,6 +664,9 @@ class ViserVisualizer:
         has_saved_positions = robot_name in self._current_joint_positions and len(
             self._current_joint_positions[robot_name]
         ) == len(joint_limits)
+        
+        # Check if we have initial config from demo (should preserve this!)
+        has_demo_initial_config = robot_name in self._initial_configs
 
         def make_update_callback(robot_name, slider_list):
             def update_callback(_):
@@ -638,11 +685,22 @@ class ViserVisualizer:
             lower = lower if lower is not None else -np.pi
             upper = upper if upper is not None else np.pi
 
-            # Use saved position if available, otherwise compute initial position
+            # Priority: saved positions > demo initial config > computed default
             if has_saved_positions:
+                # Use previously saved position
                 initial_pos = self._current_joint_positions[robot_name][i]
                 # Clamp to current joint limits in case they changed
                 initial_pos = max(lower, min(upper, initial_pos))
+            elif has_demo_initial_config:
+                # Use initial config from demo file (stored when robot was visualized)
+                demo_config = self._initial_configs[robot_name]
+                if isinstance(demo_config, dict) and joint_name in demo_config:
+                    initial_pos = demo_config[joint_name]
+                elif isinstance(demo_config, list) and i < len(demo_config):
+                    initial_pos = demo_config[i]
+                else:
+                    # Fallback to computed default
+                    initial_pos = 0.0 if lower < -0.1 and upper > 0.1 else (lower + upper) / 2.0
             else:
                 # Set initial position to middle of range, or 0 if range includes 0
                 initial_pos = 0.0 if lower < -0.1 and upper > 0.1 else (lower + upper) / 2.0
@@ -666,27 +724,33 @@ class ViserVisualizer:
         # Store slider information
         self._joint_sliders[robot_name] = slider_handles
         self._joint_limits[robot_name] = joint_limits
-        self._initial_configs[robot_name] = initial_config
+        # Note: Preserve demo initial config if it already exists
+        if not has_demo_initial_config:
+            # Convert list to dict for consistency
+            self._initial_configs[robot_name] = {jn: val for jn, val in zip(joint_names, initial_config)}
 
         # Set initial configuration and save current positions
         if urdf_handle:
             urdf_handle.update_cfg(np.array(initial_config))
 
-        # Save current joint positions for persistence
+        # Save current joint positions for persistence (as list for backward compatibility)
+        # Note: We don't save this as dict to avoid confusion with _initial_configs
         self._current_joint_positions[robot_name] = initial_config
 
         status_msg = f"Created {len(slider_handles)} joint sliders for {robot_name}"
         if has_saved_positions:
             status_msg += " (restored previous positions)"
+        elif has_demo_initial_config:
+            status_msg += " (using demo initial positions)"
         else:
-            status_msg += " (initial positions)"
+            status_msg += " (computed default positions)"
 
         logger.info(status_msg)
         return slider_handles
 
     def reset_robot_joints(self, robot_name: str):
         """
-        Reset robot joints to initial configuration.
+        Reset robot joints to initial configuration from demo.
 
         Args:
             robot_name: Name of the robot
@@ -700,17 +764,29 @@ class ViserVisualizer:
             return
 
         sliders = self._joint_sliders[robot_name]
-        initial_config = self._initial_configs[robot_name]
+        initial_config = self._initial_configs[robot_name]  # This is a dict from demo
+        joint_limits = self._joint_limits[robot_name]
+        joint_names = list(joint_limits.keys())
 
-        # Update slider values
-        for slider, init_value in zip(sliders, initial_config):
-            slider.value = init_value
+        # Update slider values - initial_config is a dict, need to extract values in order
+        if isinstance(initial_config, dict):
+            for slider, joint_name in zip(sliders, joint_names):
+                if joint_name in initial_config:
+                    slider.value = initial_config[joint_name]
+                    logger.debug(f"Reset {joint_name} to {initial_config[joint_name]}")
+                else:
+                    logger.warning(f"Joint {joint_name} not found in initial config")
+        else:
+            # If it's a list (legacy support)
+            for slider, init_value in zip(sliders, initial_config):
+                slider.value = init_value
 
-        # Clear saved positions so next setup uses initial config
+        # Clear saved positions so they don't override demo initial config on next setup
         if robot_name in self._current_joint_positions:
             del self._current_joint_positions[robot_name]
+            logger.info(f"Cleared current joint positions for {robot_name}")
 
-        logger.info(f"Reset joints for robot {robot_name} to initial configuration")
+        logger.info(f"Reset joints for robot {robot_name} to demo initial configuration")
 
     def update_robot_joint_config(self, robot_name: str, joint_config: dict):
         """
@@ -742,11 +818,53 @@ class ViserVisualizer:
                 upper = upper if upper is not None else np.pi
                 value = max(lower, min(upper, value))
                 sliders[i].value = float(value)
+    
+    def update_robot_joint_config_direct(self, robot_name: str, joint_config: dict):
+        """
+        Update robot joint configuration directly without sliders.
+        This is useful for IK control or programmatic updates when joint control GUI is not active.
+
+        Args:
+            robot_name: Name of the robot
+            joint_config: Dictionary of joint_name -> value
+        """
+        if robot_name not in self._urdf_handles:
+            logger.warning(f"Robot {robot_name} not found in URDF handles")
+            return False
+        
+        urdf_handle = self._urdf_handles[robot_name]
+        if urdf_handle is None:
+            logger.warning(f"URDF handle for {robot_name} is None")
+            return False
+        
+        try:
+            # Get joint names from URDF
+            joint_names = urdf_handle.get_actuated_joint_names()
+            
+            # Convert dict config to list
+            joint_values = []
+            for joint_name in joint_names:
+                if joint_name in joint_config:
+                    joint_values.append(joint_config[joint_name])
+                else:
+                    # If joint not in config, use 0.0 as default
+                    joint_values.append(0.0)
+            
+            # Update URDF directly
+            urdf_handle.update_cfg(np.array(joint_values, dtype=np.float32))
+            logger.info(f"Updated robot {robot_name} joints directly: {len(joint_values)} joints")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating robot joints directly: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def clear_joint_control(self, robot_name: str | None = None):
         """
         Clear joint control sliders for a specific robot or all robots.
-        This only clears GUI elements but preserves joint positions.
+        This only clears GUI elements but preserves joint positions and demo initial configs.
 
         Args:
             robot_name: Name of the robot to clear. If None, clear all robots.
@@ -758,11 +876,10 @@ class ViserVisualizer:
                 del self._joint_sliders[robot]
             if robot in self._joint_limits:
                 del self._joint_limits[robot]
-            if robot in self._initial_configs:
-                del self._initial_configs[robot]
+            # Note: _initial_configs stores the demo's initial pose and should persist
             if robot in self._joint_folders:
                 del self._joint_folders[robot]
-            # Keep self._current_joint_positions[robot] for persistence
+            # Keep self._current_joint_positions[robot] for persistence across setup/clear cycles
 
         if robots_to_clear:
             logger.info(f"Cleared joint control GUI for: {', '.join(robots_to_clear)} (positions preserved)")
@@ -1967,32 +2084,46 @@ class ViserVisualizer:
                         joint_status.value = f"Reset joints for {selected_robot} to initial position"
                         logger.info(f"Reset joints for {selected_robot}")
                     else:
-                        # If no joint control exists, try to reset robot directly to default pose
+                        # If no joint control exists (cleared), try to reset robot directly
                         if self._urdf_handles.get(selected_robot):
                             try:
-                                # Get joint info to determine initial configuration
-                                joint_info = self.get_robot_joint_info(selected_robot)
-                                if joint_info:
-                                    _, joint_limits, _ = joint_info
-                                    # Compute default positions
-                                    default_config = []
-                                    for joint_name, (lower, upper) in joint_limits.items():
-                                        lower = lower if lower is not None else -np.pi
-                                        upper = upper if upper is not None else np.pi
-                                        init_pos = 0.0 if lower < -0.1 and upper > 0.1 else (lower + upper) / 2.0
-                                        default_config.append(init_pos)
-
-                                    # Apply default configuration
-                                    self._urdf_handles[selected_robot].update_cfg(np.array(default_config))
-
-                                    # Clear saved positions
-                                    if selected_robot in self._current_joint_positions:
-                                        del self._current_joint_positions[selected_robot]
-
-                                    joint_status.value = f"Reset {selected_robot} to default pose (no control panel)"
-                                    logger.info(f"Reset {selected_robot} to default pose")
+                                # Priority: Use demo initial config if available
+                                if selected_robot in self._initial_configs:
+                                    # Use stored initial config from demo
+                                    initial_config = self._initial_configs[selected_robot]
+                                    success = self.update_robot_joint_config_direct(selected_robot, initial_config)
+                                    if success:
+                                        # Clear saved positions
+                                        if selected_robot in self._current_joint_positions:
+                                            del self._current_joint_positions[selected_robot]
+                                        joint_status.value = f"Reset {selected_robot} to demo initial pose"
+                                        logger.info(f"Reset {selected_robot} to demo initial pose (no control panel)")
+                                    else:
+                                        joint_status.value = f"Failed to reset {selected_robot}"
                                 else:
-                                    joint_status.value = f"Cannot reset {selected_robot} - no joint info available"
+                                    # Fallback: compute default positions from joint limits
+                                    joint_info = self.get_robot_joint_info(selected_robot)
+                                    if joint_info:
+                                        _, joint_limits, _ = joint_info
+                                        # Compute default positions
+                                        default_config = []
+                                        for joint_name, (lower, upper) in joint_limits.items():
+                                            lower = lower if lower is not None else -np.pi
+                                            upper = upper if upper is not None else np.pi
+                                            init_pos = 0.0 if lower < -0.1 and upper > 0.1 else (lower + upper) / 2.0
+                                            default_config.append(init_pos)
+
+                                        # Apply default configuration
+                                        self._urdf_handles[selected_robot].update_cfg(np.array(default_config))
+
+                                        # Clear saved positions
+                                        if selected_robot in self._current_joint_positions:
+                                            del self._current_joint_positions[selected_robot]
+
+                                        joint_status.value = f"Reset {selected_robot} to computed default pose"
+                                        logger.info(f"Reset {selected_robot} to computed default pose")
+                                    else:
+                                        joint_status.value = f"Cannot reset {selected_robot} - no joint info available"
                             except Exception as e:
                                 logger.error(f"Failed to reset {selected_robot}: {e}")
                                 joint_status.value = f"Failed to reset {selected_robot}: {e}"
@@ -2390,6 +2521,7 @@ class ViserVisualizer:
                             # Control buttons
                             solve_ik_btn = client.gui.add_button("Solve & Apply IK")
                             reset_target_btn = client.gui.add_button("Reset Target")
+                            reset_robot_btn = client.gui.add_button("Reset Robot Joints")
 
                             # Status display
                             ik_solve_status = client.gui.add_text("IK Solve Status", initial_value="Ready")
@@ -2476,10 +2608,30 @@ class ViserVisualizer:
                                 self.update_ik_target_marker(selected_robot, default_pos, default_quat)
 
                                 ik_solve_status.value = "Target reset to default"
+                            
+                            def reset_robot_joints():
+                                """Reset robot joints to initial configuration."""
+                                try:
+                                    if selected_robot in self._initial_configs:
+                                        initial_config = self._initial_configs[selected_robot]
+                                        # Use direct update method that doesn't require sliders
+                                        success = self.update_robot_joint_config_direct(selected_robot, initial_config)
+                                        if success:
+                                            ik_solve_status.value = "Robot joints reset to initial pose"
+                                            logger.info(f"Reset robot {selected_robot} to initial joint configuration")
+                                        else:
+                                            ik_solve_status.value = "Failed to reset robot joints"
+                                    else:
+                                        ik_solve_status.value = "No initial config found for robot"
+                                        logger.warning(f"No initial config stored for robot {selected_robot}")
+                                except Exception as e:
+                                    ik_solve_status.value = f"Error resetting robot: {e}"
+                                    logger.error(f"Error in reset_robot_joints: {e}")
 
                             # Connect callbacks
                             solve_ik_btn.on_click(lambda _: solve_and_apply_ik())
                             reset_target_btn.on_click(lambda _: reset_target())
+                            reset_robot_btn.on_click(lambda _: reset_robot_joints())
 
                             # Connect position and orientation sliders to update marker in real-time
                             pos_x_slider.on_update(lambda _: update_target_marker())

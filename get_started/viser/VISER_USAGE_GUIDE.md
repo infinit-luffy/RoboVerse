@@ -115,77 +115,61 @@ visualizer.add_frame("/world_frame")
 6. Drag timeline slider to seek to specific frames
 7. Adjust "Playback FPS" slider to change speed
 
-## Demo Scripts
+## Demo Script
 
-### 1. Static Scene Visualization
+### Unified Viser Demo
 
-**Purpose**: Basic scene setup and camera control demonstration.
+**Purpose**: All-in-one demo with configurable features via command line arguments.
 
-**Run Demo**:
+**Basic Usage** (Static Scene):
 ```bash
-python get_started/viser_static_scene_demo.py --sim isaaclab
+python get_started/viser/viser_demo.py --sim mujoco
 ```
 
-**Demonstrates**:
-- Basic 3D scene setup with primitive objects
-- Robot visualization with initial joint configurations
-- Camera controls with preset views
-
-### 2. Dynamic Scene Updates
-
-**Purpose**: Real-time visualization of moving robots and physics simulation.
-
-**Run Demo**:
+**With Joint Control**:
 ```bash
-python get_started/viser_dynamic_scene_demo.py --sim isaaclab
+python get_started/viser/viser_demo.py --sim mujoco --enable-joint-control
 ```
 
-**Demonstrates**:
-- Live motion planning and execution visualization
-- Real-time IK solving and robot movement
-- Automatic camera tracking and video recording
-
-### 3. Joint Control Demo
-
-**Purpose**: Interactive manual control of robot joints.
-
-**Run Demo**:
+**With IK Control**:
 ```bash
-python get_started/viser_joint_control_demo.py --sim isaaclab
+python get_started/viser/viser_demo.py --sim mujoco --enable-ik-control
 ```
 
-**Demonstrates**:
-- Joint control interface usage
-- Multiple robot support
-- Real-time pose updates
-
-### 4. IK Control Demo
-
-**Purpose**: End-effector positioning using inverse kinematics.
-
-**Run Demo**:
+**With Trajectory Playback**:
 ```bash
-python get_started/viser_ik_control_demo.py --sim isaaclab
+python get_started/viser/viser_demo.py --sim mujoco --enable-trajectory
 ```
 
-**Demonstrates**:
-- IK control interface usage
-- Visual target markers
-- Integration with joint control
-
-### 5. Trajectory Playback Demo
-
-**Purpose**: Loading and playing back recorded robot trajectories.
-
-**Run Demo**:
+**Dynamic Simulation** (robot moves with IK):
 ```bash
-python get_started/viser_trajectory_demo.py --sim isaaclab
+python get_started/viser/viser_demo.py --sim mujoco --dynamic
 ```
 
-**Demonstrates**:
-- Trajectory loading and playback
-- Timeline control and seeking
-- Playback speed adjustment
+**Dynamic with Video Recording**:
+```bash
+python get_started/viser/viser_demo.py --sim mujoco --dynamic --save-video
+```
+
+**All Features Enabled**:
+```bash
+python get_started/viser/viser_demo.py --sim mujoco \
+    --enable-joint-control \
+    --enable-ik-control \
+    --enable-trajectory
+```
+
+**Available Arguments**:
+- `--robot`: Robot model (default: "franka")
+- `--sim`: Simulator backend (default: "mujoco")
+- `--num-envs`: Number of parallel environments (default: 1)
+- `--headless`: Run simulator headless (default: True)
+- `--dynamic`: Enable dynamic simulation with IK motion
+- `--enable-joint-control`: Enable interactive joint control
+- `--enable-ik-control`: Enable interactive IK control
+- `--enable-trajectory`: Enable trajectory playback
+- `--solver`: IK solver for dynamic mode ("curobo" or "pyroki", default: "pyroki")
+- `--save-video`: Save video of dynamic simulation
 
 ## Integration Examples
 

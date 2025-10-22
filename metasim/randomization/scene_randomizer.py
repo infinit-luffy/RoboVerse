@@ -430,8 +430,10 @@ class SceneRandomizer(BaseRandomizerType):
             # For static geometry (floor, walls, table), we ONLY need CollisionAPI
             # DO NOT add RigidBodyAPI - that makes it dynamic and it will fall!
             collision_api = UsdPhysics.CollisionAPI.Apply(cube_prim)
-            
-            logger.debug(f"Created cube at {prim_path} with size {size} (scale={scale_factor}) and position {position} with collision")
+
+            logger.debug(
+                f"Created cube at {prim_path} with size {size} (scale={scale_factor}) and position {position} with collision"
+            )
 
         except Exception as e:
             logger.warning(f"Failed to create cube prim {prim_path}: {e}")

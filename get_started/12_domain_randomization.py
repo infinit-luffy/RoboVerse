@@ -21,6 +21,7 @@ Comprehensive demonstration of all 5 randomizers with 5 randomization levels.
 from __future__ import annotations
 
 import rootutils
+
 rootutils.setup_root(__file__, pythonpath=True)
 
 import os
@@ -69,9 +70,9 @@ def create_scenario(args) -> ScenarioCfg:
         headless=args.headless,
     )
 
-    has_table = (args.level >= 4)
+    has_table = args.level >= 4
     table_height = 0.7 if has_table else 0.0
-    
+
     # Camera - adjust for table
     if has_table:
         scenario.cameras = [
@@ -182,24 +183,24 @@ def create_scenario(args) -> ScenarioCfg:
 
 def get_init_states(level, num_envs):
     """Get initial states for objects and robot based on level."""
-    
+
     # Object dimensions
     cube_size = 0.1
     sphere_radius = 0.1
     box_base_height = 0.15  # Approximate height of box_base
-    
+
     if level >= 4:
         # Level 4: Objects ON TABLE
         table_surface_z = 0.7  # Table surface height
-        
+
         # Objects placed on table surface
         # For cube: center_z = surface_z + half_size
         # For sphere: center_z = surface_z + radius (sphere sits on surface)
         # For box_base: center_z = surface_z + half_height
-        
+
         objects = {
             "cube": {
-                "pos": torch.tensor([0.2, -0.15, table_surface_z + cube_size/2]),  # 0.75m
+                "pos": torch.tensor([0.2, -0.15, table_surface_z + cube_size / 2]),  # 0.75m
                 "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
             },
             "sphere": {
@@ -207,12 +208,12 @@ def get_init_states(level, num_envs):
                 "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
             },
             "box_base": {
-                "pos": torch.tensor([-0.2, 0.0, table_surface_z + box_base_height/2]),  # 0.775m
+                "pos": torch.tensor([-0.2, 0.0, table_surface_z + box_base_height / 2]),  # 0.775m
                 "rot": torch.tensor([0.0, 0.7071, 0.0, 0.7071]),
                 "dof_pos": {"box_joint": 0.0},
             },
         }
-        
+
         # Robot also on table (if base at table height)
         robot = {
             "franka": {
@@ -234,40 +235,40 @@ def get_init_states(level, num_envs):
     else:
         # Level 0-3: Objects ON GROUND
         objects = {
-                "cube": {
-                "pos": torch.tensor([0.3, -0.2, cube_size/2]),  # 0.05m
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                },
-                "sphere": {
+            "cube": {
+                "pos": torch.tensor([0.3, -0.2, cube_size / 2]),  # 0.05m
+                "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+            },
+            "sphere": {
                 "pos": torch.tensor([0.4, -0.6, sphere_radius]),  # 0.1m
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                },
-                "box_base": {
-                "pos": torch.tensor([0.5, 0.2, box_base_height/2]),  # 0.075m
-                    "rot": torch.tensor([0.0, 0.7071, 0.0, 0.7071]),
-                    "dof_pos": {"box_joint": 0.0},
-                },
+                "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+            },
+            "box_base": {
+                "pos": torch.tensor([0.5, 0.2, box_base_height / 2]),  # 0.075m
+                "rot": torch.tensor([0.0, 0.7071, 0.0, 0.7071]),
+                "dof_pos": {"box_joint": 0.0},
+            },
         }
-        
+
         # Robot on ground
         robot = {
-                "franka": {
+            "franka": {
                 "pos": torch.tensor([0.0, 0.0, 0.0]),
-                    "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                    "dof_pos": {
-                        "panda_joint1": 0.0,
-                        "panda_joint2": -0.785398,
-                        "panda_joint3": 0.0,
-                        "panda_joint4": -2.356194,
-                        "panda_joint5": 0.0,
-                        "panda_joint6": 1.570796,
-                        "panda_joint7": 0.785398,
-                        "panda_finger_joint1": 0.04,
-                        "panda_finger_joint2": 0.04,
+                "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                "dof_pos": {
+                    "panda_joint1": 0.0,
+                    "panda_joint2": -0.785398,
+                    "panda_joint3": 0.0,
+                    "panda_joint4": -2.356194,
+                    "panda_joint5": 0.0,
+                    "panda_joint6": 1.570796,
+                    "panda_joint7": 0.785398,
+                    "panda_finger_joint1": 0.04,
+                    "panda_finger_joint2": 0.04,
                 },
             },
         }
-    
+
     return [{"objects": objects, "robots": robot}] * num_envs
 
 
@@ -280,42 +281,42 @@ def initialize_randomizers(handler, args):
         "camera": [],
         "scene": None,
     }
-    
+
     level = args.level
     log.info("=" * 70)
     log.info(f"Randomization Level: {level}")
     log.info("=" * 70)
-    
+
     if level == 0:
         log.info("Level 0: Baseline - No randomization")
         return randomizers
-    
+
     # Level 1+: Object randomization
     if level >= 1:
         log.info("\n[Level 1] Object Randomization (Physics + Pose)")
         log.info("-" * 70)
-        
+
         cube_rand = ObjectRandomizer(
             ObjectPresets.grasping_target("cube"),
-        seed=args.seed,
-    )
+            seed=args.seed,
+        )
         cube_rand.bind_handler(handler)
         randomizers["object"].append(cube_rand)
         log.info("  [OK] cube: grasping_target preset")
 
         sphere_rand = ObjectRandomizer(
             ObjectPresets.bouncy_object("sphere"),
-        seed=args.seed,
-    )
+            seed=args.seed,
+        )
         sphere_rand.bind_handler(handler)
         randomizers["object"].append(sphere_rand)
         log.info("  [OK] sphere: bouncy_object preset")
-    
+
     # Level 2+: Visual randomization
     if level >= 2:
         log.info("\n[Level 2] Visual Randomization (Materials + Lights)")
         log.info("-" * 70)
-        
+
         log.info("  Materials:")
         cube_mat = MaterialRandomizer(
             MaterialPresets.wood_object("cube", use_mdl=True),
@@ -340,7 +341,7 @@ def initialize_randomizers(handler, args):
         box_mat.bind_handler(handler)
         randomizers["material"].append(box_mat)
         log.info("    [OK] box_base: wood (MDL)")
-        
+
         # Light randomization
         log.info("  Lights:")
         main_light_rand = LightRandomizer(
@@ -349,7 +350,7 @@ def initialize_randomizers(handler, args):
         )
         main_light_rand.bind_handler(handler)
         randomizers["light"].append(main_light_rand)
-        
+
         # Use different strategies for Level 4 vs open space
         if level >= 4:
             # For enclosed room: ONLY randomize intensity and color
@@ -360,14 +361,14 @@ def initialize_randomizers(handler, args):
             )
             fill_light_rand.bind_handler(handler)
             randomizers["light"].append(fill_light_rand)
-            
+
             back_light_rand = LightRandomizer(
                 LightPresets.outdoor_daylight("back_light", randomization_mode="intensity_only"),
                 seed=args.seed,
             )
             back_light_rand.bind_handler(handler)
             randomizers["light"].append(back_light_rand)
-            
+
             table_light_rand = LightRandomizer(
                 LightPresets.outdoor_daylight("table_light", randomization_mode="intensity_only"),
                 seed=args.seed,
@@ -378,18 +379,18 @@ def initialize_randomizers(handler, args):
             # For open space, use normal presets
             fill_light_rand = LightRandomizer(
                 LightPresets.indoor_ambient("fill_light", randomization_mode="combined"),
-            seed=args.seed,
-        )
+                seed=args.seed,
+            )
             fill_light_rand.bind_handler(handler)
             randomizers["light"].append(fill_light_rand)
-        
+
         log.info(f"    [OK] {len(randomizers['light'])} lights configured")
-    
+
     # Level 3+: Camera randomization
     if level >= 3:
         log.info("\n[Level 3] Camera Randomization (Viewpoint Variation)")
         log.info("-" * 70)
-        
+
         camera_rand = CameraRandomizer(
             CameraPresets.surveillance_camera("main_camera", randomization_mode="combined"),
             seed=args.seed,
@@ -397,12 +398,12 @@ def initialize_randomizers(handler, args):
         camera_rand.bind_handler(handler)
         randomizers["camera"].append(camera_rand)
         log.info("  [OK] main_camera: surveillance preset")
-    
+
     # Level 4: Scene randomization with TABLE
     if level >= 4:
         log.info("\n[Level 4] Scene Randomization (Tabletop Workspace)")
         log.info("-" * 70)
-        
+
         scene_cfg = ScenePresets.tabletop_workspace(
             room_size=10.0,
             wall_height=5.0,
@@ -416,7 +417,7 @@ def initialize_randomizers(handler, args):
         log.info("    - Room: 10m x 10m x 5m")
         log.info("    - Table: 1.8m x 1.8m at z=0.7m (WITH COLLIDER)")
         log.info("    - Materials: ~300 (table), ~150 each (floor/walls/ceiling)")
-    
+
     log.info("\n" + "=" * 70)
     return randomizers
 
@@ -425,21 +426,21 @@ def apply_randomization(randomizers, level):
     """Apply all active randomizers."""
     if level == 0:
         return
-    
+
     if level >= 1:
         for rand in randomizers["object"]:
             rand()
-    
+
     if level >= 2:
         for rand in randomizers["material"]:
             rand()
         for rand in randomizers["light"]:
             rand()
-    
+
     if level >= 3:
         for rand in randomizers["camera"]:
             rand()
-    
+
     if level >= 4:
         if randomizers["scene"]:
             randomizers["scene"]()
@@ -450,14 +451,14 @@ def run_simulation(handler, randomizers, args):
     os.makedirs("get_started/output", exist_ok=True)
     video_path = f"get_started/output/12_dr_level{args.level}_{args.sim}.mp4"
     obs_saver = ObsSaver(video_path=video_path)
-    
+
     log.info("\n" + "=" * 70)
     log.info("Running Simulation")
     log.info("=" * 70)
     log.info(f"Video: {video_path}")
     log.info(f"Randomization interval: every {args.randomize_interval} steps")
     log.info(f"Total steps: {args.num_steps}")
-    
+
     for step in range(args.num_steps):
         handler.simulate()
         obs = handler.get_states(mode="tensor")
@@ -466,7 +467,7 @@ def run_simulation(handler, randomizers, args):
         if step % args.randomize_interval == 0 and step > 0:
             log.info(f"\nStep {step}: Applying randomizations")
             apply_randomization(randomizers, args.level)
-    
+
     obs_saver.save()
     log.info(f"\n[SAVED] Video saved to: {video_path}")
 
@@ -478,7 +479,7 @@ def main():
         num_envs: int = 1
         headless: bool = False
         seed: int | None = 42
-        
+
         level: Literal[0, 1, 2, 3, 4] = 2
         """Randomization level:
         0 - Baseline (no DR) - Ground
@@ -487,39 +488,39 @@ def main():
         3 - + Camera - Ground
         4 - + Scene (TABLE) - Objects ON TABLE
         """
-        
+
         num_steps: int = 100
         randomize_interval: int = 10
-    
+
     args = tyro.cli(Args)
-    
+
     if args.seed is not None:
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed(args.seed)
-    
+
     log.info("=" * 70)
     log.info("Domain Randomization Demo - Final Version")
     log.info("=" * 70)
-    log.info(f"\nConfiguration:")
+    log.info("\nConfiguration:")
     log.info(f"  Simulator: {args.sim}")
     log.info(f"  Seed: {args.seed}")
     log.info(f"  Level: {args.level}")
-    
+
     if args.level >= 4:
-        log.info(f"\n  LEVEL 4 SPECIAL SETUP:")
-        log.info(f"      - Objects placed ON TABLE (z=0.7m)")
-        log.info(f"      - Room: 10m x 10m with walls and ceiling")
-        log.info(f"      - Table: 1.8m x 1.8m WITH PHYSICS COLLISION")
-        log.info(f"      - Lights: 4 sources, VERY BRIGHT for enclosed room")
+        log.info("\n  LEVEL 4 SPECIAL SETUP:")
+        log.info("      - Objects placed ON TABLE (z=0.7m)")
+        log.info("      - Room: 10m x 10m with walls and ceiling")
+        log.info("      - Table: 1.8m x 1.8m WITH PHYSICS COLLISION")
+        log.info("      - Lights: 4 sources, VERY BRIGHT for enclosed room")
     else:
-        log.info(f"\n  Note: Objects on GROUND (z~0.05-0.1m)")
-    
+        log.info("\n  Note: Objects on GROUND (z~0.05-0.1m)")
+
     # Create scenario
     scenario = create_scenario(args)
     handler = get_handler(scenario)
-    
+
     # IMPORTANT: For Level 4, create table BEFORE placing objects!
     if args.level >= 4:
         log.info("\n[Level 4 Setup] Creating table first...")
@@ -534,24 +535,24 @@ def main():
         scene_rand_early.bind_handler(handler)
         scene_rand_early()  # Create table NOW
         log.info("[OK] Table created (with physics collision)")
-        
+
         # Let table settle
         for _ in range(10):
             handler.simulate()
         log.info("[OK] Table stable")
-    
+
     # Now place objects (table exists if Level 4)
     init_states = get_init_states(args.level, scenario.num_envs)
     handler.set_states(init_states)
     log.info(f"\n[OK] Objects initialized at {'TABLE' if args.level >= 4 else 'GROUND'} level")
-    
+
     # Stabilize physics
     log.info("\nStabilizing physics...")
     stabilize_steps = 20 if args.level >= 4 else 10
     for _ in range(stabilize_steps):
         handler.simulate()
     log.info("[OK] Physics stable")
-    
+
     # Log object positions after stabilization
     if args.level >= 4:
         log.info("\n  Verifying object positions on table:")
@@ -566,26 +567,26 @@ def main():
                         log.info(f"    {status} {obj_name}: z={pos[2]:.3f}m (expected ~{expected}m)")
         except Exception as e:
             log.warning(f"  Could not verify positions: {e}")
-    
+
     # Initialize randomizers (scene already created for Level 4)
     randomizers = initialize_randomizers(handler, args)
-    
+
     # For Level 4, use the already-created scene randomizer
     if args.level >= 4:
         randomizers["scene"] = scene_rand_early
 
     # Run simulation
     run_simulation(handler, randomizers, args)
-    
+
     handler.close()
-    
+
     log.info("\n" + "=" * 70)
     log.info("Demo Completed!")
     log.info("=" * 70)
-    log.info(f"\nQuick Start:")
-    log.info(f"  Level 0-3: python get_started/12_domain_randomization.py --level [0-3]")
-    log.info(f"  Level 4:   python get_started/12_domain_randomization.py --level 4")
-    log.info(f"\n  Level 4 uses TABLE - objects should stay on table surface!")
+    log.info("\nQuick Start:")
+    log.info("  Level 0-3: python get_started/12_domain_randomization.py --level [0-3]")
+    log.info("  Level 4:   python get_started/12_domain_randomization.py --level 4")
+    log.info("\n  Level 4 uses TABLE - objects should stay on table surface!")
 
 
 if __name__ == "__main__":

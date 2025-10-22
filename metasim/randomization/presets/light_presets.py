@@ -130,8 +130,52 @@ class LightPresets:
                 enabled=True,
             ),
             position=LightPositionRandomCfg(
-                position_range=((-5.0, 5.0), (-5.0, 5.0), (1.5, 4.0)),  # Absolute positions
+                position_range=((-5.0, 5.0), (-5.0, 5.0), (1.5, 4.0)),  # Absolute positions (avoid ceiling/floor)
                 relative_to_origin=False,
+                distribution="uniform",
+                enabled=True,
+            ),
+            randomization_mode=randomization_mode,
+        )
+    
+    @staticmethod
+    def indoor_room_safe(
+        light_name: str, 
+        floor_height: float = 0.0, 
+        ceiling_height: float = 5.0,
+        randomization_mode: str = "combined"
+    ) -> LightRandomCfg:
+        """Indoor room lighting with safe position bounds.
+        
+        Args:
+            light_name: Name of the light to randomize
+            floor_height: Floor z-coordinate (default 0.0)
+            ceiling_height: Ceiling z-coordinate (default 5.0)
+            randomization_mode: Randomization mode
+            
+        Returns:
+            LightRandomCfg with bounded position randomization
+        """
+        # Calculate safe z-range: leave 0.5m margin from floor and ceiling
+        safe_z_min = floor_height + 0.5
+        safe_z_max = ceiling_height - 0.5
+        
+        return LightRandomCfg(
+            light_name=light_name,
+            intensity=LightIntensityRandomCfg(
+                intensity_range=LightProperties.INTENSITY_BRIGHT, 
+                distribution="uniform", 
+                enabled=True
+            ),
+            color=LightColorRandomCfg(
+                color_range=LightProperties.COLOR_WARM, 
+                distribution="uniform", 
+                enabled=True
+            ),
+            position=LightPositionRandomCfg(
+                # Use smaller relative offsets to stay within bounds
+                position_range=((-2.0, 2.0), (-2.0, 2.0), (-1.0, 1.0)),  # Limited z range
+                relative_to_origin=True,  # Relative to initial position
                 distribution="uniform",
                 enabled=True,
             ),

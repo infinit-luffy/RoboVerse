@@ -374,7 +374,7 @@ class SceneRandomizer(BaseRandomizerType):
         }
 
     def _create_cube_prim(self, prim_path: str, size: tuple[float, float, float], position: tuple[float, float, float]):
-        """Create a cube primitive using IsaacSim commands.
+        """Create a cube primitive with physics collision using IsaacSim commands.
 
         Args:
             prim_path: USD prim path
@@ -388,7 +388,7 @@ class SceneRandomizer(BaseRandomizerType):
             except ModuleNotFoundError:
                 import isaacsim.core.utils.prims as prim_utils
 
-            from pxr import Gf, UsdGeom
+            from pxr import Gf, UsdGeom, UsdPhysics
 
             # Get stage
             stage = prim_utils.get_current_stage()
@@ -426,7 +426,12 @@ class SceneRandomizer(BaseRandomizerType):
             scale_factor = tuple(s / 2.0 for s in size)
             scale_op.Set(Gf.Vec3d(*scale_factor))
 
-            logger.debug(f"Created cube at {prim_path} with size {size} (scale={scale_factor}) and position {position}")
+            # Add physics collision - IMPORTANT for table to support objects!
+            # For static geometry (floor, walls, table), we ONLY need CollisionAPI
+            # DO NOT add RigidBodyAPI - that makes it dynamic and it will fall!
+            collision_api = UsdPhysics.CollisionAPI.Apply(cube_prim)
+            
+            logger.debug(f"Created cube at {prim_path} with size {size} (scale={scale_factor}) and position {position} with collision")
 
         except Exception as e:
             logger.warning(f"Failed to create cube prim {prim_path}: {e}")

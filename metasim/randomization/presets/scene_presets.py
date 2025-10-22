@@ -296,7 +296,7 @@ class ScenePresets:
             floor=SceneGeometryCfg(
                 enabled=True,
                 size=(room_size, room_size, wall_thickness),
-                position=(0.0, 0.0, -wall_thickness / 2),
+                position=(0.0, 0.0, 0.005),  # Slightly above z=0 to avoid z-fighting with IsaacSim default ground
                 material_randomization=True,
             ),
             walls=SceneGeometryCfg(
@@ -350,7 +350,7 @@ class ScenePresets:
             floor=SceneGeometryCfg(
                 enabled=True,
                 size=(room_size, room_size, wall_thickness),
-                position=(0.0, 0.0, -wall_thickness / 2),
+                position=(0.0, 0.0, 0.005),  # Slightly above z=0 to avoid z-fighting
                 material_randomization=True,
             ),
             walls=SceneGeometryCfg(
@@ -405,7 +405,7 @@ class ScenePresets:
             floor=SceneGeometryCfg(
                 enabled=True,
                 size=(floor_size, floor_size, floor_thickness),
-                position=(0.0, 0.0, -floor_thickness / 2),
+                position=(0.0, 0.0, 0.005),  # Slightly above z=0 to avoid z-fighting
                 material_randomization=True,
             ),
             floor_materials=SceneMaterialPoolCfg(

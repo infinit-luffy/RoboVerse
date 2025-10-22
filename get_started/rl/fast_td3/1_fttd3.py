@@ -16,9 +16,7 @@ CONFIG: dict[str, Any] = {
     "decimation": 10,
     "train_or_eval": "train",
     "headless": True,
-    "viser_port": 8080,
-    # Resource optimization for Viser
-    "viser_update_freq": 1,  # Update Viser every 30 steps instead of every step
+    "use_viser": True,
     # -------------------------------------------------------------------------------
     # Seeds & Device
     # -------------------------------------------------------------------------------
@@ -170,20 +168,16 @@ def main() -> None:
     log.info(f"Using device: {device}")
 
     task_cls = get_task_class(cfg("task"))
-    # Get default scenario from task class and update with specific parameters
-    # Set headless based on whether Viser is enabled
-    headless = cfg("headless") and cfg("viser_port") <= 0
+    headless = cfg("headless")
     scenario = task_cls.scenario.update(
         robots=cfg("robots"), simulator=cfg("sim"), num_envs=cfg("num_envs"), headless=headless, cameras=[]
     )
     envs = task_cls(scenario, device=device)
 
     # Optionally wrap with Viser for real-time visualization
-    if cfg("viser_port") > 0:
-        update_freq = cfg("viser_update_freq", 5)
-        log.info(f"Creating Viser visualization on port {cfg('viser_port')} (update every {update_freq} steps)")
-        envs = TaskViserWrapper(envs, port=cfg("viser_port"), update_freq=update_freq)
-        eval_envs = envs  # Use wrapped envs for evaluation too
+    if cfg("use_viser"):
+        envs = TaskViserWrapper(envs)
+        eval_envs = envs
     else:
         eval_envs = envs
 

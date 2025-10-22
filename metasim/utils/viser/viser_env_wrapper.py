@@ -9,7 +9,7 @@ class TaskViserWrapper:
     Only renders the first environment for simplicity. Designed for fast_td3 integration.
     """
 
-    def __init__(self, task_env, port: int = 8080, update_freq: int = 10):
+    def __init__(self, task_env, port: int = 8080, update_freq: int = 1):
         """Initialize the wrapper.
 
         Args:

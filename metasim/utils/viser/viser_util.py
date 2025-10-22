@@ -166,9 +166,9 @@ def load_urdf_with_patch(urdf_path: str) -> tuple[Any, str]:
         urdf_obj = yourdfpy.URDF.load(patched_urdf_path)
         return urdf_obj, patched_urdf_path
     except Exception as e:
-        print(f"Error loading URDF {patched_urdf_path}: {e}")
-        print("This might be due to empty or malformed collision/geometry elements")
-        print("Please check that all collision elements have valid geometry tags")
+        logger.error(f"Error loading URDF {patched_urdf_path}: {e}")
+        logger.error("This might be due to empty or malformed collision/geometry elements")
+        logger.error("Please check that all collision elements have valid geometry tags")
         raise e
 
 
@@ -313,6 +313,14 @@ class ViserVisualizer:
         state: dict | None = None,
         base_offset_debug: bool = True,
     ):
+        """Visualize a single item (robot or object) in the 3D scene.
+
+        Args:
+            cfg: Configuration object for the item (cube, sphere, cylinder, rigid object, articulated object, or robot)
+            name: Name identifier for the item
+            state: Optional state dictionary containing position, rotation, and joint positions
+            base_offset_debug: Whether to apply base offset for debugging
+        """
         # Debug: print out the states for debugging
         logger.debug(f"[Viser] {name} state: {state}")
 
@@ -532,7 +540,7 @@ class ViserVisualizer:
             return
 
     def refresh_camera_view(self):
-        """Refresh camera view"""
+        """Refresh camera view."""
         if self._camera_update_callback is not None:
             import threading
 
@@ -822,6 +830,7 @@ class ViserVisualizer:
 
     def update_robot_joint_config_direct(self, robot_name: str, joint_config: dict):
         """Update robot joint configuration directly without sliders.
+
         This is useful for IK control or programmatic updates when joint control GUI is not active.
 
         Args:
@@ -864,6 +873,7 @@ class ViserVisualizer:
 
     def clear_joint_control(self, robot_name: str | None = None):
         """Clear joint control sliders for a specific robot or all robots.
+
         This only clears GUI elements but preserves joint positions and demo initial configs.
 
         Args:

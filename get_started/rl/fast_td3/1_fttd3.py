@@ -16,6 +16,9 @@ CONFIG: dict[str, Any] = {
     "decimation": 10,
     "train_or_eval": "train",
     "headless": True,
+    "viser_port": 8080,
+    # Resource optimization for Viser
+    "viser_update_freq": 1,  # Update Viser every 30 steps instead of every step
     # -------------------------------------------------------------------------------
     # Seeds & Device
     # -------------------------------------------------------------------------------
@@ -105,24 +108,23 @@ try:
 except ImportError:
     pass
 
-import torch
-
-torch.set_float32_matmul_precision("high")
-
 import numpy as np
 import torch
 import torch.nn.functional as F
-import tqdm
-import wandb
 from loguru import logger as log
-from tensordict import TensorDict
 from torch import optim
 from torch.amp import GradScaler, autocast
+from tensordict import TensorDict
+import tqdm
+import wandb
+
+torch.set_float32_matmul_precision("high")
 
 from get_started.rl.fast_td3.fttd3_module import Actor, Critic, EmpiricalNormalization, SimpleReplayBuffer
 from metasim.scenario.cameras import PinholeCameraCfg
 from metasim.task.registry import get_task_class
 from metasim.utils.obs_utils import ObsSaver
+from metasim.utils.viser.viser_env_wrapper import TaskViserWrapper
 
 
 def main() -> None:
@@ -169,11 +171,21 @@ def main() -> None:
 
     task_cls = get_task_class(cfg("task"))
     # Get default scenario from task class and update with specific parameters
+    # Set headless based on whether Viser is enabled
+    headless = cfg("headless") and cfg("viser_port") <= 0
     scenario = task_cls.scenario.update(
-        robots=cfg("robots"), simulator=cfg("sim"), num_envs=cfg("num_envs"), headless=cfg("headless"), cameras=[]
+        robots=cfg("robots"), simulator=cfg("sim"), num_envs=cfg("num_envs"), headless=headless, cameras=[]
     )
     envs = task_cls(scenario, device=device)
-    eval_envs = envs
+
+    # Optionally wrap with Viser for real-time visualization
+    if cfg("viser_port") > 0:
+        update_freq = cfg("viser_update_freq", 5)
+        log.info(f"Creating Viser visualization on port {cfg('viser_port')} (update every {update_freq} steps)")
+        envs = TaskViserWrapper(envs, port=cfg("viser_port"), update_freq=update_freq)
+        eval_envs = envs  # Use wrapped envs for evaluation too
+    else:
+        eval_envs = envs
 
     # ---------------- derive shapes ------------------------------------
     n_act = envs.num_actions
@@ -266,6 +278,7 @@ def main() -> None:
                 obs = normalize_obs(obs)
                 actions = actor(obs)
             next_obs, rewards, terminated, time_out, infos = eval_envs.step(actions.float())
+            dones = terminated | time_out
             episode_returns = torch.where(~done_masks, episode_returns + rewards, episode_returns)
             episode_lengths = torch.where(~done_masks, episode_lengths + 1, episode_lengths)
             done_masks = torch.logical_or(done_masks, dones)
@@ -313,7 +326,8 @@ def main() -> None:
         for _ in range(env.max_episode_steps):
             with torch.no_grad(), autocast(device_type=amp_device_type, dtype=amp_dtype, enabled=amp_enabled):
                 actions = actor(obs_normalizer(obs))
-            obs, _, done, _, _ = env.step(actions.float())
+            obs, _, terminated, time_out, _ = env.step(actions.float())
+            done = terminated | time_out
 
             obs_orin = env.handler.get_states()
             obs_saver.add(obs_orin)

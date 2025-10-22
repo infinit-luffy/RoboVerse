@@ -70,17 +70,17 @@ class Args:
     num_envs: int = 1
     """Number of parallel environments."""
 
-    headless: bool = True
+    headless: bool = False
     """Use viser for visualization, not simulator's viewer."""
 
     ## Control modes
-    dynamic: bool = False
+    dynamic: bool = True
     """Enable dynamic simulation with IK motion."""
 
     enable_joint_control: bool = False
     """Enable interactive joint control GUI."""
 
-    enable_ik_control: bool = False
+    enable_ik_control: bool = True
     """Enable interactive IK control GUI."""
 
     enable_trajectory: bool = False
@@ -268,7 +268,7 @@ def main():
     # ========================================================================
     # Setup Viser Visualization
     # ========================================================================
-    from get_started.viser.viser_util import ViserVisualizer
+    from metasim.utils.viser.viser_util import ViserVisualizer
 
     # Download URDF files before visualization
     download_urdf_files(scenario)

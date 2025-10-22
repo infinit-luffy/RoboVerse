@@ -162,8 +162,14 @@ def load_urdf_with_patch(urdf_path: str) -> tuple[Any, str]:
     import yourdfpy
 
     patched_urdf_path = patch_urdf_mesh_paths_to_absolute(urdf_path)
-    urdf_obj = yourdfpy.URDF.load(patched_urdf_path)
-    return urdf_obj, patched_urdf_path
+    try:
+        urdf_obj = yourdfpy.URDF.load(patched_urdf_path)
+        return urdf_obj, patched_urdf_path
+    except Exception as e:
+        print(f"Error loading URDF {patched_urdf_path}: {e}")
+        print("This might be due to empty or malformed collision/geometry elements")
+        print("Please check that all collision elements have valid geometry tags")
+        raise e
 
 
 class ViserVisualizer:

@@ -532,9 +532,7 @@ class ViserVisualizer:
             return
 
     def refresh_camera_view(self):
-        """
-        refresh camera view
-        """
+        """Refresh camera view"""
         if self._camera_update_callback is not None:
             import threading
 
@@ -567,8 +565,7 @@ class ViserVisualizer:
             return False
 
     def get_available_trajectories(self):
-        """
-        Get list of available robot trajectories.
+        """Get list of available robot trajectories.
 
         Returns:
             List of (robot_name, num_demos) tuples
@@ -582,8 +579,7 @@ class ViserVisualizer:
         return trajectories
 
     def set_current_trajectory(self, robot_name: str, demo_index: int = 0):
-        """
-        Set the current trajectory to play.
+        """Set the current trajectory to play.
 
         Args:
             robot_name: Name of the robot
@@ -610,8 +606,7 @@ class ViserVisualizer:
         return True
 
     def load_and_set_trajectory(self, trajectory_path: str, robot_name: str | None = None, demo_index: int = 0):
-        """
-        Load trajectory file and optionally set current trajectory.
+        """Load trajectory file and optionally set current trajectory.
 
         Args:
             trajectory_path: Path to trajectory file
@@ -624,8 +619,7 @@ class ViserVisualizer:
         return success
 
     def get_robot_joint_info(self, robot_name: str):
-        """
-        Get joint information for a robot.
+        """Get joint information for a robot.
 
         Args:
             robot_name: Name of the robot
@@ -651,8 +645,7 @@ class ViserVisualizer:
             return None
 
     def create_joint_sliders(self, robot_name: str, client_gui):
-        """
-        Create joint control sliders for a robot.
+        """Create joint control sliders for a robot.
 
         Args:
             robot_name: Name of the robot
@@ -759,8 +752,7 @@ class ViserVisualizer:
         return slider_handles
 
     def reset_robot_joints(self, robot_name: str):
-        """
-        Reset robot joints to initial configuration from demo.
+        """Reset robot joints to initial configuration from demo.
 
         Args:
             robot_name: Name of the robot
@@ -799,8 +791,7 @@ class ViserVisualizer:
         logger.info(f"Reset joints for robot {robot_name} to demo initial configuration")
 
     def update_robot_joint_config(self, robot_name: str, joint_config: dict):
-        """
-        Update robot joint configuration programmatically.
+        """Update robot joint configuration programmatically.
 
         Args:
             robot_name: Name of the robot
@@ -830,8 +821,7 @@ class ViserVisualizer:
                 sliders[i].value = float(value)
 
     def update_robot_joint_config_direct(self, robot_name: str, joint_config: dict):
-        """
-        Update robot joint configuration directly without sliders.
+        """Update robot joint configuration directly without sliders.
         This is useful for IK control or programmatic updates when joint control GUI is not active.
 
         Args:
@@ -873,8 +863,7 @@ class ViserVisualizer:
             return False
 
     def clear_joint_control(self, robot_name: str | None = None):
-        """
-        Clear joint control sliders for a specific robot or all robots.
+        """Clear joint control sliders for a specific robot or all robots.
         This only clears GUI elements but preserves joint positions and demo initial configs.
 
         Args:
@@ -898,8 +887,7 @@ class ViserVisualizer:
             logger.info("No joint controls to clear")
 
     def apply_trajectory_frame(self, frame_index: int):
-        """
-        Apply a specific frame from the current trajectory.
+        """Apply a specific frame from the current trajectory.
 
         Args:
             frame_index: The frame index to apply
@@ -938,8 +926,7 @@ class ViserVisualizer:
         return True
 
     def play_trajectory(self, fps: float = 10.0):
-        """
-        Start playing the current trajectory.
+        """Start playing the current trajectory.
 
         Args:
             fps: Playback frame rate
@@ -1036,8 +1023,7 @@ class ViserVisualizer:
         logger.info("Trajectory playback stopped")
 
     def seek_trajectory(self, frame_index: int):
-        """
-        Seek to a specific frame in the trajectory.
+        """Seek to a specific frame in the trajectory.
 
         Args:
             frame_index: Target frame index
@@ -2161,8 +2147,7 @@ class ViserVisualizer:
                 traceback.print_exc()
 
     def setup_ik_solver(self, robot_name: str, robot_config, env_handler=None, solver="pyroki"):
-        """
-        Setup IK solver for a specific robot.
+        """Setup IK solver for a specific robot.
 
         Args:
             robot_name: Name of the robot
@@ -2201,8 +2186,7 @@ class ViserVisualizer:
         target_pos: list[float],
         target_quat: list[float] | None = None,
     ):
-        """
-        Solve IK for target end-effector position and orientation.
+        """Solve IK for target end-effector position and orientation.
 
         Args:
             robot_name: Name of the robot
@@ -2275,8 +2259,7 @@ class ViserVisualizer:
         target_pos: list[float],
         target_quat: list[float] | None = None,
     ):
-        """
-        Update robot configuration using IK solution.
+        """Update robot configuration using IK solution.
 
         Args:
             robot_name: Name of the robot
@@ -2318,8 +2301,7 @@ class ViserVisualizer:
         orientation: list[float] | None = None,
         color: tuple[float, float, float] = (1.0, 0.0, 0.0),
     ):
-        """
-        Add or update a visual marker for IK target position and orientation.
+        """Add or update a visual marker for IK target position and orientation.
 
         Args:
             robot_name: Name of the robot
@@ -2378,8 +2360,7 @@ class ViserVisualizer:
         position: list[float],
         orientation: list[float] | None = None,
     ):
-        """
-        Update the position and orientation of IK target marker.
+        """Update the position and orientation of IK target marker.
 
         Args:
             robot_name: Name of the robot
@@ -2407,8 +2388,7 @@ class ViserVisualizer:
             logger.error(f"Failed to update IK target marker: {e}")
 
     def remove_ik_target_marker(self, robot_name: str):
-        """
-        Remove IK target marker and orientation frame for a robot.
+        """Remove IK target marker and orientation frame for a robot.
 
         Args:
             robot_name: Name of the robot

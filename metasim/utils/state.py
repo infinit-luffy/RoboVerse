@@ -5,7 +5,6 @@ from __future__ import annotations
 from itertools import chain
 
 import torch
-from loguru import logger as log
 
 from metasim.types import Action, CameraState, DictEnvState, ObjectState, RobotState, TensorState
 

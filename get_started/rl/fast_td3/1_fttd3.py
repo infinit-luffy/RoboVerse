@@ -111,12 +111,12 @@ except ImportError:
 import numpy as np
 import torch
 import torch.nn.functional as F
-from loguru import logger as log
-from torch import optim
-from torch.amp import GradScaler, autocast
-from tensordict import TensorDict
 import tqdm
 import wandb
+from loguru import logger as log
+from tensordict import TensorDict
+from torch import optim
+from torch.amp import GradScaler, autocast
 
 torch.set_float32_matmul_precision("high")
 

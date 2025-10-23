@@ -247,7 +247,7 @@ class PPO:
                     if kl_mean > self.desired_kl * 2.0:
                         self.step_size = max(1e-5, self.step_size / 1.5)
                     elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:
-                        self.step_size = min(1e-2, self.step_size * 1.5)
+                        self.step_size = min(1e-3, self.step_size * 1.5)
                     for param_group in self.optimizer.param_groups:
                         param_group["lr"] = self.step_size
 

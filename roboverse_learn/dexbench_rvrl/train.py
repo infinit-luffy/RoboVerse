@@ -84,6 +84,8 @@ class Args:
     obs_type: str = "state"  # "state" or "rgb"
     robot: str = "shadow"  # "allegro" or "shadow"
     no_prio: bool = False
+    use_dr: bool = False  # whether to use domain randomization
+    use_materials: bool = False  # whether to randomize object materials
 
 
 ################################################

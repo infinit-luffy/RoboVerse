@@ -77,7 +77,7 @@ class ReOrientationCfg(BaseRLTaskCfg):
     goal_another_rot = None  # Placeholder for another goal rotation, to be set later, shape (num_envs, 4)
     sensors = []
     vel_obs_scale: float = 0.2  # Scale for velocity observations
-    force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
+    force_torque_obs_scale: float = 1.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
@@ -372,13 +372,11 @@ class ReOrientationCfg(BaseRLTaskCfg):
                     actions[:, actions_start : actions_start + 3 * robot.num_fingertips].view(
                         self.num_envs, robot.num_fingertips, 3
                     )
-                    * self.hand_translation_scale
                 )
                 ft_rot = (
                     actions[
                         :, actions_start + 3 * robot.num_fingertips : actions_start + 6 * robot.num_fingertips
                     ].view(self.num_envs, robot.num_fingertips, 3)
-                    * self.hand_orientation_scale
                 )
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)
                 step_actions[:, step_actions_start + robot.hand_dof_idx] = hand_dof_pos

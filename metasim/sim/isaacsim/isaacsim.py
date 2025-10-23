@@ -52,6 +52,7 @@ class IsaacsimHandler(BaseSimHandler):
             self._device = torch.device(scenario_cfg.device)
         else:
             self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {self._device}")
 
         self._num_envs: int = scenario_cfg.num_envs
         self._episode_length_buf = [0 for _ in range(self.num_envs)]
@@ -79,6 +80,7 @@ class IsaacsimHandler(BaseSimHandler):
         AppLauncher.add_app_launcher_args(parser)
         args = parser.parse_args([])
         args.enable_cameras = True
+        args.device = str(self.device)
         args.headless = self.headless
         app_launcher = AppLauncher(args)
         self.simulation_app = app_launcher.app
@@ -88,7 +90,7 @@ class IsaacsimHandler(BaseSimHandler):
         from isaaclab.sim import PhysxCfg, SimulationCfg, SimulationContext
 
         sim_config: SimulationCfg = SimulationCfg(
-            device=args.device,
+            device=str(self.device),
             render_interval=self.render_interval,
             physx=PhysxCfg(
                 bounce_threshold_velocity=self.scenario.sim_params.bounce_threshold_velocity,
@@ -103,8 +105,7 @@ class IsaacsimHandler(BaseSimHandler):
             sim_config.dt = self.scenario.sim_params.dt
 
         self.sim: SimulationContext = SimulationContext(sim_config)
-        scene_config: InteractiveSceneCfg = InteractiveSceneCfg(
-            num_envs=self._num_envs, env_spacing=self.scenario.env_spacing
+        scene_config: InteractiveSceneCfg = InteractiveSceneCfg( num_envs=self._num_envs, env_spacing=self.scenario.env_spacing
         )
         self.scene = InteractiveScene(scene_config)
 
@@ -703,7 +704,7 @@ class IsaacsimHandler(BaseSimHandler):
                 RigidObjectCfg(
                     prim_path=prim_path,
                     spawn=sim_utils.UsdFileCfg(
-                        usd_path="metasim/data/quick_start/assets/COMMON/frame/usd/frame.usd",
+                        usd_path=obj.usd_path,
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(
                             disable_gravity=True, kinematic_enabled=True
                         ),  # fixed

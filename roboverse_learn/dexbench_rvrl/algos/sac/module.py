@@ -227,16 +227,17 @@ class RGB_Encoder(nn.Module):
         self.num_img = len(self.img_key)
 
         if self.encoder_type == "resnet":
-            self.encoder = torchvision.models.resnet18(pretrained=True)
+            self.visual_encoder = torchvision.models.resnet18(pretrained=True)
             self.visual_feature_dim = self.encoder.fc.in_features
-            del self.encoder.fc  # delete the original fully connected layer
-            self.encoder.fc = nn.Identity()
+            del self.visual_encoder.fc  # delete the original fully connected layer
+            self.visual_encoder.fc = nn.Identity()
             print("=> using resnet18 as visual encoder")
         elif self.encoder_type == "cnn":
-            stages = model_cfg.get("stages", 5)
+            cnn_cfg = model_cfg.get("cnn", {})
+            stages = cnn_cfg.get("stages", 5)
             input_dim = self.num_channel[0]
 
-            kernel_size = model_cfg.get("kernel_size", [4])
+            kernel_size = cnn_cfg.get("kernel_size", [4])
             if isinstance(kernel_size, int):
                 kernel_size = [kernel_size] * stages
             elif isinstance(kernel_size, list):
@@ -245,7 +246,7 @@ class RGB_Encoder(nn.Module):
                 else:
                     assert len(kernel_size) == stages, "kernel_size should be an int or list of length stages"
 
-            stride = model_cfg.get("stride", [2])
+            stride = cnn_cfg.get("stride", [2])
             if isinstance(stride, int):
                 stride = [stride] * stages
             elif isinstance(stride, list):
@@ -254,7 +255,7 @@ class RGB_Encoder(nn.Module):
                 else:
                     assert len(stride) == stages, "stride should be an int or list of length stages"
 
-            depth = model_cfg.get("depth", [32])
+            depth = cnn_cfg.get("depth", [32])
             if isinstance(depth, int):
                 depth = [depth] * stages
             elif isinstance(depth, list):
@@ -292,15 +293,15 @@ class RGB_Encoder(nn.Module):
             raise NotImplementedError
 
     def forward(self, img):
-        # import cv2
-        # import numpy as np
+        import cv2
+        import numpy as np
 
-        # img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
-        # img_uint8 = (img0 * 255).astype(np.uint8) if img0.dtype != np.uint8 else img0
-        # img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
-        # cv2.imwrite("camera0_image.png", img_bgr)
+        img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
+        img_uint8 = (img0 * 255).astype(np.uint8) if img0.dtype != np.uint8 else img0
+        img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+        cv2.imwrite("sac_image.png", img_bgr)
         # exit(0)
-        return self.encoder(img)
+        return self.visual_encoder(img)
 
 
 def get_activation(act_name):

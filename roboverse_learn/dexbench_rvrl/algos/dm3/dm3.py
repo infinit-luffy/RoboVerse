@@ -412,10 +412,7 @@ class DreamerV3:
                         with timer("time/data_sample"):
                             data = self.buffer.sample(self.batch_size, self.batch_length)
                         with timer("time/dynamic_learning"):
-                            if iteration % 10 == 0:
                                 posteriors, deterministics = self.dynamic_learning(data, save_recon=True)
-                            else:
-                                posteriors, deterministics = self.dynamic_learning(data)
                         with timer("time/behavior_learning"):
                             self.behavior_learning(posteriors, deterministics)
 
@@ -495,7 +492,7 @@ class DreamerV3:
                     img1_uint8 = (img1 * 255).astype(np.uint8)
                     img1_bgr = cv2.cvtColor(img1_uint8, cv2.COLOR_RGB2BGR)
                     img_bgr = np.concatenate([img1_bgr, img0_bgr], axis=1)
-                    cv2.imwrite("recon_img.png", img_bgr)
+                    cv2.imwrite("red_recon_img.png", img_bgr)
                 recon_obs_dist = (
                     MSEDistribution(recon_obs, len(self.obs_shape[key])) if "rgb" in key else SymlogDist(recon_obs)
                 )

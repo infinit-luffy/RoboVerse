@@ -270,13 +270,13 @@ class MaterialRandomizer(BaseRandomizerType):
         else:
             raise ValueError(f"Unsupported distribution: {distribution}")
 
-    def randomize_physical_properties(self) -> None:
+    def randomize_physical_properties(self, env_ids=None) -> None:
         """Randomize physical material properties (friction, restitution)."""
         if not self.cfg.physical or not self.cfg.physical.enabled:
             return
 
         obj_inst = self._get_object_instance(self.cfg.obj_name)
-        env_ids = self._get_env_ids()
+        env_ids = env_ids if env_ids is not None else self._get_env_ids()
 
         try:
             # Get current material properties
@@ -304,13 +304,13 @@ class MaterialRandomizer(BaseRandomizerType):
         except Exception as e:
             logger.warning(f"Failed to randomize physical properties for {self.cfg.obj_name}: {e}")
 
-    def randomize_pbr_properties(self) -> None:
+    def randomize_pbr_properties(self, env_ids=None) -> None:
         """Randomize PBR material properties."""
         if not self.cfg.pbr or not self.cfg.pbr.enabled:
             return
 
         obj_inst = self._get_object_instance(self.cfg.obj_name)
-        env_ids = self._get_env_ids()
+        env_ids = env_ids if env_ids is not None else self._get_env_ids()
 
         # Get prim paths for each environment
         root_path = obj_inst.cfg.prim_path
@@ -324,6 +324,13 @@ class MaterialRandomizer(BaseRandomizerType):
 
     def _randomize_prim_pbr(self, prim_path: str) -> None:
         """Randomize PBR properties for a specific prim."""
+        try:
+            import omni.isaac.core.utils.prims as prim_utils
+        except ModuleNotFoundError:
+            import isaacsim.core.utils.prims as prim_utils
+        from omni.kit.material.library import get_material_prim_path
+        from pxr import Gf, Sdf, UsdShade
+        
         prim = prim_utils.get_prim_at_path(prim_path)
         if not prim:
             return
@@ -371,13 +378,13 @@ class MaterialRandomizer(BaseRandomizerType):
             b = self._generate_random_value(self.cfg.pbr.diffuse_color_range[2], self.cfg.pbr.distribution)
             shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(r, g, b))
 
-    def randomize_mdl_material(self) -> None:
+    def randomize_mdl_material(self, env_ids=None) -> None:
         """Apply MDL material based on selection strategy."""
         if not self.cfg.mdl or not self.cfg.mdl.enabled:
             return
 
         obj_inst = self._get_object_instance(self.cfg.obj_name)
-        env_ids = self._get_env_ids()
+        env_ids = env_ids if env_ids is not None else self._get_env_ids()
 
         # Select MDL path from all configured paths (regardless of existence)
         if not self.cfg.mdl.mdl_paths:
@@ -439,58 +446,70 @@ class MaterialRandomizer(BaseRandomizerType):
             raise ValueError(f"Unknown selection strategy: {self.cfg.mdl.selection_strategy}")
 
     def _apply_mdl_to_prim(self, mdl_path: str, prim_path: str) -> None:
-        """Apply MDL material to a specific prim using project's proven method."""
+        """Apply MDL material to a specific prim.
+
+        This is the internal implementation that was originally in material_util.py
+        """
+        # Convert to absolute path for IsaacSim
         try:
-            # Use the existing utility function from the project
-            from metasim.sim.isaaclab.utils.material_util import apply_mdl_to_prim
+            import omni.isaac.core.utils.prims as prim_utils
+        except ModuleNotFoundError:
+            import isaacsim.core.utils.prims as prim_utils
+        from omni.kit.material.library import get_material_prim_path
+        from pxr import Gf, Sdf, UsdShade
+        import omni
+            
+        mdl_path = os.path.abspath(mdl_path)
 
-            # Ensure UV coordinates first
-            prim = prim_utils.get_prim_at_path(prim_path)
-            if prim:
-                self._ensure_uv_for_hierarchy(prim)
+        if not os.path.exists(mdl_path):
+            raise FileNotFoundError(f"Material file {mdl_path} does not exist")
+        if not mdl_path.endswith(".mdl"):
+            raise ValueError(f"Material file {mdl_path} must have .mdl extension")
 
-            # Apply using the proven utility
-            apply_mdl_to_prim(mdl_path, prim_path)
-
-        except ImportError:
-            # Fallback to our implementation if utility is not available
-            self._apply_mdl_fallback(mdl_path, prim_path)
-        except Exception as e:
-            logger.warning(f"Failed to apply MDL {mdl_path} to {prim_path}: {e}")
-
-    def _apply_mdl_fallback(self, mdl_path: str, prim_path: str) -> None:
-        """Fallback MDL application method."""
         prim = prim_utils.get_prim_at_path(prim_path)
         if not prim:
             raise ValueError(f"Prim not found at path {prim_path}")
 
-        mtl_base_name = os.path.basename(mdl_path).removesuffix(".mdl")
-        mtl_name = f"{mtl_base_name}_mat"
+        # Ensure UV coordinates first
+        self._ensure_uv_for_hierarchy(prim)
+
+        # Material name should match the MDL file basename (without .mdl extension)
+        # Don't add _mat or timestamp - let IsaacSim use the exported material name from MDL
+        mtl_name = os.path.basename(mdl_path).removesuffix(".mdl")
         _, mtl_prim_path = get_material_prim_path(mtl_name)
 
-        success, _ = omni.kit.commands.execute(
+        logger.debug(f"Creating MDL material: {mtl_name} from {mdl_path}")
+
+        success, result = omni.kit.commands.execute(
             "CreateMdlMaterialPrim",
             mtl_url=mdl_path,
             mtl_name=mtl_name,
             mtl_path=mtl_prim_path,
             select_new_prim=False,
         )
+        if not success:
+            logger.error(f"Failed to create material {mtl_name} at {mtl_prim_path}")
+            raise RuntimeError(f"Failed to create material {mtl_name} at {mtl_prim_path}")
 
-        if success:
-            success_bind, _ = omni.kit.commands.execute(
-                "BindMaterial",
-                prim_path=prim.GetPath(),
-                material_path=mtl_prim_path,
-                strength=UsdShade.Tokens.strongerThanDescendants,
-            )
-            if not success_bind:
-                logger.warning(f"Failed to bind MDL material {mtl_name}")
-        else:
-            logger.warning(f"Failed to create MDL material {mtl_name}")
+        logger.debug(f"Binding material {mtl_prim_path} to {prim.GetPath()}")
+        # from ipdb import set_trace; set_trace()
+        
+        success, result = omni.kit.commands.execute(
+            "BindMaterial",
+            prim_path=prim.GetPath(),
+            material_path=mtl_prim_path,
+            strength=UsdShade.Tokens.strongerThanDescendants,
+        )
+        
+        if not success:
+            logger.error(f"Failed to bind material at {mtl_prim_path} to {prim.GetPath()}")
+            raise RuntimeError(f"Failed to bind material at {mtl_prim_path} to {prim.GetPath()}")
+
+        logger.debug(f"Successfully applied MDL material {mtl_name} to {prim_path}")
 
     def _ensure_uv_for_hierarchy(self, prim) -> None:
         """Ensure UV coordinates for all meshes in the prim hierarchy."""
-        from pxr import Usd, UsdGeom
+        from pxr import Usd, UsdGeom, Sdf
 
         # Process all meshes in the hierarchy
         for p in Usd.PrimRange(prim):
@@ -509,7 +528,7 @@ class MaterialRandomizer(BaseRandomizerType):
         """Improved UV coordinate generation based on bounding box projection."""
         from math import isfinite
 
-        from pxr import Gf, UsdGeom, Vt
+        from pxr import Gf, UsdGeom, Vt, Sdf
 
         pvapi = UsdGeom.PrimvarsAPI(mesh)
         pv = pvapi.GetPrimvar("st")
@@ -559,7 +578,7 @@ class MaterialRandomizer(BaseRandomizerType):
 
     def _ensure_basic_uv_for_gprim(self, gprim) -> None:
         """Basic UV coordinate generation for geometric primitives."""
-        from pxr import Gf, UsdGeom, Vt
+        from pxr import Gf, UsdGeom, Vt, Sdf
 
         try:
             pvapi = UsdGeom.PrimvarsAPI(gprim)
@@ -595,7 +614,7 @@ class MaterialRandomizer(BaseRandomizerType):
         except Exception:
             return {}
 
-    def __call__(self) -> None:
+    def __call__(self, env_ids=None) -> None:
         """Execute material randomization based on configuration.
 
         Randomization behavior depends on randomization_mode:
@@ -610,13 +629,13 @@ class MaterialRandomizer(BaseRandomizerType):
                 return
 
             if self.cfg.randomization_mode == "combined":
-                self._apply_combined_materials(enabled_types)
+                self._apply_combined_materials(enabled_types, env_ids)
             elif self.cfg.randomization_mode == "physics_only":
-                self._apply_physics_only(enabled_types)
+                self._apply_physics_only(enabled_types, env_ids)
             elif self.cfg.randomization_mode == "visual_only":
-                self._apply_visual_only(enabled_types)
+                self._apply_visual_only(enabled_types, env_ids)
             elif self.cfg.randomization_mode == "all_separate":
-                self._apply_all_separate(enabled_types)
+                self._apply_all_separate(enabled_types, env_ids)
             else:
                 raise ValueError(f"Unknown randomization mode: {self.cfg.randomization_mode}")
 
@@ -635,35 +654,35 @@ class MaterialRandomizer(BaseRandomizerType):
             enabled.append("mdl")
         return enabled
 
-    def _apply_combined_materials(self, enabled_types: list[str]) -> None:
+    def _apply_combined_materials(self, enabled_types: list[str], env_ids=None) -> None:
         """Apply physics + best available visual material."""
         # Apply physical properties if enabled
         if "physical" in enabled_types:
-            self.randomize_physical_properties()
+            self.randomize_physical_properties(env_ids)
 
         # Apply best available visual material (MDL > PBR)
         if "mdl" in enabled_types:
-            self.randomize_mdl_material()
+            self.randomize_mdl_material(env_ids)
         elif "pbr" in enabled_types:
-            self.randomize_pbr_properties()
+            self.randomize_pbr_properties(env_ids)
 
-    def _apply_physics_only(self, enabled_types: list[str]) -> None:
+    def _apply_physics_only(self, enabled_types: list[str], env_ids=None) -> None:
         """Apply only physical properties."""
         if "physical" in enabled_types:
-            self.randomize_physical_properties()
+            self.randomize_physical_properties(env_ids)
 
-    def _apply_visual_only(self, enabled_types: list[str]) -> None:
+    def _apply_visual_only(self, enabled_types: list[str], env_ids=None) -> None:
         """Apply only visual properties (MDL > PBR)."""
         if "mdl" in enabled_types:
-            self.randomize_mdl_material()
+            self.randomize_mdl_material(env_ids)
         elif "pbr" in enabled_types:
-            self.randomize_pbr_properties()
+            self.randomize_pbr_properties(env_ids)
 
-    def _apply_all_separate(self, enabled_types: list[str]) -> None:
+    def _apply_all_separate(self, enabled_types: list[str], env_ids=None) -> None:
         """Apply all enabled material types independently."""
         if "physical" in enabled_types:
-            self.randomize_physical_properties()
+            self.randomize_physical_properties(env_ids)
         if "pbr" in enabled_types:
-            self.randomize_pbr_properties()
+            self.randomize_pbr_properties(env_ids)
         if "mdl" in enabled_types:
-            self.randomize_mdl_material()
+            self.randomize_mdl_material(env_ids)

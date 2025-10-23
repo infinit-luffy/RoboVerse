@@ -95,14 +95,14 @@ class ReplayBuffer:
             if "rgb" not in key
             else torch.as_tensor(flatten(self.observation[key])[flattened_index], device=self.device).float() / 255.0
             for key in self.obs_shape.keys()
-        })
+        }, batch_size=batch_size, device=self.device)
         next_observation = TensorDict({
             key: torch.as_tensor(flatten(self.next_observation[key])[flattened_index], device=self.device).float()
             if "rgb" not in key
             else torch.as_tensor(flatten(self.next_observation[key])[flattened_index], device=self.device).float()
             / 255.0
             for key in self.obs_shape.keys()
-        })
+        }, batch_size=batch_size, device=self.device)
         action = torch.as_tensor(flatten(self.action)[flattened_index], device=self.device).float()
         reward = torch.as_tensor(flatten(self.reward)[flattened_index], device=self.device).float()
         done = torch.as_tensor(flatten(self.done)[flattened_index], device=self.device).float()

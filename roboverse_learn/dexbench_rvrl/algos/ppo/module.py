@@ -3,7 +3,8 @@ import torch
 import torch.nn as nn
 import torchvision
 from torch.distributions import MultivariateNormal
-
+from torchvision.transforms import v2
+import os
 
 class ActorCritic(nn.Module):
     def __init__(self, obs_type, obs_shape, actions_shape, initial_std, model_cfg, img_h=None, img_w=None):
@@ -43,6 +44,7 @@ class ActorCritic(nn.Module):
 
             # img encoder
             self.encoder_type = model_cfg.get("encoder_type", "resnet")
+            self.use_transform = model_cfg.get("use_transform", False)
             if self.encoder_type == "resnet":
                 self.visual_encoder = torchvision.models.resnet18(pretrained=True)
                 self.visual_feature_dim = self.visual_encoder.fc.in_features
@@ -51,11 +53,33 @@ class ActorCritic(nn.Module):
                 if self.fix_img_encoder:
                     for param in self.visual_encoder.parameters():
                         param.requires_grad = False
+                self.transform = make_transform()
+            elif self.encoder_type == "dinov3":
+                dino_cfg = model_cfg.get("dinov3", {})
+                model_type = dino_cfg.get("model_type", "vits16")
+                dir_path = dino_cfg.get("dir_path", "roboverse_learn/dexbench_rvrl/pretrained_ckpts/dinov3")
+                ckpt_path = os.path.join(dir_path, f"dinov3_{model_type}_pretrain.pth")
+                self.use_patch_features = dino_cfg.get("use_patch_features", True)
+                REPO_DIR = "/home/ghr/yizhuo/RoboVerse/third_party/dinov3"
+                self.visual_encoder = torch.hub.load(
+                    REPO_DIR,
+                    f'dinov3_{model_type}',
+                    source='local',
+                    weights=ckpt_path,
+                )
+                self.transform = make_transform
+                if self.fix_img_encoder:
+                    for param in self.visual_encoder.parameters():
+                        param.requires_grad = False
+                dummy = torch.randn(1, 3, 224, 224)
+                output = self.visual_encoder.forward_features(dummy)
+                self.visual_feature_dim = output['x_norm_clstoken'].shape[-1] if not self.use_patch_features else output['x_norm_clstoken'].shape[-1] + output['x_norm_patchtokens'].shape[-1]
             elif self.encoder_type == "cnn":
-                stages = model_cfg.get("stages", 5)
+                cnn_cfg = model_cfg.get("cnn", {})
+                stages = cnn_cfg.get("stages", 5)
                 input_dim = self.num_channel[0]
 
-                kernel_size = model_cfg.get("kernel_size", [4])
+                kernel_size = cnn_cfg.get("kernel_size", [4])
                 if isinstance(kernel_size, int):
                     kernel_size = [kernel_size] * stages
                 elif isinstance(kernel_size, list):
@@ -64,7 +88,7 @@ class ActorCritic(nn.Module):
                     else:
                         assert len(kernel_size) == stages, "kernel_size should be an int or list of length stages"
 
-                stride = model_cfg.get("stride", [2])
+                stride = cnn_cfg.get("stride", [2])
                 if isinstance(stride, int):
                     stride = [stride] * stages
                 elif isinstance(stride, list):
@@ -73,7 +97,7 @@ class ActorCritic(nn.Module):
                     else:
                         assert len(stride) == stages, "stride should be an int or list of length stages"
 
-                depth = model_cfg.get("depth", [32])
+                depth = cnn_cfg.get("depth", [32])
                 if isinstance(depth, int):
                     depth = [depth] * stages
                 elif isinstance(depth, list):
@@ -169,19 +193,36 @@ class ActorCritic(nn.Module):
                 feature.append(observations[key])
             elif key in self.img_key:
                 img = observations[key]
-                # import cv2
-                # import numpy as np
+                import cv2
+                import numpy as np
 
-                # img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
-                # img_uint8 = (img0 * 255).astype(np.uint8) if img0.dtype != np.uint8 else img0
-                # img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
-                # cv2.imwrite("camera0_image.png", img_bgr)
+                img0 = img[0].permute(1, 2, 0).cpu().numpy()  # Get the first environment's camera image
+                img_uint8 = (img0 * 255).astype(np.uint8) if img0.dtype != np.uint8 else img0
+                img_bgr = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2BGR)
+                cv2.imwrite("button_cnn_image_2.png", img_bgr)
                 # exit(0)
-                if self.fix_img_encoder:
-                    with torch.no_grad():
-                        img_features = self.visual_encoder(img)
-                else:
-                    img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+                if self.encoder_type in ["resnet", "dinov3"] and self.use_transform:
+                    img = self.transform(img)
+                if self.encoder_type in ["cnn", "resnet"]:
+                    if self.fix_img_encoder:
+                        with torch.no_grad():
+                            img_features = self.visual_encoder(img)
+                    else:
+                        img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+                elif self.encoder_type == "dinov3":
+                    if self.fix_img_encoder:
+                        with torch.no_grad():
+                            output = self.visual_encoder.forward_features(img)
+                            img_features = output['x_norm_clstoken']
+                            if self.use_patch_features:
+                                patch_features = output['x_norm_patchtokens'].mean(dim=1)
+                                img_features = torch.cat([img_features, patch_features], dim=-1)
+                    else:
+                        output = self.visual_encoder.forward_features(img)
+                        img_features = output['x_norm_clstoken']
+                        if self.use_patch_features:
+                            patch_features = output['x_norm_patchtokens'].mean(dim=1)
+                            img_features = torch.cat([img_features, patch_features], dim=-1)
                 img_features_flatten = img_features.view(
                     observations[key].shape[0], -1
                 )  # (batch_size, num_img * visual_feature_dim)
@@ -215,11 +256,28 @@ class ActorCritic(nn.Module):
                 feature.append(observations[key])
             elif key in self.img_key:
                 img = observations[key]
-                if self.fix_img_encoder or self.fix_actor_img_encoder:
-                    with torch.no_grad():
-                        img_features = self.visual_encoder(img)
-                else:
-                    img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+                if self.encoder_type in ["resnet", "dinov3"] and self.use_transform:
+                    img = self.transform(img)
+                if self.encoder_type in ["cnn", "resnet"]:
+                    if self.fix_img_encoder or self.fix_actor_img_encoder:
+                        with torch.no_grad():
+                            img_features = self.visual_encoder(img)
+                    else:
+                        img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+                elif self.encoder_type == "dinov3":
+                    if self.fix_img_encoder or self.fix_actor_img_encoder:
+                        with torch.no_grad():
+                            output = self.visual_encoder.forward_features(img)
+                            img_features = output['x_norm_clstoken']
+                            if self.use_patch_features:
+                                patch_features = output['x_norm_patchtokens'].mean(dim=1)
+                                img_features = torch.cat([img_features, patch_features], dim=-1)
+                    else:
+                        output = self.visual_encoder.forward_features(img)
+                        img_features = output['x_norm_clstoken']
+                        if self.use_patch_features:
+                            patch_features = output['x_norm_patchtokens'].mean(dim=1)
+                            img_features = torch.cat([img_features, patch_features], dim=-1)
                 img_features_flatten = img_features.view(
                     observations[key].shape[0], -1
                 )  # (batch_size, num_img * visual_feature_dim)
@@ -237,11 +295,28 @@ class ActorCritic(nn.Module):
                 feature.append(observations[key])
             elif key in self.img_key:
                 img = observations[key]
-                if self.fix_img_encoder:
-                    with torch.no_grad():
-                        img_features = self.visual_encoder(img)
-                else:
-                    img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+                if self.encoder_type in ["resnet", "dinov3"] and self.use_transform:
+                    img = self.transform(img)
+                if self.encoder_type in ["cnn", "resnet"]:
+                    if self.fix_img_encoder:
+                        with torch.no_grad():
+                            img_features = self.visual_encoder(img)
+                    else:
+                        img_features = self.visual_encoder(img)  # (batch_size * num_img, visual_feature_dim)
+                elif self.encoder_type == "dinov3":
+                    if self.fix_img_encoder:
+                        with torch.no_grad():
+                            output = self.visual_encoder.forward_features(img)
+                            img_features = output['x_norm_clstoken']
+                            if self.use_patch_features:
+                                patch_features = output['x_norm_patchtokens'].mean(dim=1)
+                                img_features = torch.cat([img_features, patch_features], dim=-1)
+                    else:
+                        output = self.visual_encoder.forward_features(img)
+                        img_features = output['x_norm_clstoken']
+                        if self.use_patch_features:
+                            patch_features = output['x_norm_patchtokens'].mean(dim=1)
+                            img_features = torch.cat([img_features, patch_features], dim=-1)
                 img_features_flatten = img_features.view(
                     observations[key].shape[0], -1
                 )  # (batch_size, num_img * visual_feature_dim)
@@ -262,6 +337,15 @@ class ActorCritic(nn.Module):
         value = self.critic(feature)
 
         return actions_log_prob, entropy, value, actions_mean, self.log_std.repeat(actions_mean.shape[0], 1)
+    
+def make_transform(resize_size: int = 224):
+    resize = v2.Resize((resize_size, resize_size), antialias=True)
+    to_float = v2.ToDtype(torch.float32, scale=True)
+    normalize = v2.Normalize(
+        mean=(0.485, 0.456, 0.406),
+        std=(0.229, 0.224, 0.225),
+    )
+    return v2.Compose([resize, to_float, normalize])
 
 
 def get_activation(act_name):

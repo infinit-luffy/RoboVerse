@@ -8,37 +8,49 @@ policy: # only works for MlpPolicy right now
   q_hid_sizes: [1024, 1024, 512]
   activation: elu # can be elu, relu, selu, crelu, lrelu, tanh, sigmoid
   encoder_type: "cnn"
-  stages: 5
-  kernel_size: 4
-  stride: 2
-  depth: [32, 64, 128, 256, 512]
-  fix_img_encoder: True # if True, the image encoder will not be trained, useful for transfer learning
+  cnn:
+    stages: 5
+    kernel_size: 4
+    stride: 2
+    depth: [32, 64, 128, 256, 512]
+  fix_img_encoder: False # if True, the image encoder will not be trained, useful for transfer learning
   fix_actor_img_encoder: True # if True, the image encoder in the actor will not be trained, useful for transfer learning
-  visual_feature_dim: 512
+  visual_feature_dim: 1024
+  log_std_min: -20
+  log_std_max: 2
 learn:
   agent_name: shadow_hand
   test: False
   resume: 0
-  log_interval: 10000
+  log_interval: 100000
   print_log: True
+  print_interval: 1
 
   # rollout params
   max_iterations: 100000
+  nstep: 1
 
   # training params
   max_grad_norm: 1
-  actor_lr: 5.e-5
-  critic_lr: 1.e-4
+  actor_lr: 3.e-4
+  critic_lr: 3.e-4
+  alpha_lr: 3.e-4
   tau: 0.005
   alpha: 0.2
   policy_frequency: 1
   critic_frequency: 1
   target_network_frequency: 2
-  batch_size: 4096
+  batch_size: 1024
   prefill: 400
   buffer_size: 5000
-  gamma: 0.96
+  gamma: 0.99
+
+  automaic_alpha_tuning: True
 
 env:
   img_h: 128
   img_w: 128
+  light:
+    type: "dome"
+    intensity: 1500.0
+    color: [1.0, 1.0, 1.0]

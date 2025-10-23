@@ -475,12 +475,12 @@ class ObjectRandomizer(BaseRandomizerType):
         return torch.stack([w, x, y, z], dim=-1)
 
     # Randomization Methods
-    def randomize_physics(self) -> None:
+    def randomize_physics(self, env_ids=None) -> None:
         """Randomize physics properties based on configuration."""
         if not self.cfg.physics.enabled:
             return
 
-        env_ids = self.cfg.env_ids or list(range(self.handler.num_envs))
+        env_ids = env_ids if env_ids is not None else list(range(self.handler.num_envs))
 
         # Randomize mass
         if self.cfg.physics.mass_range is not None:
@@ -557,12 +557,12 @@ class ObjectRandomizer(BaseRandomizerType):
 
             self.set_restitution(self.cfg.obj_name, new_restitution, self.cfg.body_name, env_ids)
 
-    def randomize_pose(self) -> None:
+    def randomize_pose(self, env_ids=None) -> None:
         """Randomize pose (position and rotation) based on configuration."""
         if not self.cfg.pose.enabled:
             return
 
-        env_ids = self.cfg.env_ids or list(range(self.handler.num_envs))
+        env_ids = env_ids if env_ids is not None else list(range(self.handler.num_envs))
         current_pos, current_rot = self.get_pose(self.cfg.obj_name, env_ids)
 
         new_pos = current_pos.clone()
@@ -623,10 +623,10 @@ class ObjectRandomizer(BaseRandomizerType):
 
         self.set_pose(self.cfg.obj_name, new_pos, new_rot, env_ids)
 
-    def __call__(self) -> None:
+    def __call__(self, env_ids=None) -> None:
         """Execute object randomization based on configuration."""
-        self.randomize_physics()
-        self.randomize_pose()
+        self.randomize_physics(env_ids)
+        self.randomize_pose(env_ids)
 
     # Getter methods for backward compatibility and debugging
     def get_properties(self) -> dict[str, Any]:

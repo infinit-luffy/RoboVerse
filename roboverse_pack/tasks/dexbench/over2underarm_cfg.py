@@ -86,7 +86,7 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
     goal_rot = None  # Placeholder for goal rotation, to be set later, shape (num_envs, 4)
     sensors = []
     vel_obs_scale: float = 0.2  # Scale for velocity observations
-    force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
+    force_torque_obs_scale: float = 1.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
@@ -384,8 +384,8 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
                 ft_action = actions[:, actions_start : actions_start + 6 * robot.num_fingertips].view(
                     self.num_envs, robot.num_fingertips, 6
                 )
-                ft_pos = ft_action[:, :, :3] * self.hand_translation_scale
-                ft_rot = ft_action[:, :, 3:] * self.hand_orientation_scale
+                ft_pos = ft_action[:, :, :3]
+                ft_rot = ft_action[:, :, 3:]
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)
                 step_actions[:, step_actions_start + robot.hand_dof_idx] = hand_dof_pos
                 actions_start += 6 * robot.num_fingertips
@@ -572,20 +572,26 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
             # If no noise is applied, return the initial states directly
             return deepcopy(init_states)
         if isinstance(init_states, list):
+            if getattr(self, "robot_dof_default_pos_cpu", None) is None:
+                self.robot_dof_default_pos_cpu = {}
+                for robot in self.robots:
+                    self.robot_dof_default_pos_cpu[robot.name] = torch.zeros(
+                        robot.num_joints, dtype=torch.float32, device="cpu"
+                    )
+                    for idx, name in enumerate(robot.dof_names):
+                        self.robot_dof_default_pos_cpu[robot.name][idx] = self.init_states["robots"][robot.name][
+                            "dof_pos"
+                        ][name]
             reset_state = deepcopy(init_states)
-            num_shadow_hand_dofs = self.shadow_hand_dof_lower_limits.shape[0]
+            num_dofs = self.robots[0].num_joints + self.robots[1].num_joints
             x_unit_tensor = torch.tensor([1, 0, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
             y_unit_tensor = torch.tensor([0, 1, 0], dtype=torch.float, device="cpu").repeat((len(env_ids), 1))
 
             # generate random values
-            rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device="cpu")
+            rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_dofs + 5), device="cpu")
 
             new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
-
-            robot_dof_default_pos = self.robot_dof_default_pos_cpu[self.robots[0].name]
-            delta_max = self.shadow_hand_dof_upper_limits_cpu - robot_dof_default_pos
-            delta_min = self.shadow_hand_dof_lower_limits_cpu - robot_dof_default_pos
-
+            start_idx = 5
             for i, env_id in enumerate(env_ids):
                 for obj_name in reset_state[env_id]["objects"].keys():
                     reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
@@ -593,14 +599,20 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
                     )
                     reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
 
-                # reset shadow hand
-                for robot_name in reset_state[env_id]["robots"].keys():
-                    rand_delta = delta_min + (delta_max - delta_min) * rand_floats[i, 5 : 5 + num_shadow_hand_dofs]
-                    dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
-                    reset_state[env_id]["robots"][robot_name]["dof_pos"] = {
-                        name: dof_pos[j].item()
-                        for j, name in enumerate(reset_state[env_id]["robots"][robot_name]["dof_pos"].keys())
-                    }
+                # reset hand
+                if self.reset_dof_pos_noise > 0.0:
+                    for robot in self.robots:
+                        robot_dof_default_pos = self.robot_dof_default_pos_cpu[robot.name]
+                        delta_max = robot.joint_limits_upper.cpu() - robot_dof_default_pos
+                        delta_min = robot.joint_limits_lower.cpu() - robot_dof_default_pos
+                        rand_delta = (
+                            delta_min + (delta_max - delta_min) * rand_floats[i, start_idx : start_idx + robot.num_joints]
+                        )
+                        dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
+                        reset_state[env_id]["robots"][robot.name]["dof_pos"] = {
+                            name: dof_pos[idx].item() for idx, name in enumerate(robot.dof_names)
+                        }
+                        start_idx += robot.num_joints
 
             return reset_state
         elif isinstance(init_states, TensorState):
@@ -623,32 +635,34 @@ class Over2UnderarmCfg(BaseRLTaskCfg):
                 if isinstance(obj, ArticulationObjCfg):
                     joint_pos = reset_state.objects[obj.name].joint_pos
                     obj_state.joint_pos = joint_pos
+                    obj_state.joint_vel = torch.zeros_like(joint_pos)
                 reset_state.objects[obj.name] = obj_state
 
-            start_idx = 5
-            for robot_id, robot in enumerate(self.robots):
-                robot_dof_default_pos = reset_state.robots[robot.name].joint_pos[env_ids]
-                delta_max = robot.joint_limits_upper - robot_dof_default_pos
-                delta_min = robot.joint_limits_lower - robot_dof_default_pos
-                rand_delta = (
-                    delta_min + (delta_max - delta_min) * rand_floats[:, start_idx : start_idx + robot.num_joints]
-                )
-                dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
-                joint_pos = reset_state.robots[robot.name].joint_pos
-                joint_pos[env_ids.unsqueeze(1), robot.hand_dof_idx.unsqueeze(0)] = dof_pos[:, robot.hand_dof_idx]
-                robot_state = RobotState(
-                    root_state=reset_state.robots[robot.name].root_state,
-                    joint_pos=joint_pos,
-                    joint_vel=torch.zeros_like(joint_pos),
-                    body_names=None,
-                    body_state=None,
-                    joint_force=None,
-                    joint_effort_target=None,
-                    joint_pos_target=None,
-                    joint_vel_target=None,
-                )
-                reset_state.robots[robot.name] = robot_state
-                start_idx += robot.num_joints
+            if self.reset_dof_pos_noise > 0.0:
+                start_idx = 5
+                for robot_id, robot in enumerate(self.robots):
+                    robot_dof_default_pos = reset_state.robots[robot.name].joint_pos[env_ids]
+                    delta_max = robot.joint_limits_upper - robot_dof_default_pos
+                    delta_min = robot.joint_limits_lower - robot_dof_default_pos
+                    rand_delta = (
+                        delta_min + (delta_max - delta_min) * rand_floats[:, start_idx : start_idx + robot.num_joints]
+                    )
+                    dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
+                    joint_pos = reset_state.robots[robot.name].joint_pos
+                    joint_pos[env_ids.unsqueeze(1), robot.hand_dof_idx.unsqueeze(0)] = dof_pos[:, robot.hand_dof_idx]
+                    robot_state = RobotState(
+                        root_state=reset_state.robots[robot.name].root_state,
+                        joint_pos=joint_pos,
+                        joint_vel=torch.zeros_like(joint_pos),
+                        body_names=None,
+                        body_state=None,
+                        joint_force=None,
+                        joint_effort_target=None,
+                        joint_pos_target=None,
+                        joint_vel_target=None,
+                    )
+                    reset_state.robots[robot.name] = robot_state
+                    start_idx += robot.num_joints
 
             return reset_state
         else:

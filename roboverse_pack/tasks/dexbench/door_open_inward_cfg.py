@@ -84,7 +84,7 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
     r_handle_idx = None  # Index of the right hand handle in the body state
     l_handle_idx = None  # Index of the left hand handle in the body state
     vel_obs_scale: float = 0.2  # Scale for velocity observations
-    force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
+    force_torque_obs_scale: float = 1.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
@@ -379,8 +379,8 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
                 ft_action = actions[:, actions_start : actions_start + 6 * robot.num_fingertips].view(
                     self.num_envs, robot.num_fingertips, 6
                 )
-                ft_pos = ft_action[:, :, :3] * self.hand_translation_scale
-                ft_rot = ft_action[:, :, 3:] * self.hand_orientation_scale
+                ft_pos = ft_action[:, :, :3]
+                ft_rot = ft_action[:, :, 3:]
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)
                 step_actions[:, step_actions_start + robot.hand_dof_idx] = hand_dof_pos
                 actions_start += 6 * robot.num_fingertips
@@ -607,18 +607,19 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
                     reset_state[env_id]["objects"][obj_name]["rot"] = new_object_rot[i]
 
                 # reset hand
-                for robot in self.robots:
-                    robot_dof_default_pos = self.robot_dof_default_pos_cpu[robot.name]
-                    delta_max = robot.joint_limits_upper.cpu() - robot_dof_default_pos
-                    delta_min = robot.joint_limits_lower.cpu() - robot_dof_default_pos
-                    rand_delta = (
-                        delta_min + (delta_max - delta_min) * rand_floats[i, start_idx : start_idx + robot.num_joints]
-                    )
-                    dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
-                    reset_state[env_id]["robots"][robot.name]["dof_pos"] = {
-                        name: dof_pos[idx].item() for idx, name in enumerate(robot.dof_names)
-                    }
-                    start_idx += robot.num_joints
+                if self.reset_dof_pos_noise > 0.0:
+                    for robot in self.robots:
+                        robot_dof_default_pos = self.robot_dof_default_pos_cpu[robot.name]
+                        delta_max = robot.joint_limits_upper.cpu() - robot_dof_default_pos
+                        delta_min = robot.joint_limits_lower.cpu() - robot_dof_default_pos
+                        rand_delta = (
+                            delta_min + (delta_max - delta_min) * rand_floats[i, start_idx : start_idx + robot.num_joints]
+                        )
+                        dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
+                        reset_state[env_id]["robots"][robot.name]["dof_pos"] = {
+                            name: dof_pos[idx].item() for idx, name in enumerate(robot.dof_names)
+                        }
+                        start_idx += robot.num_joints
 
             return reset_state
         elif isinstance(init_states, TensorState):
@@ -642,26 +643,27 @@ class DoorOpenInwardCfg(BaseRLTaskCfg):
                     obj_state.joint_pos = joint_pos
                 reset_state.objects[obj.name] = obj_state
 
-            for robot_id, robot in enumerate(self.robots):
-                robot_dof_default_pos = self.robot_dof_default_pos[robot.name][self.joint_reindex]
-                delta_max = self.shadow_hand_dof_upper_limits[self.joint_reindex] - robot_dof_default_pos
-                delta_min = self.shadow_hand_dof_lower_limits[self.joint_reindex] - robot_dof_default_pos
-                rand_delta = delta_min + (delta_max - delta_min) * rand_floats[:, 5 : 5 + num_shadow_hand_dofs]
-                dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
-                joint_pos = reset_state.robots[robot.name].joint_pos
-                joint_pos[env_ids, :] = dof_pos
-                robot_state = RobotState(
-                    root_state=reset_state.robots[robot.name].root_state,
-                    joint_pos=joint_pos,
-                    joint_vel=torch.zeros_like(joint_pos),
-                    body_names=None,
-                    body_state=None,
-                    joint_force=None,
-                    joint_effort_target=None,
-                    joint_pos_target=None,
-                    joint_vel_target=None,
-                )
-                reset_state.robots[robot.name] = robot_state
+            if self.reset_dof_pos_noise > 0.0:
+                for robot_id, robot in enumerate(self.robots):
+                    robot_dof_default_pos = self.robot_dof_default_pos[robot.name][self.joint_reindex]
+                    delta_max = self.shadow_hand_dof_upper_limits[self.joint_reindex] - robot_dof_default_pos
+                    delta_min = self.shadow_hand_dof_lower_limits[self.joint_reindex] - robot_dof_default_pos
+                    rand_delta = delta_min + (delta_max - delta_min) * rand_floats[:, 5 : 5 + num_shadow_hand_dofs]
+                    dof_pos = robot_dof_default_pos + self.reset_dof_pos_noise * rand_delta
+                    joint_pos = reset_state.robots[robot.name].joint_pos
+                    joint_pos[env_ids, :] = dof_pos
+                    robot_state = RobotState(
+                        root_state=reset_state.robots[robot.name].root_state,
+                        joint_pos=joint_pos,
+                        joint_vel=torch.zeros_like(joint_pos),
+                        body_names=None,
+                        body_state=None,
+                        joint_force=None,
+                        joint_effort_target=None,
+                        joint_pos_target=None,
+                        joint_vel_target=None,
+                    )
+                    reset_state.robots[robot.name] = robot_state
 
             return reset_state
         else:

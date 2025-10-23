@@ -17,6 +17,7 @@ from metasim.utils.setup_util import get_handler
 from roboverse_pack.tasks.dexbench.get_task import get_task
 from metasim.utils.state import list_state_to_tensor
 from roboverse_learn.dexbench_rvrl.envs.base import BaseVecEnv
+from .domain_randomization_helper import DomainRandomizationHelper
 
 
 class DexEnv(BaseVecEnv):
@@ -45,6 +46,54 @@ class DexEnv(BaseVecEnv):
         self.task = task
         cameras = [] if not hasattr(task, "cameras") else task.cameras
         sensors = [] if not hasattr(task, "sensors") else task.sensors
+        light_cfg = env_cfg.get("light", None) if env_cfg is not None else None
+        if light_cfg is not None:
+            from metasim.scenario.lights import BaseLightCfg, DistantLightCfg, CylinderLightCfg, DomeLightCfg, SphereLightCfg, DiskLightCfg
+
+            light_type = light_cfg.get("type", "distant").lower()
+            if light_type == "distant":
+                light = DistantLightCfg(
+                    name="distant_light",
+                    intensity=light_cfg.get("intensity", 500.0),
+                    color=tuple(light_cfg.get("color", (1.0, 1.0, 1.0))),
+                    polar=light_cfg.get("polar", 0.0),
+                    azimuth=light_cfg.get("azimuth", 0.0),
+                )
+            elif light_type == "cylinder":
+                light = CylinderLightCfg(
+                    name="cylinder_light",
+                    intensity=light_cfg.get("intensity", 500.0),
+                    color=tuple(light_cfg.get("color", (1.0, 1.0, 1.0))),
+                    length=light_cfg.get("length", 1.0),
+                    radius=light_cfg.get("radius", 0.5),
+                )
+            elif light_type == "dome":
+                light = DomeLightCfg(
+                    name="dome_light",
+                    intensity=light_cfg.get("intensity", 500.0),
+                    color=tuple(light_cfg.get("color", (1.0, 1.0, 1.0))),
+                )
+            elif light_type == "sphere":
+                light = SphereLightCfg(
+                    name="sphere_light",
+                    intensity=light_cfg.get("intensity", 500.0),
+                    color=tuple(light_cfg.get("color", (1.0, 1.0, 1.0))),
+                    radius=light_cfg.get("radius", 0.5),    
+                )
+            elif light_type == "disk":
+                light = DiskLightCfg(
+                    name="disk_light",
+                    intensity=light_cfg.get("intensity", 500.0),
+                    color=tuple(light_cfg.get("color", (1.0, 1.0, 1.0))),
+                    radius=light_cfg.get("radius", 1.0),
+                )
+            else:
+                log.warning(f"Unknown light type '{light_type}', defaulting to DistantLightCfg.")
+                light = DistantLightCfg()
+        else:
+            from metasim.scenario.lights import DistantLightCfg
+            light = DistantLightCfg()
+                
         scenario = ScenarioCfg(
             robots=task.robots,
             objects=task.objects,
@@ -56,6 +105,7 @@ class DexEnv(BaseVecEnv):
             sim_params=task.sim_params,
             decimation=task.decimation,
             env_spacing=task.env_spacing,
+            lights=[light], 
         )
         scenario.device = args.device
         self.task.robots = scenario.robots
@@ -63,8 +113,26 @@ class DexEnv(BaseVecEnv):
         self.sim_device = torch.device(args.device if torch.cuda.is_available() else "cpu")
         self._num_envs = scenario.num_envs
         self.robots = scenario.robots
+        self.objects = scenario.objects
 
         self.handler = get_handler(scenario)
+        
+        randomization_cfg = task.randomization_cfg if hasattr(task, "randomization_cfg") else None
+        self.domain_randomization_helper = None
+        self.use_dr = args.use_dr
+        self.use_materials = args.use_materials
+        if randomization_cfg is not None and (args.use_dr or args.use_materials):
+            self.domain_randomization_helper = DomainRandomizationHelper(
+                cfg=randomization_cfg,
+                lights=scenario.lights,
+                objects=self.objects,
+                robots=self.robots,
+                cameras=scenario.cameras,
+                handler=self.handler,
+                env_spacing=scenario.env_spacing,
+                seed=args.seed,
+            )
+            
 
         self.init_states = [copy.deepcopy(self.task.init_states) for _ in range(self.num_envs)]
         self.init_states_tensor = list_state_to_tensor(
@@ -111,8 +179,9 @@ class DexEnv(BaseVecEnv):
         self.total_reset = 0
         self.total_success = 0
         self.mean_success_rate = 0.0
-        self.reset_counts = deque(maxlen=100)
-        self.success_counts = deque(maxlen=100)
+        self.quelen = 12800 // self.num_envs
+        self.reset_counts = deque(maxlen=self.quelen)
+        self.success_counts = deque(maxlen=self.quelen)
 
         self.last_success_rate = 0.0
         if args.seed is not None:
@@ -131,6 +200,8 @@ class DexEnv(BaseVecEnv):
     def reset(self):
         """Reset the environment."""
         env_ids = list(range(self.num_envs))
+        if self.domain_randomization_helper is not None and (self.use_dr or self.use_materials):
+            self.domain_randomization_helper.randomiation(env_ids=env_ids)
         self.handler.set_states(self.init_states_tensor, env_ids=env_ids)
         self.handler.refresh_render()
         obs = self.handler.get_states()
@@ -213,7 +284,7 @@ class DexEnv(BaseVecEnv):
 
         success_rate = step_successes / step_resets if step_resets else self.last_success_rate
         self.last_success_rate = success_rate
-        if len(self.reset_counts) == 100:
+        if len(self.reset_counts) == self.quelen:
             self.total_reset -= self.reset_counts[0]
             self.total_success -= self.success_counts[0]
 
@@ -260,6 +331,8 @@ class DexEnv(BaseVecEnv):
         self.episode_reset[env_ids] = 0
         self.reset_goal_pose(env_ids)
         reset_states = self.task.reset_init_pose_fn(self.init_states_tensor, env_ids=env_ids)
+        if self.domain_randomization_helper is not None and self.use_dr:
+            self.domain_randomization_helper.randomiation(env_ids=env_ids.tolist())
         self.handler.set_states(reset_states, env_ids=env_ids.tolist())
         self.handler.refresh_render()
         env_states = self.handler.get_states()

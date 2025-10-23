@@ -87,7 +87,7 @@ class ScissorCfg(BaseRLTaskCfg):
     l_handle_idx = None  # Index of the left hand handle in the body state
     r_handle_idx = None  # Index of the right hand handle in the body state
     vel_obs_scale: float = 0.2  # Scale for velocity observations
-    force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
+    force_torque_obs_scale: float = 1.0  # Scale for force and torque observations
     sim: Literal["isaaclab", "isaacgym", "genesis", "pyrep", "pybullet", "sapien", "sapien3", "mujoco", "blender"] = (
         "isaacgym"
     )
@@ -391,8 +391,8 @@ class ScissorCfg(BaseRLTaskCfg):
                 ft_action = actions[:, actions_start : actions_start + 6 * robot.num_fingertips].view(
                     self.num_envs, robot.num_fingertips, 6
                 )
-                ft_pos = ft_action[:, :, :3] * self.hand_translation_scale
-                ft_rot = ft_action[:, :, 3:] * self.hand_orientation_scale
+                ft_pos = ft_action[:, :, :3]
+                ft_rot = ft_action[:, :, 3:]
                 hand_dof_pos = robot.control_hand_ik(ft_pos, ft_rot)
                 step_actions[:, step_actions_start + robot.hand_dof_idx] = hand_dof_pos
                 actions_start += 6 * robot.num_fingertips

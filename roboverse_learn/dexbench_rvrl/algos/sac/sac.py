@@ -75,7 +75,9 @@ class SAC:
             enable_deterministic_run()
         learn_cfg = self.train_cfg["learn"]
         self.actor_lr = learn_cfg.get("actor_lr", 3e-4)
-        self.critic_lr = learn_cfg.get("critic_lr", 1e-3)
+        self.critic_lr = learn_cfg.get("critic_lr", 3e-4)
+        self.alpha_lr = learn_cfg.get("alpha_lr", 3e-4)
+        self.automatic_alpha_tuning = learn_cfg.get("automaic_alpha_tuning", True)
         self.gamma = learn_cfg.get("gamma", 0.99)
         self.tau = learn_cfg.get("tau", 0.005)
         self.alpha = learn_cfg.get("alpha", 0.2)
@@ -85,10 +87,16 @@ class SAC:
         self.num_envs = env.num_envs
         self.batch_size = learn_cfg["batch_size"]
         self.max_iterations = learn_cfg.get("max_iterations", 100000)
+        self.nstep = learn_cfg.get("nstep", 1)
         self.log_interval = learn_cfg.get("log_interval", 1)
         self.print_interval = learn_cfg.get("print_interval", 10)
         self.prefill = learn_cfg.get("prefill", 200)
         self.max_grad_norm = learn_cfg.get("max_grad_norm", None)
+        
+        if self.automatic_alpha_tuning is True:
+            self.target_entropy = -self.action_dim
+            self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+            self.alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=self.alpha_lr)
 
         self.model_cfg = self.train_cfg.get("policy", None)
 
@@ -254,27 +262,28 @@ class SAC:
             for iteration in range(self.current_learning_iteration, self.max_iterations):
                 with timer("time/iteration"):
                     with torch.inference_mode(), timer("time/roll_out"):
-                        if iteration < self.prefill:
-                            action = torch.rand((self.num_envs, self.action_dim), device=self.device) * 2 - 1
-                        else:
-                            action, _ = self.actor.get_action(obs)
-                        next_obs, reward, terminated, truncated, info = self.env.step(action)
-                        done = torch.logical_or(terminated, truncated)
-                        self.buffer.add(obs, action, reward, next_obs, done, terminated)
+                        for _ in range(self.nstep):
+                            if iteration < self.prefill:
+                                action = torch.rand((self.num_envs, self.action_dim), device=self.device) * 2 - 1
+                            else:
+                                action, _ = self.actor.get_action(obs)
+                            next_obs, reward, terminated, truncated, info = self.env.step(action)
+                            done = torch.logical_or(terminated, truncated)
+                            self.buffer.add(obs, action, reward, next_obs, done, terminated)
 
-                        for k in obs:
-                            obs[k].copy_(next_obs[k])
+                            for k in obs:
+                                obs[k].copy_(next_obs[k])
 
-                        ep_infos.append(info)
-                        self.cur_rewards_sum += reward
-                        self.cur_episode_length += 1
-                        self.global_step += self.num_envs
+                            ep_infos.append(info)
+                            self.cur_rewards_sum += reward
+                            self.cur_episode_length += 1
+                            self.global_step += self.num_envs
 
-                        if done.any():
-                            self.episode_rewards.update(self.cur_rewards_sum[done])
-                            self.episode_lengths.update(self.cur_episode_length[done])
-                            self.cur_rewards_sum[done] = 0
-                            self.cur_episode_length[done] = 0
+                            if done.any():
+                                self.episode_rewards.update(self.cur_rewards_sum[done])
+                                self.episode_lengths.update(self.cur_episode_length[done])
+                                self.cur_rewards_sum[done] = 0
+                                self.cur_episode_length[done] = 0
 
                     mean_reward = self.buffer.mean_reward()
                     # update the model
@@ -342,6 +351,16 @@ class SAC:
         self.actor_optimizer.step()
 
         self.actor_losses.update(actor_loss.detach().item())
+        if self.automatic_alpha_tuning:
+            self.update_alpha(log_prob.detach())
+        
+    def update_alpha(self, log_prob):
+        alpha_loss = -(self.log_alpha * (log_prob + self.target_entropy).detach()).mean()
+
+        self.alpha_optimizer.zero_grad()
+        alpha_loss.backward()
+        self.alpha_optimizer.step()
+        self.alpha = self.log_alpha.exp()
 
     def log(self, locs, width=80, pad=35):
         ep_string = ""

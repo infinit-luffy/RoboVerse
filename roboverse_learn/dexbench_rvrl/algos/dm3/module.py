@@ -358,30 +358,32 @@ class Encoder(nn.Module):
             self.num_img = len(self.img_key)
             self.visual_feature_dim = model_cfg.get("visual_feature_dim", 4096)
 
-            stages = model_cfg.get("stages", 5)
+            cnn_cfg = model_cfg.get("cnn", {})
+            stages = cnn_cfg.get("stages", 5)
             input_dim = self.num_channel[0]
-            kernel_size = model_cfg.get("kernel_size", 4)
+
+            kernel_size = cnn_cfg.get("kernel_size", [4])
             if isinstance(kernel_size, int):
                 kernel_size = [kernel_size] * stages
-            else:
+            elif isinstance(kernel_size, list):
                 if len(kernel_size) == 1:
                     kernel_size = kernel_size * stages
                 else:
                     assert len(kernel_size) == stages, "kernel_size should be an int or list of length stages"
 
-            stride = model_cfg.get("stride", 2)
+            stride = cnn_cfg.get("stride", [2])
             if isinstance(stride, int):
                 stride = [stride] * stages
-            else:
+            elif isinstance(stride, list):
                 if len(stride) == 1:
                     stride = stride * stages
                 else:
                     assert len(stride) == stages, "stride should be an int or list of length stages"
 
-            depth = model_cfg.get("depth", 16)
+            depth = cnn_cfg.get("depth", [32])
             if isinstance(depth, int):
-                depth = depth * stages
-            else:
+                depth = [depth] * stages
+            elif isinstance(depth, list):
                 if len(depth) == 1:
                     depth = depth * stages
                 else:

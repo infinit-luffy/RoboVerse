@@ -4,10 +4,11 @@ clip_observations: 5.0
 clip_actions: 1.0
 
 model: # only works for MlpPolicy right now
-  stages: 5
-  kernel_size: 4
-  stride: 2
-  depth: [32, 64, 128, 256, 512]
+  cnn:
+    stages: 5
+    kernel_size: 4
+    stride: 2
+    depth: [32, 64, 128, 256, 512]
   hidden_dim: [1024, 1024, 512]
   recurrent_hidden_dim: 512
   representation_hidden_dim: 1024
@@ -63,3 +64,7 @@ learn:
 env:
   img_h: 128
   img_w: 128
+  light:
+    type: "dome"
+    intensity: 1500.0
+    color: [1.0, 1.0, 1.0]

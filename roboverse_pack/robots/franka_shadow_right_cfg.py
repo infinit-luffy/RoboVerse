@@ -58,7 +58,7 @@ class FrankaShadowHandRightCfg(BaseDexCfg):
     shadow_hand_finger_stiffness: float = 1.0
     shadow_hand_finger_damping: float = 0.1
     vel_obs_scale: float = 0.2  # Scale for velocity observations
-    force_torque_obs_scale: float = 10.0  # Scale for force and torque observations
+    force_torque_obs_scale: float = 1.0  # Scale for force and torque observations
 
     actuators: dict[str, BaseActuatorCfg] = {
         "FFJ1": BaseActuatorCfg(),
@@ -321,6 +321,8 @@ class FrankaShadowHandRightCfg(BaseDexCfg):
     def control_hand_ik(self, target_pos, target_rot):
         if self.hand_controller != "ik":
             raise ValueError("hand_controller must be 'ik' to use control_hand_ik")
+        target_pos = target_pos * self.hand_translation_scale
+        target_rot = target_rot * self.hand_orientation_scale
         init_q = torch_to_jax(self.dof_pos[:, self.hand_dof_idx][:, self.ik_reindex])
         target_wxyz = torch_to_jax(
             math.quat_mul(

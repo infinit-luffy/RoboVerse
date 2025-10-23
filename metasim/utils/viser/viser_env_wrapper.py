@@ -1,7 +1,5 @@
 from typing import Any
 
-from metasim.utils.state import list_state_to_tensor
-
 
 class TaskViserWrapper:
     """Simple wrapper for RLTaskEnv with real-time Viser visualization.
@@ -149,7 +147,6 @@ class TaskViserWrapper:
 
         self._update_viser_states(obs)
         return result
-
 
     def step(self, actions):
         """Step environment and update visualization."""

@@ -1,207 +1,111 @@
 # Viser Visualization
 
-## Simple Usage (Recommended)
+## Prerequisites
 
-The easiest way to add real-time 3D visualization to your RL training is to wrap your environment with `TaskViserWrapper`:
+Before using Viser visualization, ensure you have the required dependencies installed:
+
+```bash
+pip install viser            # Core dependencies only
+pip install viser[examples]  # To include example dependencies
+```
+
+## Basic Setup
+
+The easiest way to add real-time 3D visualization is to wrap your environment with `TaskViserWrapper`:
 
 ```python
 from metasim.utils.viser.viser_env_wrapper import TaskViserWrapper
 
 # Basic usage - just wrap your environment
-envs = TaskViserWrapper(envs)
+env = TaskViserWrapper(env)
 
-# That's it! Your training will now show real-time 3D visualization
+# That's it! Your environment now has real-time 3D visualization
 ```
-
-## Advanced Usage
 
 For more control over visualization settings:
 
 ```python
 # Custom port and update frequency
-envs = TaskViserWrapper(envs, port=8080, update_freq=30)
+env = TaskViserWrapper(env, port=8080, update_freq=30)
 ```
 
-## Integration with FastTD3
 
-In your training script, simply replace:
+## Advance : Interactive Features
 
-```python
-# Before
-envs = task_cls(scenario, device=device)
+Viser provides comprehensive interactive 3D visualization and robot control capabilities through an intuitive web interface. The system supports multiple control modes and advanced visualization features.
 
-# After
-envs = task_cls(scenario, device=device)
-envs = TaskViserWrapper(envs)  # Add this line
-```
+## Core Features
 
-## Demo Scripts
+### 1. Real-time 3D Visualization
+- **Live Scene Rendering**: View your robot and environment in real-time 3D
+- **Multi-camera Support**: Flexible camera positioning and controls
+- **Performance Optimized**: Efficient rendering with configurable update rates
 
-This directory contains a unified demo for viser-based 3D visualization and robot control.
+### 2. Interactive Robot Control
+- **Joint Control**: Direct manipulation of individual robot joints via GUI sliders
+- **End-Effector Control**: Intuitive control of end-effector position and orientation
+- **Real-time Feedback**: Immediate visual feedback for all control inputs
 
-## Files
+### 3. Trajectory Management
+- **Trajectory Playback**: Load and play back recorded robot trajectories
+- **Speed Control**: Adjustable playback speed with scrubbing capabilities
+- **Multi-trajectory Support**: Switch between different recorded demonstrations
 
-- **`viser_demo.py`**: Unified demo script with all features
-- **`viser_util.py`**: Core visualization utilities and ViserVisualizer class
-- **`VISER_USAGE_GUIDE.md`**: Comprehensive usage guide
+### 4. Advanced Visualization Tools
+- **Coordinate Frames**: Visual reference frames for better spatial understanding
+- **Contact Visualization**: View contact forces and interactions
+- **State Recording**: Capture and save simulation states for analysis
 
-## Quick Start
 
-### Prerequisites
-```bash
-cd /home/xy/Documents/RoboVerse
-conda activate isaacsim  # or your environment
-```
-
-### Basic Static Scene
-```bash
-python get_started/viser/viser_demo.py --sim pybullet
-```
-Open http://localhost:8080 to view the scene.
-
-## Features
-
-### 1. Static/Dynamic Scene Visualization
-- **Static**: Display scene without simulation
-- **Dynamic**: Run IK-based robot motion with simulation
-
-### 2. Interactive Joint Control
-Control robot joints with GUI sliders:
-```bash
-python get_started/viser/viser_demo.py --sim pybullet --enable-joint-control
-```
-
-### 3. Interactive IK Control
-Control end-effector position/orientation:
-```bash
-python get_started/viser/viser_demo.py --sim pybullet --enable-ik-control
-```
-
-### 4. Trajectory Playback
-Load and play recorded trajectories:
-```bash
-python get_started/viser/viser_demo.py --sim pybullet --enable-trajectory \
-    --trajectory-path roboverse_data/trajs/rlbench/close_box/v2/franka_v2.pkl.gz
-```
-
-### 5. Dynamic Simulation
-Run IK-based robot motion:
-```bash
-python get_started/viser/viser_demo.py --sim pybullet --dynamic
-```
-
-With video recording:
-```bash
-python get_started/viser/viser_demo.py --sim pybullet --dynamic --save-video
-```
-
-### 6. Combine Multiple Features
-```bash
-python get_started/viser/viser_demo.py --sim pybullet \
-    --enable-joint-control \
-    --enable-ik-control \
-    --enable-trajectory \
-    --trajectory-path roboverse_data/trajs/rlbench/close_box/v2/franka_v2.pkl.gz
-```
-
-## Command Line Arguments
-
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
-| `--robot` | str | "franka" | Robot model to use |
-| `--sim` | str | "mujoco" | Simulator backend (mujoco, pybullet, etc.) |
-| `--num-envs` | int | 1 | Number of parallel environments |
-| `--headless` | bool | True | Run simulator headless |
-| `--dynamic` | bool | False | Enable dynamic simulation with IK motion |
-| `--enable-joint-control` | bool | False | Enable interactive joint control |
-| `--enable-ik-control` | bool | False | Enable interactive IK control |
-| `--enable-trajectory` | bool | False | Enable trajectory playback |
-| `--trajectory-path` | str | None | Path to trajectory file (.pkl.gz) |
-| `--solver` | str | "pyroki" | IK solver ("curobo" or "pyroki") |
-| `--save-video` | bool | False | Save video of dynamic simulation |
-
-## Key Features
-
-- **Unified Demo** - Single script replaces 5+ separate demos  
-- **Flexible Configuration** - Enable/disable features via CLI flags  
-- **No Code Duplication** - Shared scene setup and utilities  
-- **Static + Dynamic** - Both modes in one script  
-- **Multiple Control Modes** - Joint, IK, Trajectory controls  
-- **Reset to Initial Pose** - All control modes support resetting to demo-defined initial pose
-
-## GUI Controls
+## Interactive Control Interface
 
 ### Camera Controls
 - **Rotate**: Left mouse drag
-- **Pan**: Right mouse drag or Shift+Left drag  
+- **Pan**: Right mouse drag or Shift+Left drag
 - **Zoom**: Scroll wheel
 - **Preset Views**: Top, Side, Front buttons
 - **Screenshot**: Capture button
 - **Video Recording**: Start/Stop recording
 
-### Joint Control
-1. Select robot from dropdown
-2. Click "Setup Joint Control"
-3. Use individual joint sliders
+## Robot Control Features
+
+### Joint Control Mode
+1. Select robot from dropdown menu
+2. Click "Setup Joint Control" to enable sliders
+3. Use individual joint sliders to control each degree of freedom
 4. Click "Reset Joints" to return to initial pose
-5. Click "Clear Joint Control" to remove GUI
+5. Click "Clear Joint Control" to remove GUI controls
 
-### IK Control
-1. Click "Setup IK Control"
-2. Adjust target position sliders (X, Y, Z)
-3. Adjust target orientation sliders (Quat W, X, Y, Z)
-4. Visual markers show target (red sphere + RGB axes)
-5. Click "Solve & Apply IK" to move robot
-6. Click "Reset Robot Joints" to return to initial pose
-7. Click "Reset Target" to reset target markers
+### End-Effector Control Mode
+1. Click "Setup IK Control" to enable end-effector controls
+2. Adjust target position sliders (X, Y, Z coordinates)
+3. Adjust target orientation sliders (Quaternion W, X, Y, Z)
+4. Visual markers show target position (red sphere + RGB coordinate axes)
+5. Click "Solve & Apply IK" to move robot to target pose
+6. Click "Reset Robot Joints" to return to initial configuration
+7. Click "Reset Target" to reset target markers to default
 
-### Trajectory Playback
-1. Load trajectory via `--trajectory-path` argument
-2. Click "Update Robot List" to refresh
-3. Select robot and demo index
-4. Click "Set Current Trajectory"
-5. Use Play/Pause/Stop controls
-6. Drag timeline slider to seek
-7. Adjust "Playback FPS" for speed control
+### Trajectory Playback Mode
+1. Load trajectory via file path parameter
+2. Click "Update Robot List" to refresh available robots
+3. Select robot and trajectory from dropdown menus
+4. Click "Set Current Trajectory" to load the selected trajectory
+5. Use Play/Pause/Stop controls to control playback
+6. Drag timeline slider to scrub through trajectory
+7. Adjust "Playback FPS" slider for speed control
 
-## Documentation
+## Advanced Features
 
-See [`VISER_USAGE_GUIDE.md`](./VISER_USAGE_GUIDE.md) for detailed documentation on:
-- Camera controls
-- Joint control interface
-- IK control interface  
-- Trajectory playback
-- Integration examples
+### Multi-Robot Support
+- Visualize and control multiple robots simultaneously
+- Individual control interfaces for each robot
+- Synchronized trajectory playback across multiple robots
 
-## Examples
+### Performance Optimization
+- Configurable update frequency to balance visualization quality and performance
+- Automatic camera view refresh for smooth interaction
+- Efficient state extraction and visualization updates
 
-### Basic Visualization
-```bash
-# Static scene with default settings
-python get_started/viser/viser_demo.py
-```
-
-### Interactive Control
-```bash
-# Joint control with different simulator
-python get_started/viser/viser_demo.py --sim genesis --enable-joint-control
-
-# IK control with different robot
-python get_started/viser/viser_demo.py --robot ur5e --enable-ik-control
-```
-
-### Trajectory Playback
-```bash
-# Load and play trajectory
-python get_started/viser/viser_demo.py --enable-trajectory \
-    --trajectory-path roboverse_data/trajs/libero/pick_up_the_butter_and_place_it_in_the_basket/v2/franka_v2.pkl.gz
-```
-
-### Dynamic Simulation
-```bash
-# Run dynamic simulation and save video
-python get_started/viser/viser_demo.py --dynamic --save-video
-```
 
 ## Troubleshooting
 
@@ -218,7 +122,8 @@ Ensure you have the IK solver installed:
 
 ## Notes
 
-- The demo uses headless mode by default (viser for visualization, not simulator's viewer)
-- All control modes preserve the initial robot pose defined in the demo script
-- Reset functionality in both Joint Control and IK Control returns to the demo-defined initial pose
+- Viser uses headless mode by default (viser for visualization, not simulator's viewer)
+- All control modes preserve the initial robot pose defined in your environment
+- Reset functionality returns to the environment's initial configuration
 - Multiple control modes can be enabled simultaneously
+- The system automatically handles different environment types (gym-style and standard RLTaskEnv)

@@ -181,8 +181,9 @@ def main():
 
     tic = time.time()
     device = torch.device("cpu")
-    env = task_cls(scenario, device=device) 
+    env = task_cls(scenario, device=device)
     from metasim.utils.viser.viser_env_wrapper import TaskViserWrapper
+
     env = TaskViserWrapper(env)
     toc = time.time()
     log.trace(f"Time to launch: {toc - tic:.2f}s")

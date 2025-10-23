@@ -8,5 +8,5 @@ We also provide advanced tasks tutorials for using MetaSim:
 motion_planning/index
 rl_example/index
 il/index
-viser/index
+viser/usage
 ```

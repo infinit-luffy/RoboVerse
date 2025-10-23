@@ -33,13 +33,13 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 @configclass
 class Args:
-    task: str = "stack_cube"
+    task: str = "put_banana"
     robot: str = "franka"
     scene: str | None = None
     render: RenderCfg = RenderCfg()
 
     ## Handlers
-    sim: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = "mujoco"
+    sim: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "sapien2", "sapien3", "mujoco", "mjx"] = "isaacsim"
     renderer: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "mujoco", "sapien2", "sapien3"] | None = None
 
     ## Others
@@ -164,8 +164,8 @@ def display_camera_observation_opencv(obs, width, height):
 def main():
     task_cls = get_task_class(args.task)
     # Create two cameras with different viewpoints
-    camera1 = PinholeCameraCfg(name="camera_1", pos=(1.0, -1.0, 1.0), look_at=(0.0, 0.0, 0.0))
-    camera2 = PinholeCameraCfg(name="camera_2", pos=(1.5, -0.2, 0.5), look_at=(0.0, 0.0, 0.0))
+    camera1 = PinholeCameraCfg(name="camera_1", pos=(2.0, -2.0, 2.0), look_at=(0.0, 0.0, 0.0))
+    camera2 = PinholeCameraCfg(name="camera_2", pos=(2.5, -1.2, 2.5), look_at=(0.0, 0.0, 0.0))
     scenario = task_cls.scenario.update(
         robots=[args.robot],
         scene=args.scene,
@@ -187,17 +187,6 @@ def main():
     env = TaskViserWrapper(env)
     toc = time.time()
     log.trace(f"Time to launch: {toc - tic:.2f}s")
-
-    traj_filepath = env.traj_filepath
-    ## Data
-    tic = time.time()
-    assert os.path.exists(traj_filepath), f"Trajectory file: {traj_filepath} does not exist."
-    init_states, all_actions, all_states = get_traj(
-        traj_filepath, scenario.robots[0], env.handler
-    )  # XXX: only support one robot
-    toc = time.time()
-    log.trace(f"Time to load data: {toc - tic:.2f}s")
-
     ## Reset before first step
     tic = time.time()
     obs, extras = env.reset()

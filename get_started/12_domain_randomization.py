@@ -462,6 +462,7 @@ def run_simulation(handler, randomizers, args):
     for step in range(args.num_steps):
         handler.simulate()
         obs = handler.get_states(mode="tensor")
+
         obs_saver.add(obs)
 
         if step % args.randomize_interval == 0 and step > 0:
@@ -583,10 +584,6 @@ def main():
     log.info("\n" + "=" * 70)
     log.info("Demo Completed!")
     log.info("=" * 70)
-    log.info("\nQuick Start:")
-    log.info("  Level 0-3: python get_started/12_domain_randomization.py --level [0-3]")
-    log.info("  Level 4:   python get_started/12_domain_randomization.py --level 4")
-    log.info("\n  Level 4 uses TABLE - objects should stay on table surface!")
 
 
 if __name__ == "__main__":

@@ -5,13 +5,11 @@ from __future__ import annotations
 from dataclasses import MISSING
 
 import torch
-from loguru import logger as log
 
 from metasim.constants import PhysicStateType
 from metasim.scenario.objects import BaseObjCfg, PrimitiveCubeCfg
 from metasim.utils.configclass import configclass
 from metasim.utils.math import matrix_from_quat, quat_from_matrix
-from metasim.utils.tensor_util import tensor_to_str
 
 from .util import get_pos, get_rot
 

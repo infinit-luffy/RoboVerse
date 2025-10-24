@@ -144,6 +144,9 @@ class SceneRandomizer(BaseRandomizerType):
 
         logger.debug(f"SceneRandomizer initialized with seed {self._seed}")
 
+        # self._create_or_update_floor("/World/envs/env_0", 0)
+        # self._create_or_update_walls("/World/envs/env_0", 0)
+
     def bind_handler(self, handler):
         """Bind the scene randomizer to a simulation handler.
 
@@ -167,6 +170,9 @@ class SceneRandomizer(BaseRandomizerType):
             if self.handler.scenario.scene is not None:
                 logger.info("Predefined scene detected, SceneRandomizer will skip geometry creation")
                 return True
+            else:
+                logger.error("Predefined scene is None")
+                return False
         return False
 
     def __call__(self, env_ids: list[int] | None = None):

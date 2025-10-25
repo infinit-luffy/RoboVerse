@@ -168,7 +168,7 @@ def evaluate(
 
 def main():
     parser = argparse.ArgumentParser(description='FastTD3 Evaluation')
-    parser.add_argument('--checkpoint', type=str, required=True,
+    parser.add_argument('--checkpoint', type=str, default='models/walk_1400.pt',
                        help='Path to checkpoint file')
     parser.add_argument('--num_episodes', type=int, default=10,
                        help='Number of episodes to evaluate')

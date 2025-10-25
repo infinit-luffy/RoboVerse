@@ -144,9 +144,6 @@ class SceneRandomizer(BaseRandomizerType):
 
         logger.debug(f"SceneRandomizer initialized with seed {self._seed}")
 
-        # self._create_or_update_floor("/World/envs/env_0", 0)
-        # self._create_or_update_walls("/World/envs/env_0", 0)
-
     def bind_handler(self, handler):
         """Bind the scene randomizer to a simulation handler.
 
@@ -477,90 +474,90 @@ class SceneRandomizer(BaseRandomizerType):
             material_path: Path to MDL material file
             prim_path: USD prim path
         """
+        # try:
+        # First, check and download the material file if needed
+        from metasim.utils.hf_util import check_and_download_recursive
+
+        logger.debug(f"Checking and downloading material: {material_path}")
+        check_and_download_recursive([material_path])
+
+        # Get absolute path to MDL file
+        import os
+
+        abs_material_path = os.path.abspath(material_path)
+        if not os.path.exists(abs_material_path):
+            logger.warning(f"Material file not found: {abs_material_path}")
+            return
+
+        # Lazy import IsaacSim modules
         try:
-            # First, check and download the material file if needed
-            from metasim.utils.hf_util import check_and_download_recursive
+            import omni.isaac.core.utils.prims as prim_utils
+        except ModuleNotFoundError:
+            import isaacsim.core.utils.prims as prim_utils
 
-            logger.debug(f"Checking and downloading material: {material_path}")
-            check_and_download_recursive([material_path])
+        from pxr import UsdGeom
 
-            # Get absolute path to MDL file
-            import os
+        # Find all mesh prims under the target path
+        target_prim = prim_utils.get_prim_at_path(prim_path)
+        if not target_prim or not target_prim.IsValid():
+            logger.warning(f"Target prim not found: {prim_path}")
+            return
 
-            abs_material_path = os.path.abspath(material_path)
-            if not os.path.exists(abs_material_path):
-                logger.warning(f"Material file not found: {abs_material_path}")
-                return
+        mesh_prims_paths = []
 
-            # Lazy import IsaacSim modules
-            try:
-                import omni.isaac.core.utils.prims as prim_utils
-            except ModuleNotFoundError:
-                import isaacsim.core.utils.prims as prim_utils
+        # Check if target is a geometric primitive (Mesh, Cube, Sphere, etc.) or Xform
+        prim_type = target_prim.GetTypeName()
 
-            from pxr import UsdGeom
+        if target_prim.IsA(UsdGeom.Mesh):
+            mesh_prims_paths.append(prim_path)
+            logger.debug(f"Target prim {prim_path} is a Mesh")
+        elif prim_type in ["Cube", "Sphere", "Cylinder", "Cone", "Capsule"]:
+            # USD geometric primitives can accept materials directly
+            mesh_prims_paths.append(prim_path)
+            logger.debug(f"Target prim {prim_path} is a {prim_type} primitive")
+        else:
+            logger.debug(f"Target prim {prim_path} is {prim_type}, searching for Mesh/Primitive children...")
 
-            # Find all mesh prims under the target path
-            target_prim = prim_utils.get_prim_at_path(prim_path)
-            if not target_prim or not target_prim.IsValid():
-                logger.warning(f"Target prim not found: {prim_path}")
-                return
+            # Recursively find all mesh/primitive children
+            def find_renderables(prim):
+                prim_type = prim.GetTypeName()
+                if prim.IsA(UsdGeom.Mesh) or prim_type in ["Cube", "Sphere", "Cylinder", "Cone", "Capsule"]:
+                    mesh_path = str(prim.GetPath())
+                    mesh_prims_paths.append(mesh_path)
+                    logger.debug(f"  Found {prim_type}: {mesh_path}")
+                for child in prim.GetChildren():
+                    find_renderables(child)
 
-            mesh_prims_paths = []
+            find_renderables(target_prim)
 
-            # Check if target is a geometric primitive (Mesh, Cube, Sphere, etc.) or Xform
-            prim_type = target_prim.GetTypeName()
+        if not mesh_prims_paths:
+            logger.warning(f"No renderable prims found under {prim_path}, applying to prim itself...")
+            mesh_prims_paths = [prim_path]
 
-            if target_prim.IsA(UsdGeom.Mesh):
-                mesh_prims_paths.append(prim_path)
-                logger.debug(f"Target prim {prim_path} is a Mesh")
-            elif prim_type in ["Cube", "Sphere", "Cylinder", "Cone", "Capsule"]:
-                # USD geometric primitives can accept materials directly
-                mesh_prims_paths.append(prim_path)
-                logger.debug(f"Target prim {prim_path} is a {prim_type} primitive")
-            else:
-                logger.debug(f"Target prim {prim_path} is {prim_type}, searching for Mesh/Primitive children...")
+        # Use MaterialRandomizer's proven method to apply material to each mesh
+        from metasim.randomization.material_randomizer import MaterialRandomizer
 
-                # Recursively find all mesh/primitive children
-                def find_renderables(prim):
-                    prim_type = prim.GetTypeName()
-                    if prim.IsA(UsdGeom.Mesh) or prim_type in ["Cube", "Sphere", "Cylinder", "Cone", "Capsule"]:
-                        mesh_path = str(prim.GetPath())
-                        mesh_prims_paths.append(mesh_path)
-                        logger.debug(f"  Found {prim_type}: {mesh_path}")
-                    for child in prim.GetChildren():
-                        find_renderables(child)
+        dummy_randomizer = MaterialRandomizer.__new__(MaterialRandomizer)
+        dummy_randomizer.handler = self.handler
 
-                find_renderables(target_prim)
+        for mesh_path in mesh_prims_paths:
+            # For terrain, explicitly ensure UV coordinates with larger tile size
+            mesh_prim = prim_utils.get_prim_at_path(mesh_path)
+            if mesh_prim and ("ground" in mesh_path.lower() or "terrain" in mesh_path.lower()):
+                logger.info(f"Ensuring UV coordinates for terrain mesh {mesh_path}")
+                try:
+                    dummy_randomizer._ensure_uv_for_hierarchy(mesh_prim)
+                    logger.info("Successfully ensured UV for terrain mesh")
+                except Exception as e:
+                    logger.warning(f"Failed to ensure UV for terrain: {e}")
 
-            if not mesh_prims_paths:
-                logger.warning(f"No renderable prims found under {prim_path}, applying to prim itself...")
-                mesh_prims_paths = [prim_path]
+            dummy_randomizer._apply_mdl_to_prim(material_path, mesh_path)
+            logger.debug(f"Applied material to mesh {mesh_path}")
 
-            # Use MaterialRandomizer's proven method to apply material to each mesh
-            from metasim.randomization.material_randomizer import MaterialRandomizer
+        logger.info(f"Successfully applied MDL material to {len(mesh_prims_paths)} mesh(es) under {prim_path}")
 
-            dummy_randomizer = MaterialRandomizer.__new__(MaterialRandomizer)
-            dummy_randomizer.handler = self.handler
-
-            for mesh_path in mesh_prims_paths:
-                # For terrain, explicitly ensure UV coordinates with larger tile size
-                mesh_prim = prim_utils.get_prim_at_path(mesh_path)
-                if mesh_prim and ("ground" in mesh_path.lower() or "terrain" in mesh_path.lower()):
-                    logger.info(f"Ensuring UV coordinates for terrain mesh {mesh_path}")
-                    try:
-                        dummy_randomizer._ensure_uv_for_hierarchy(mesh_prim)
-                        logger.info("Successfully ensured UV for terrain mesh")
-                    except Exception as e:
-                        logger.warning(f"Failed to ensure UV for terrain: {e}")
-
-                dummy_randomizer._apply_mdl_to_prim(material_path, mesh_path)
-                logger.debug(f"Applied material to mesh {mesh_path}")
-
-            logger.info(f"Successfully applied MDL material to {len(mesh_prims_paths)} mesh(es) under {prim_path}")
-
-        except Exception as e:
-            logger.warning(f"Failed to apply material {material_path} to {prim_path}: {e}")
+        # except Exception as e:
+        #     logger.warning(f"Failed to apply material {material_path} to {prim_path}: {e}")
 
     def _randomize_materials_only(self, env_ids: list[int] | None = None):
         """Apply material randomization to existing scene elements only.

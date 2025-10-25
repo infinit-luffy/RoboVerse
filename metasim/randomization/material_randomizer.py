@@ -451,6 +451,8 @@ class MaterialRandomizer(BaseRandomizerType):
         if not mdl_path.endswith(".mdl"):
             raise ValueError(f"Material file {mdl_path} must have .mdl extension")
 
+        import isaacsim.core.utils.prims as prim_utils
+
         prim = prim_utils.get_prim_at_path(prim_path)
         if not prim:
             raise ValueError(f"Prim not found at path {prim_path}")
@@ -461,6 +463,10 @@ class MaterialRandomizer(BaseRandomizerType):
         # Material name should match the MDL file basename (without .mdl extension)
         # Don't add _mat or timestamp - let IsaacSim use the exported material name from MDL
         mtl_name = os.path.basename(mdl_path).removesuffix(".mdl")
+        import omni.kit.commands
+        from omni.kit.material.library import get_material_prim_path
+        from pxr import UsdShade
+
         _, mtl_prim_path = get_material_prim_path(mtl_name)
 
         logger.debug(f"Creating MDL material: {mtl_name} from {mdl_path}")
@@ -484,6 +490,7 @@ class MaterialRandomizer(BaseRandomizerType):
             material_path=mtl_prim_path,
             strength=UsdShade.Tokens.strongerThanDescendants,
         )
+
         if not success:
             logger.error(f"Failed to bind material at {mtl_prim_path} to {prim.GetPath()}")
             raise RuntimeError(f"Failed to bind material at {mtl_prim_path} to {prim.GetPath()}")

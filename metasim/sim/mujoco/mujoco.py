@@ -12,6 +12,40 @@ import torch
 from dm_control import mjcf
 from loguru import logger as log
 
+# Defensive monkey-patches for known mujoco/glfw shutdown issues on some platforms.
+# These replace the third-party destructors with safe wrappers that swallow exceptions
+# during interpreter teardown (where module globals may be None).
+try:
+    # Patch mujoco.renderer.Renderer.__del__ to avoid noisy TypeError if glfw.free is None
+    if hasattr(mujoco, "renderer") and hasattr(mujoco.renderer, "Renderer"):
+        _orig_renderer_del = getattr(mujoco.renderer.Renderer, "__del__", None)
+
+        def _safe_renderer_del(self):
+            try:
+                if _orig_renderer_del is not None:
+                    _orig_renderer_del(self)
+            except Exception:
+                # Swallow exceptions during interpreter shutdown
+                return
+
+        mujoco.renderer.Renderer.__del__ = _safe_renderer_del
+
+    # Patch mujoco.glfw.GLContext.__del__ similarly if present
+    if hasattr(mujoco, "glfw") and hasattr(mujoco.glfw, "GLContext"):
+        _orig_glctx_del = getattr(mujoco.glfw.GLContext, "__del__", None)
+
+        def _safe_glctx_del(self):
+            try:
+                if _orig_glctx_del is not None:
+                    _orig_glctx_del(self)
+            except Exception:
+                return
+
+        mujoco.glfw.GLContext.__del__ = _safe_glctx_del
+except Exception:
+    # If any of the attributes aren't present or patching fails, ignore — this is defensive.
+    pass
+
 from metasim.scenario.objects import ArticulationObjCfg, PrimitiveCubeCfg, PrimitiveCylinderCfg, PrimitiveSphereCfg
 from metasim.scenario.robot import RobotCfg
 
@@ -533,8 +567,12 @@ class MujocoHandler(BaseSimHandler):
                         self.renderer.update_scene(self._mj_data, camera=camera_id)
                         rgb_np = self.renderer.render()
                     rgb = torch.from_numpy(rgb_np.copy()).unsqueeze(0)
+                elif sys.platform == "win32":
+                    rgb_np = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=False)
+                    # Ensure numpy array -> torch tensor with shape (1, H, W, C)
+                    rgb = torch.from_numpy(np.ascontiguousarray(rgb_np)).unsqueeze(0)
                 else:
-                    rgb = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=False)
+                    rgb_np = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=False)
             if "depth" in camera.data_types:
                 if sys.platform == "darwin":
                     with self._mj_lock:
@@ -569,8 +607,11 @@ class MujocoHandler(BaseSimHandler):
                                     "Depth rendering not supported by this mujoco.Renderer build."
                                 )
                     depth = torch.from_numpy(depth_np.copy()).unsqueeze(0)
+                elif sys.platform == "win32":
+                    depth_np = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=True)
+                    depth = torch.from_numpy(np.ascontiguousarray(depth_np)).unsqueeze(0)
                 else:
-                    depth = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=True)
+                    depth_np = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=True)
 
 
             # depth = torch.from_numpy(depth_np.copy()).unsqueeze(0)
@@ -817,6 +858,7 @@ class MujocoHandler(BaseSimHandler):
             except Exception:
                 pass
             self.renderer = None
+
 
     ############################################################
     ## Utils

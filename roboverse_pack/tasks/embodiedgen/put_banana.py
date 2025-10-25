@@ -58,14 +58,14 @@ class PutBananaTask(EmbodiedGenBaseTask):
                 urdf_path="roboverse_data/assets/EmbodiedGenData/demo_assets/book/result/book.urdf",
                 mjcf_path="roboverse_data/assets/EmbodiedGenData/demo_assets/book/mjcf/book.mjcf",
             ),
-            RigidObjCfg(
-                name="lamp",
-                scale=(1, 1, 1),
-                physics=PhysicStateType.RIGIDBODY,
-                usd_path="roboverse_data/assets/EmbodiedGenData/demo_assets/lamp/usd/lamp.usd",
-                urdf_path="roboverse_data/assets/EmbodiedGenData/demo_assets/lamp/result/lamp.urdf",
-                mjcf_path="roboverse_data/assets/EmbodiedGenData/demo_assets/lamp/mjcf/lamp.mjcf",
-            ),
+            # RigidObjCfg(
+            #     name="lamp",
+            #     scale=(1, 1, 1),
+            #     physics=PhysicStateType.RIGIDBODY,
+            #     usd_path="roboverse_data/assets/EmbodiedGenData/demo_assets/lamp/usd/lamp.usd",
+            #     urdf_path="roboverse_data/assets/EmbodiedGenData/demo_assets/lamp/result/lamp.urdf",
+            #     mjcf_path="roboverse_data/assets/EmbodiedGenData/demo_assets/lamp/mjcf/lamp.mjcf",
+            # ),
             RigidObjCfg(
                 name="remote_control",
                 scale=(1, 1, 1),
@@ -122,23 +122,23 @@ class PutBananaTask(EmbodiedGenBaseTask):
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
                     "mug": {
-                        "pos": torch.tensor([0.68, -0.34, 0.863]),  # Target: mug on table (right)
+                        "pos": torch.tensor([0.48, -0.54, 0.863]),  # Target: mug on table (right)
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
                     "book": {
                         "pos": torch.tensor([0.3, -0.28, 0.82]),  # Book on table
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
-                    "lamp": {
-                        "pos": torch.tensor([0.68, 0.10, 1.05]),  # Lamp on table
-                        "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
-                    },
+                    # "lamp": {
+                    #     "pos": torch.tensor([0.68, 0.10, 1.05]),  # Lamp on table
+                    #     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+                    # },
                     "remote_control": {
                         "pos": torch.tensor([0.68, -0.54, 0.811]),  # Remote on table
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
                     "rubiks_cube": {
-                        "pos": torch.tensor([0.48, -0.54, 0.83]),  # Rubik's cube on table
+                        "pos": torch.tensor([0.68, -0.34, 0.83]),  # Rubik's cube on table
                         "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                     },
                     "vase": {

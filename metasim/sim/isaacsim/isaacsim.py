@@ -190,6 +190,11 @@ class IsaacsimHandler(BaseSimHandler):
         self._load_sensors()
         indices = torch.arange(self.num_envs, dtype=torch.int64, device=self.device)
         self.scene.reset(indices)
+        
+        if self.headless:
+            from isaacsim.core.utils.viewports import destroy_all_viewports
+            destroy_all_viewports()
+            print("Headless mode: Destroyed all viewports to save resources.")
 
         # set obj stiffness
         for obj in self.objects:

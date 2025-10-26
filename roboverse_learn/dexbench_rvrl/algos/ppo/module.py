@@ -30,7 +30,7 @@ class ActorCritic(nn.Module):
         self.obs_shape = obs_shape
         self.obs_key = list(obs_shape.keys())
         self.state_key = [key for key in obs_shape.keys() if "state" in key]
-        self.state_shape = sum([sum(obs_shape[key]) for key in self.state_key])
+        self.state_shape = sum([np.prod(obs_shape[key]) for key in self.state_key])
         self.visual_feature_dim = 0 if "rgb" not in obs_type else self.visual_feature_dim
         self.num_img = 0
 

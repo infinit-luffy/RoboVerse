@@ -33,7 +33,9 @@ class DexEnv(BaseVecEnv):
         if args.robot is not None:
             task.current_robot_type = args.robot
         task.num_envs = args.num_envs
-        task.device = args.device
+        if args.sim_device is None:
+            args.sim_device = args.device
+        task.device = args.sim_device
         task.is_testing = args.test
         task.obs_type = args.obs_type
         if "rgb" in args.obs_type and env_cfg is not None:
@@ -107,10 +109,10 @@ class DexEnv(BaseVecEnv):
             env_spacing=task.env_spacing,
             lights=[light], 
         )
-        scenario.device = args.device
+        scenario.device = args.sim_device
         self.task.robots = scenario.robots
         self.task.objects = scenario.objects
-        self.sim_device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+        self.sim_device = torch.device(args.sim_device if torch.cuda.is_available() else "cpu")
         self._num_envs = scenario.num_envs
         self.robots = scenario.robots
         self.objects = scenario.objects

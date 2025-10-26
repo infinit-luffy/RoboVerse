@@ -73,6 +73,7 @@ class Args:
     headless: bool = False
     test: bool = False
     device: str = "cuda"  # Device for IsaacLab environments
+    sim_device: str = None
     logdir: str = "logs/"
     experiment: str = "Base"
     algo: str = "ppo"

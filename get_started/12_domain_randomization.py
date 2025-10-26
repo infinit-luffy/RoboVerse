@@ -1,20 +1,26 @@
-"""Domain Randomization Demo with Trajectory Replay - Final Version
+"""Domain Randomization Demo with Trajectory Replay
 
-Replays close_box task trajectories with domain randomization applied.
+Replays close_box task trajectories with progressive domain randomization.
 
-## Scene Setup (ALL LEVELS):
-- Table height: 0.7m
-- Objects placed ON table surface (z = 0.7 + object_height/2)
-- Room: 10m x 10m x 5m (walls enclose scene)
-- Table: 1.8m x 1.8m (smaller than room)
-- Lights: VERY BRIGHT (enclosed room)
-- SceneRandomizer creates table WITH PHYSICS COLLISION
+Scene Setup:
+- Enclosed room: 10m x 10m x 5m with walls and ceiling
+- Table: 1.8m x 1.8m at height 0.7m with physics collision
+- Objects placed on table surface
 
-## Randomization Levels:
-- Level 0: No randomization (baseline) - Scene with FIXED textured materials
-- Level 1: Object properties (physics + pose) - Scene with FIXED textured materials
-- Level 2: + Visual randomization (scene materials + lights) - Scene materials RANDOMIZE
-- Level 3: + Camera randomization - Scene materials RANDOMIZE
+Lighting (5 lights, all inside room):
+- 1 central DiskLight (main directional light, supports orientation randomization)
+- 4 corner SphereLight (even ambient coverage)
+- Intensities auto-adjusted for render mode:
+  * PathTracing: 28K + 12Kx4 = 76K total
+  * RayTracing: 20K + 7Kx4 = 48K total
+
+Randomization Levels:
+- Level 0: Baseline (no randomization)
+- Level 1: Material randomization
+- Level 2: Material + Lighting randomization
+- Level 3: Material + Lighting + Camera randomization
+
+All randomizations applied simultaneously every N steps (default: 10)
 """
 
 from __future__ import annotations
@@ -24,7 +30,6 @@ import rootutils
 rootutils.setup_root(__file__, pythonpath=True)
 
 import os
-import time
 from typing import Literal
 
 import numpy as np
@@ -36,7 +41,6 @@ from rich.logging import RichHandler
 from metasim.randomization import (
     CameraPresets,
     CameraRandomizer,
-    LightPresets,
     LightRandomizer,
     MaterialPresets,
     MaterialRandomizer,
@@ -47,7 +51,8 @@ from metasim.randomization import (
 from metasim.randomization.presets.scene_presets import ScenePresets
 from metasim.randomization.scene_randomizer import SceneMaterialPoolCfg
 from metasim.scenario.cameras import PinholeCameraCfg
-from metasim.scenario.lights import DistantLightCfg, SphereLightCfg
+from metasim.scenario.lights import DiskLightCfg, SphereLightCfg
+from metasim.scenario.render import RenderCfg
 from metasim.task.registry import get_task_class
 from metasim.utils import configclass
 from metasim.utils.demo_util import get_traj
@@ -56,9 +61,6 @@ from metasim.utils.obs_utils import ObsSaver
 log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 
-###########################################################
-## Utils for Trajectory Replay
-###########################################################
 def get_actions(all_actions, action_idx: int, num_envs: int):
     """Get actions for all environments at a given step."""
     envs_actions = all_actions[:num_envs]
@@ -81,51 +83,64 @@ def create_env(args):
 
     table_height = 0.7
 
-    # Camera - adjust for table
     camera = PinholeCameraCfg(
         name="main_camera",
         width=1024,
         height=1024,
-        pos=(2.0, -2.0, 2.0),  # Higher and further back for table view
-        look_at=(0.0, 0.0, table_height + 0.05),  # Look at objects on table
+        pos=(2.0, -2.0, 2.0),
+        look_at=(0.0, 0.0, table_height + 0.05),
     )
 
-    # Lights - CRITICAL: Enclosed room needs MUCH more light
-    # All levels have enclosed room, use bright lighting
+    # Lighting configuration for enclosed room (10m x 10m x 5m)
+    # All lights positioned inside room to avoid wall blocking
+    # Layout: 1 central DiskLight + 4 corner SphereLight
+    if args.render_mode == "pathtracing":
+        ceiling_main = 28000.0
+        ceiling_corners = 12000.0
+    else:
+        ceiling_main = 20000.0
+        ceiling_corners = 7000.0
+
     lights = [
-        DistantLightCfg(
-            name="main_light",
-            intensity=10000.0,  # 10x brighter for enclosed room
-            color=(1.0, 1.0, 0.98),
-            polar=30.0,
-            azimuth=45.0,
-            is_global=True,
+        DiskLightCfg(
+            name="ceiling_main",
+            intensity=ceiling_main,
+            color=(1.0, 1.0, 1.0),
+            radius=1.2,
+            pos=(0.0, 0.0, 4.5),
+            rot=(0.7071, 0.0, 0.0, 0.7071),
         ),
         SphereLightCfg(
-            name="fill_light",
-            intensity=8000.0,  # Very bright fill
+            name="ceiling_ne",
+            intensity=ceiling_corners,
             color=(1.0, 1.0, 1.0),
             radius=0.6,
-            pos=(2.0, 2.0, 3.5),  # Inside room (walls at ±5m)
-            is_global=True,  # IMPORTANT: Penetrate walls for enclosed room
+            pos=(3.0, 3.0, 4.0),
         ),
         SphereLightCfg(
-            name="back_light",
-            intensity=6000.0,  # Strong back light
-            color=(0.98, 0.98, 1.0),
-            radius=0.5,
-            pos=(-2.0, -2.0, 3.5),  # Inside room, opposite corner
-            is_global=True,  # IMPORTANT: Penetrate walls for enclosed room
+            name="ceiling_nw",
+            intensity=ceiling_corners,
+            color=(1.0, 1.0, 1.0),
+            radius=0.6,
+            pos=(-3.0, 3.0, 4.0),
         ),
         SphereLightCfg(
-            name="table_light",
-            intensity=5000.0,  # Direct table illumination
-            color=(1.0, 1.0, 0.95),
-            radius=0.4,
-            pos=(0.0, 0.0, 2.5),  # Centered above table
-            is_global=True,  # IMPORTANT: Penetrate walls for enclosed room
+            name="ceiling_sw",
+            intensity=ceiling_corners,
+            color=(1.0, 1.0, 1.0),
+            radius=0.6,
+            pos=(-3.0, -3.0, 4.0),
+        ),
+        SphereLightCfg(
+            name="ceiling_se",
+            intensity=ceiling_corners,
+            color=(1.0, 1.0, 1.0),
+            radius=0.6,
+            pos=(3.0, -3.0, 4.0),
         ),
     ]
+
+    render_cfg = RenderCfg(mode=args.render_mode)
 
     scenario = task_cls.scenario.update(
         robots=[args.robot],
@@ -134,6 +149,7 @@ def create_env(args):
         lights=lights,
         simulator=args.sim,
         renderer=args.renderer,
+        render=render_cfg,
         num_envs=args.num_envs,
         headless=args.headless,
     )
@@ -146,27 +162,20 @@ def create_env(args):
 
 def get_init_states(level, num_envs):
     """Get initial states for objects and robot based on level."""
+    box_base_height = 0.15
+    table_surface_z = 0.7
 
-    # Object dimensions
-    box_base_height = 0.15  # Approximate height of box_base
-
-    # All levels: Objects ON TABLE
-    table_surface_z = 0.7  # Table surface height
-
-    # Objects placed on table surface
-    # For box_base: center_z = surface_z + half_height
     objects = {
         "box_base": {
-            "pos": torch.tensor([-0.2, 0.0, table_surface_z + box_base_height / 2]),  # 0.775m
+            "pos": torch.tensor([-0.2, 0.0, table_surface_z + box_base_height / 2]),
             "rot": torch.tensor([0.0, 0.7071, 0.0, 0.7071]),
             "dof_pos": {"box_joint": 0.0},
         },
     }
 
-    # Robot also on table
     robot = {
         "franka": {
-            "pos": torch.tensor([0.0, -0.4, table_surface_z]),  # Base on table
+            "pos": torch.tensor([0.0, -0.4, table_surface_z]),
             "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
             "dof_pos": {
                 "panda_joint1": 0.0,
@@ -200,32 +209,17 @@ def initialize_randomizers(handler, args):
     log.info(f"Randomization Level: {level}")
     log.info("=" * 70)
 
-    # All levels: Create tabletop workspace scene
-    log.info("\n[Scene Setup] Tabletop Workspace")
+    log.info("\n[Scene Setup]")
     log.info("-" * 70)
 
-    # Get base scene configuration
     scene_cfg = ScenePresets.tabletop_workspace(
-        room_size=10.0,
+        room_size=5.0,
         wall_height=5.0,
         table_size=(1.8, 1.8, 0.1),
         table_height=0.7,
     )
 
-    # Level 0-1: Use fixed materials (single material from pool, no randomization)
-    # Level 2+: Full material randomization
     if level < 1:
-        # Enable material application but use fixed materials (first from pool)
-        # if scene_cfg.floor:
-        #     scene_cfg.floor.material_randomization = True
-        # if scene_cfg.walls:
-        #     scene_cfg.walls.material_randomization = True
-        # if scene_cfg.ceiling:
-        #     scene_cfg.ceiling.material_randomization = True
-        # if scene_cfg.table:
-        #     scene_cfg.table.material_randomization = True
-
-        # Override material pools with single fixed material
         scene_cfg.floor_materials = SceneMaterialPoolCfg(
             material_paths=["roboverse_data/materials/arnold/Carpet/Carpet_Beige.mdl"],
             selection_strategy="sequential",
@@ -242,22 +236,16 @@ def initialize_randomizers(handler, args):
             material_paths=["roboverse_data/materials/arnold/Wood/Plywood.mdl"],
             selection_strategy="sequential",
         )
-        log.info("  [OK] Tabletop workspace (FIXED materials with textures, no randomization)")
+        log.info("  Scene with fixed materials")
     else:
-        log.info("  [OK] Tabletop workspace (materials WILL randomize)")
+        log.info("  Scene with randomized materials")
 
     scene_rand = SceneRandomizer(scene_cfg, seed=args.seed)
     scene_rand.bind_handler(handler)
     randomizers["scene"] = scene_rand
 
-    log.info("    - Room: 10m x 10m x 5m")
-    log.info("    - Table: 1.8m x 1.8m at z=0.7m (WITH COLLIDER)")
-
-    # # Level 0+: Object randomization (currently disabled - only box_base used)
-    # if level >= 0:
-    log.info("\n[Level 1] Object Randomization (Physics + Pose)")
-    log.info("-" * 70)
-    log.info("  [SKIP] Object randomization (only box_base, no DR needed)")
+    log.info("    Room: 10m x 10m x 5m")
+    log.info("    Table: 1.8m x 1.8m at z=0.7m with collider")
 
     box_rand = ObjectRandomizer(
         ObjectPresets.heavy_object("box_base"),
@@ -266,51 +254,100 @@ def initialize_randomizers(handler, args):
     box_rand.cfg.pose.rotation_range = (0, 0)
     box_rand.cfg.pose.position_range[2] = (0, 0)
     box_rand.bind_handler(handler)
-    # only randomize once for position of box_base
     box_rand()
 
-    # Level 1+: Visual randomization
-    # if level >= 1:
-    log.info("\n[Level 1] Visual Randomization (Materials + Lights)")
+    log.info("\n[Level 1+] Material Randomization")
     log.info("-" * 70)
 
-    log.info("  Materials:")
     box_mat = MaterialRandomizer(
         MaterialPresets.wood_object("box_base", use_mdl=True),
         seed=args.seed,
     )
     box_mat.bind_handler(handler)
     randomizers["material"].append(box_mat)
-    log.info("    [OK] box_base: wood (MDL)")
+    log.info("  box_base: wood material")
 
-    # Light randomization - all 4 lights in enclosed room
-    log.info("  Lights:")
+    log.info("\n[Level 2+] Light Randomization")
+    log.info("-" * 70)
 
-    # level 2+: lighting and reflection randomization
-    # if level >= 2:
-    # Main light: allow full randomization
-    main_light_rand = LightRandomizer(
-        LightPresets.indoor_ambient("main_light", randomization_mode="combined"),
-        seed=args.seed,
+    from metasim.randomization import (
+        LightColorRandomCfg,
+        LightIntensityRandomCfg,
+        LightOrientationRandomCfg,
+        LightPositionRandomCfg,
+        LightRandomCfg,
     )
+
+    if args.render_mode == "pathtracing":
+        ceiling_main_range = (22000.0, 40000.0)
+        ceiling_corner_range = (10000.0, 18000.0)
+    else:
+        ceiling_main_range = (16000.0, 30000.0)
+        ceiling_corner_range = (6000.0, 12000.0)
+
+    main_light_cfg = LightRandomCfg(
+        light_name="ceiling_main",
+        intensity=LightIntensityRandomCfg(
+            intensity_range=ceiling_main_range,
+            distribution="uniform",
+            enabled=True,
+        ),
+        color=LightColorRandomCfg(
+            temperature_range=(3000.0, 6000.0),
+            use_temperature=True,
+            distribution="uniform",
+            enabled=True,
+        ),
+        position=LightPositionRandomCfg(
+            position_range=((-2.0, 2.0), (-2.0, 2.0), (-0.5, 0.5)),
+            relative_to_origin=True,
+            distribution="uniform",
+            enabled=True,
+        ),
+        orientation=LightOrientationRandomCfg(
+            angle_range=((-30.0, 30.0), (-30.0, 30.0), (-180.0, 180.0)),
+            relative_to_origin=True,
+            distribution="uniform",
+            enabled=True,
+        ),
+        randomization_mode="combined",
+    )
+    main_light_rand = LightRandomizer(main_light_cfg, seed=args.seed)
     main_light_rand.bind_handler(handler)
     randomizers["light"].append(main_light_rand)
 
-    # Other lights: ONLY randomize intensity and color
-    # DO NOT randomize position - walls will block lights if they move outside room
-    for light_name in ["fill_light", "back_light", "table_light"]:
-        light_rand = LightRandomizer(
-            LightPresets.outdoor_daylight(light_name, randomization_mode="intensity_only"),
-            seed=args.seed,
+    for light_name in ["ceiling_ne", "ceiling_nw", "ceiling_sw", "ceiling_se"]:
+        light_cfg = LightRandomCfg(
+            light_name=light_name,
+            intensity=LightIntensityRandomCfg(
+                intensity_range=ceiling_corner_range,
+                distribution="uniform",
+                enabled=True,
+            ),
+            color=LightColorRandomCfg(
+                temperature_range=(2700.0, 5500.0),
+                use_temperature=True,
+                distribution="uniform",
+                enabled=True,
+            ),
+            position=LightPositionRandomCfg(
+                position_range=((-1.5, 1.5), (-1.5, 1.5), (-0.5, 0.5)),
+                relative_to_origin=True,
+                distribution="uniform",
+                enabled=True,
+            ),
+            randomization_mode="combined",
         )
+        light_rand = LightRandomizer(light_cfg, seed=args.seed)
         light_rand.bind_handler(handler)
         randomizers["light"].append(light_rand)
 
-    log.info(f"    [OK] {len(randomizers['light'])} lights configured")
+    log.info(f"  Configured {len(randomizers['light'])} light randomizers")
+    log.info(f"    DiskLight (main): {ceiling_main_range[0] / 1000:.0f}K-{ceiling_main_range[1] / 1000:.0f}K")
+    log.info(f"    SphereLight (corners): {ceiling_corner_range[0] / 1000:.0f}K-{ceiling_corner_range[1] / 1000:.0f}K")
+    log.info("    Randomization: intensity, color, position, orientation (DiskLight only)")
 
-    # Level 3+: Camera randomization
-    # if level >= 3:
-    log.info("\n[Level 3] Camera Randomization (Viewpoint Variation)")
+    log.info("\n[Level 3+] Camera Randomization")
     log.info("-" * 70)
 
     camera_rand = CameraRandomizer(
@@ -319,7 +356,7 @@ def initialize_randomizers(handler, args):
     )
     camera_rand.bind_handler(handler)
     randomizers["camera"].append(camera_rand)
-    log.info("  [OK] main_camera: surveillance preset")
+    log.info("  Camera: surveillance preset")
 
     log.info("\n" + "=" * 70)
     return randomizers
@@ -327,17 +364,13 @@ def initialize_randomizers(handler, args):
 
 def apply_randomization(randomizers, level):
     """Apply all active randomizers."""
-
-    # Scene randomizer - all levels (but only level 2+ randomize materials)
     if randomizers["scene"]:
         randomizers["scene"]()
 
-    # Object randomization - level 0+
     if level >= 0:
         for rand in randomizers["object"]:
             rand()
 
-    # Material and light randomization - level 1+
     if level >= 1:
         for rand in randomizers["material"]:
             rand()
@@ -346,7 +379,6 @@ def apply_randomization(randomizers, level):
         for rand in randomizers["light"]:
             rand()
 
-    # Camera randomization - level 3+
     if level >= 3:
         for rand in randomizers["camera"]:
             rand()
@@ -360,93 +392,54 @@ def get_states(all_states, action_idx: int, num_envs: int):
 
 
 def run_replay_with_randomization(env, randomizers, init_state, all_actions, all_states, args):
-    """Replay trajectory with periodic randomization.
-
-    Supports two replay modes:
-    1. Action-based (default): Replay using actions (allows randomization)
-    2. State-based (--object_states): Directly set object states (deterministic)
-    """
+    """Replay trajectory with periodic randomization."""
     os.makedirs("get_started/output", exist_ok=True)
     video_path = f"get_started/output/12_dr_level{args.level}_{args.sim}.mp4"
     obs_saver = ObsSaver(video_path=video_path)
 
     log.info("\n" + "=" * 70)
-    log.info("Running Trajectory Replay with Domain Randomization")
+    log.info("Trajectory Replay with Domain Randomization")
     log.info("=" * 70)
-    log.info(f"Replay mode: {'State-based (deterministic)' if args.object_states else 'Action-based (with DR)'}")
-    log.info(f"Video: {video_path}")
-
-    if not args.object_states:
-        log.info(f"Randomization interval: every {args.randomize_interval} steps")
+    log.info(f"Video output: {video_path}")
+    log.info(f"Randomization interval: every {args.randomize_interval} steps")
 
     traj_length = len(all_actions[0]) if all_actions else (len(all_states[0]) if all_states else 0)
     log.info(f"Trajectory length: {traj_length} steps")
 
-    # Apply initial randomization (especially scene setup)
-    log.info("\nInitial randomization (scene setup)...")
     apply_randomization(randomizers, args.level)
-
-    log.info("Custom materials applied successfully!")
-
-    # Reset environment
-    tic = time.time()
     obs, extras = env.reset(states=[init_state] * args.num_envs)
 
-    toc = time.time()
-    log.trace(f"Time to reset: {toc - tic:.2f}s")
-
-    # Main replay loop
     step = 0
     num_envs = env.scenario.num_envs
 
     while True:
-        log.debug(f"Step {step}")
-
-        tic = time.time()
-
-        # Action-based replay: use actions with domain randomization
-
-        # Apply randomization periodically
         if step % args.randomize_interval == 0 and step > 0:
-            log.info(f"\nStep {step}: Applying randomizations")
+            log.info(f"Step {step}: Applying randomizations")
             apply_randomization(randomizers, args.level)
 
-        # Get actions from trajectory
         actions = get_actions(all_actions, step, num_envs)
-
-        # Execute step
         obs, reward, success, time_out, extras = env.step(actions)
 
-        # Check termination conditions
         if success.any():
-            log.info(f"Env {success.nonzero().squeeze(-1).tolist()} succeeded!")
+            log.info(f"Env {success.nonzero().squeeze(-1).tolist()} succeeded")
 
         if time_out.any():
-            log.info(f"Env {time_out.nonzero().squeeze(-1).tolist()} timed out!")
+            log.info(f"Env {time_out.nonzero().squeeze(-1).tolist()} timed out")
 
         if success.all() or time_out.all():
-            log.info("All environments terminated!")
+            log.info("All environments terminated")
             break
 
-        toc = time.time()
-        log.trace(f"Time to step: {toc - tic:.2f}s")
-
-        # Save observation
-        tic = time.time()
         obs_saver.add(obs)
-        toc = time.time()
-        log.trace(f"Time to save obs: {toc - tic:.2f}s")
 
-        # Check if trajectory ended
-        check_array = all_states if args.object_states else all_actions
-        if get_runout(check_array, step + 1):
-            log.info("Run out of trajectory data, stopping")
+        if get_runout(all_actions, step + 1):
+            log.info("Trajectory ended")
             break
 
         step += 1
 
     obs_saver.save()
-    log.info(f"\n[SAVED] Video saved to: {video_path}")
+    log.info(f"\nVideo saved: {video_path}")
 
 
 def main():
@@ -461,18 +454,23 @@ def main():
         seed: int | None = 42
 
         level: Literal[0, 1, 2, 3] = 1
-        """Randomization level (ALL levels have same tabletop scene):
-        0 - Baseline (no DR) - Scene with FIXED textured materials
-        1 - Object only - Scene with FIXED textured materials
-        2 - + Visual (scene materials + lights) - Scene materials RANDOMIZE
-        3 - + Camera - Scene materials RANDOMIZE
+        """Randomization level:
+        0 - Baseline (no DR)
+        1 - Material randomization
+        2 - Material + Light randomization
+        3 - Material + Light + Camera randomization
         """
 
         randomize_interval: int = 10
 
         object_states: bool = False
-        """If True, replay using object states (deterministic, no DR applied).
-        If False (default), replay using actions (allows domain randomization)."""
+        """If True, replay using object states (deterministic)."""
+
+        render_mode: Literal["raytracing", "pathtracing"] = "raytracing"
+        """Rendering mode:
+        - raytracing: Fast with shadows
+        - pathtracing: Highest quality (slower)
+        """
 
     args = tyro.cli(Args)
 
@@ -483,43 +481,38 @@ def main():
             torch.cuda.manual_seed(args.seed)
 
     log.info("=" * 70)
-    log.info("Domain Randomization Demo with Trajectory Replay - Final Version")
+    log.info("Domain Randomization Demo with Trajectory Replay")
     log.info("=" * 70)
     log.info("\nConfiguration:")
     log.info(f"  Simulator: {args.sim}")
+    log.info(f"  Render mode: {args.render_mode}")
     log.info(f"  Robot: {args.robot}")
     log.info(f"  Seed: {args.seed}")
-    log.info(f"  Level: {args.level}")
+    log.info(f"  Randomization level: {args.level}")
 
-    log.info("\n  SCENE SETUP (ALL LEVELS):")
-    log.info("      - Objects placed ON TABLE (z=0.7m)")
-    log.info("      - Room: 10m x 10m with walls and ceiling")
-    log.info("      - Table: 1.8m x 1.8m WITH PHYSICS COLLISION")
-    log.info("      - Lights: 4 sources, VERY BRIGHT for enclosed room")
+    log.info("\nScene:")
+    log.info("  Room: 10m x 10m x 5m (enclosed)")
+    log.info("  Table: 1.8m x 1.8m at z=0.7m")
 
-    if args.level < 2:
-        log.info("\n  Note: Scene materials are FIXED with textures (not randomized)")
+    log.info(f"\nLighting ({args.render_mode}):")
+    if args.render_mode == "pathtracing":
+        log.info("  DiskLight (main): 28K, 4x SphereLight (corners): 12K each")
+        log.info("  Total: ~76K")
     else:
-        log.info("\n  Note: Scene materials WILL be randomized")
+        log.info("  DiskLight (main): 20K, 4x SphereLight (corners): 7K each")
+        log.info("  Total: ~48K")
+    log.info("  All lights inside room")
 
-    # Create environment
-    tic = time.time()
     env = create_env(args)
-    toc = time.time()
-    log.trace(f"Time to launch: {toc - tic:.2f}s")
-
-    # Get handler for randomization
     handler = env.handler
 
-    # Load trajectory data
     traj_filepath = env.traj_filepath
-    log.info(f"\nLoading trajectory from: {traj_filepath}")
+    log.info(f"\nLoading trajectory: {traj_filepath}")
+    assert os.path.exists(traj_filepath), f"Trajectory file not found: {traj_filepath}"
 
-    tic = time.time()
-    assert os.path.exists(traj_filepath), f"Trajectory file: {traj_filepath} does not exist."
     init_states, all_actions, all_states = get_traj(traj_filepath, env.scenario.robots[0], handler)
-    # z axis lifting by table height
     init_state = init_states[0]
+
     for obj_name, obj_state in init_state["objects"].items():
         obj_state["pos"][2] += 0.7
 
@@ -527,32 +520,20 @@ def main():
         robot_state["pos"][2] += 0.7
 
     env.handler.set_states(init_states, env_ids=list(range(args.num_envs)))
+    log.info(f"Loaded {len(all_actions[0]) if all_actions else 0} actions")
 
-    toc = time.time()
-    log.trace(f"Time to load data: {toc - tic:.2f}s")
-    log.info(f"Loaded {len(all_actions[0]) if all_actions else 0} actions from trajectory")
-
-    # Initialize randomizers
     randomizers = initialize_randomizers(handler, args)
 
-    # Show replay mode information
     if args.object_states:
-        log.info("\n" + "!" * 70)
-        log.info("WARNING: Using state-based replay mode")
-        log.info("Domain randomization will NOT be applied (deterministic replay)")
-        log.info("!" * 70)
+        log.info("\nWARNING: State-based replay mode (no randomization applied)")
 
-    # Run replay with randomization
     run_replay_with_randomization(env, randomizers, init_state, all_actions, all_states, args)
 
-    # Cleanup
     env.close()
     if args.sim == "isaacsim":
         env.handler.simulation_app.close()
 
-    log.info("\n" + "=" * 70)
-    log.info("Demo Completed!")
-    log.info("=" * 70)
+    log.info("\nDemo completed")
 
 
 if __name__ == "__main__":

@@ -497,20 +497,27 @@ class MaterialRandomizer(BaseRandomizerType):
 
         logger.debug(f"Successfully applied MDL material {mtl_name} to {prim_path}")
 
-    def _ensure_uv_for_hierarchy(self, prim) -> None:
-        """Ensure UV coordinates for all meshes in the prim hierarchy."""
+    def _ensure_uv_for_hierarchy(self, prim, tile_scale: float = 1.0) -> None:
+        """Ensure UV coordinates for all meshes in the prim hierarchy.
+
+        Args:
+            prim: USD prim to process
+            tile_scale: Scale factor for UV tiling (passed to UV generation functions)
+        """
         from pxr import Usd, UsdGeom
 
         # Process all meshes in the hierarchy
         for p in Usd.PrimRange(prim):
             if p.IsA(UsdGeom.Mesh):
                 try:
-                    self._ensure_uv_coordinates_improved(UsdGeom.Mesh(p))
+                    self._ensure_uv_coordinates_improved(
+                        UsdGeom.Mesh(p), tile=1.0 / tile_scale if tile_scale > 0 else 0.2
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to generate UV for mesh {p.GetPath()}: {e}")
             elif p.IsA(UsdGeom.Gprim) and not p.IsA(UsdGeom.Mesh):
                 try:
-                    self._ensure_basic_uv_for_gprim(p)
+                    self._ensure_basic_uv_for_gprim(p, tile_scale=tile_scale)
                 except Exception as e:
                     logger.warning(f"Failed to generate UV for gprim {p.GetPath()}: {e}")
 
@@ -566,26 +573,53 @@ class MaterialRandomizer(BaseRandomizerType):
         except Exception as e:
             logger.warning(f"Failed to create UV coordinates for mesh: {e}")
 
-    def _ensure_basic_uv_for_gprim(self, gprim) -> None:
-        """Basic UV coordinate generation for geometric primitives."""
-        from pxr import Gf, UsdGeom, Vt
+    def _ensure_basic_uv_for_gprim(self, gprim, tile_scale: float = 1.0) -> None:
+        """Enhanced UV coordinate generation for geometric primitives (Cube, Sphere, etc.).
+
+        Args:
+            gprim: The geometric primitive to generate UVs for
+            tile_scale: Scale factor for UV tiling (smaller = more repetitions)
+        """
+        from pxr import Gf, Sdf, UsdGeom, Vt
 
         try:
             pvapi = UsdGeom.PrimvarsAPI(gprim)
             if pvapi.HasPrimvar("st"):
                 return  # UV coordinates already exist
 
-            # Create basic UV coordinates for primitive shapes
-            # This is a simple approach that should work for most primitives
-            basic_uvs = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            prim_type = gprim.GetTypeName()
 
-            st = Vt.Vec2fArray([Gf.Vec2f(u, v) for (u, v) in basic_uvs])
-            pv = pvapi.CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex)
-            pv.Set(st)
-            pv.SetInterpolation(UsdGeom.Tokens.vertex)
+            if prim_type == "Cube":
+                # Proper UV mapping for cube: 6 faces, 4 vertices per face = 24 faceVarying UVs
+                # Each face gets proper 0-1 UV coordinates for correct texture mapping
+                # Face order in USD Cube: -X, +X, -Y, +Y, -Z, +Z
+                cube_uvs = []
+                for face_idx in range(6):
+                    # Each face gets a 0-1 UV square
+                    cube_uvs.extend([
+                        (0.0, 0.0),  # bottom-left
+                        (tile_scale, 0.0),  # bottom-right
+                        (tile_scale, tile_scale),  # top-right
+                        (0.0, tile_scale),  # top-left
+                    ])
+
+                st = Vt.Vec2fArray([Gf.Vec2f(u, v) for (u, v) in cube_uvs])
+                pv = pvapi.CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.faceVarying)
+                pv.Set(st)
+                pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
+                logger.debug(f"Generated {len(cube_uvs)} faceVarying UVs for Cube with tile_scale={tile_scale}")
+            else:
+                # For other primitives, use simpler vertex-based UVs
+                basic_uvs = [(0.0, 0.0), (tile_scale, 0.0), (tile_scale, tile_scale), (0.0, tile_scale)]
+
+                st = Vt.Vec2fArray([Gf.Vec2f(u, v) for (u, v) in basic_uvs])
+                pv = pvapi.CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex)
+                pv.Set(st)
+                pv.SetInterpolation(UsdGeom.Tokens.vertex)
+                logger.debug(f"Generated {len(basic_uvs)} vertex UVs for {prim_type}")
 
         except Exception as e:
-            logger.warning(f"Failed to create basic UV coordinates for {gprim.GetPath()}: {e}")
+            logger.warning(f"Failed to create UV coordinates for {gprim.GetPath()}: {e}")
 
     def get_physical_properties(self) -> dict:
         """Get current physical properties for logging."""

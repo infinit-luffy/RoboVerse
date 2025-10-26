@@ -90,11 +90,19 @@ for config in light_configs:
     light_randomizers.append(randomizer)
 
 # Option 2: Using individual presets
-main_light_randomizer = LightRandomizer(
-    LightPresets.outdoor_daylight("main_light", randomization_mode="combined"),
+# For DistantLight (outdoor sun)
+sun_randomizer = LightRandomizer(
+    LightPresets.distant_outdoor_sun("sun_light", randomization_mode="combined"),
     seed=42,
 )
-main_light_randomizer.bind_handler(handler)
+sun_randomizer.bind_handler(handler)
+
+# For SphereLight (ceiling light)
+ceiling_randomizer = LightRandomizer(
+    LightPresets.sphere_ceiling_light("ceiling_light", randomization_mode="combined"),
+    seed=43,
+)
+ceiling_randomizer.bind_handler(handler)
 ```
 
 ### Camera Randomizers

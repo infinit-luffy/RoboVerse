@@ -467,6 +467,68 @@ class SceneRandomizer(BaseRandomizerType):
 
         return None
 
+    def _calculate_uv_tile_scale(self, prim, prim_path: str) -> float:
+        """Calculate appropriate UV tile scale based on geometry size.
+
+        For large surfaces like walls and floors, we want textures to repeat
+        rather than stretch. This function calculates a tile_scale that makes
+        textures repeat approximately every 1-2 meters.
+
+        Args:
+            prim: USD prim
+            prim_path: Path to the prim (for logging)
+
+        Returns:
+            tile_scale: Scale factor for UV coordinates (smaller = more repetitions)
+        """
+        try:
+            from pxr import UsdGeom
+
+            prim_type = prim.GetTypeName()
+
+            if prim_type == "Cube":
+                # Get cube size and scale
+                cube = UsdGeom.Cube(prim)
+                size = cube.GetSizeAttr().Get() or 2.0  # Default USD cube size is 2.0
+
+                # Get scale from xform
+                xformable = UsdGeom.Xformable(prim)
+                xform_ops = xformable.GetOrderedXformOps()
+                scale = [1.0, 1.0, 1.0]
+                for op in xform_ops:
+                    if op.GetOpType() == UsdGeom.XformOp.TypeScale:
+                        scale_value = op.Get()
+                        if scale_value:
+                            scale = list(scale_value)
+                        break
+
+                # Calculate actual dimensions
+                actual_sizes = [size * s for s in scale]
+
+                # For walls, we care about the two largest dimensions (width and height)
+                # For floors/ceilings, same applies
+                sorted_sizes = sorted(actual_sizes, reverse=True)
+                max_dimension = sorted_sizes[0]  # Largest dimension
+
+                # We want textures to repeat approximately every 1 meter
+                # tile_scale controls how many times the 0-1 UV range is used
+                # Larger dimensions need larger tile_scale values for more repetitions
+                target_texture_size = 1.0  # Target: texture repeats every 1 meter
+                tile_scale = max_dimension / target_texture_size
+
+                logger.debug(
+                    f"Cube {prim_path}: size={size}, scale={scale}, actual={actual_sizes}, tile_scale={tile_scale:.2f}"
+                )
+                return tile_scale
+
+            else:
+                # For other geometry types, use a default moderate tiling
+                return 2.0
+
+        except Exception as e:
+            logger.warning(f"Failed to calculate tile scale for {prim_path}: {e}")
+            return 1.0  # Default fallback
+
     def _apply_material_to_prim(self, material_path: str, prim_path: str):
         """Apply MDL material to a primitive using MaterialRandomizer's proven method.
 
@@ -541,15 +603,20 @@ class SceneRandomizer(BaseRandomizerType):
         dummy_randomizer.handler = self.handler
 
         for mesh_path in mesh_prims_paths:
-            # For terrain, explicitly ensure UV coordinates with larger tile size
+            # Ensure UV coordinates for all scene geometry (floor, walls, ceiling, table)
             mesh_prim = prim_utils.get_prim_at_path(mesh_path)
-            if mesh_prim and ("ground" in mesh_path.lower() or "terrain" in mesh_path.lower()):
-                logger.info(f"Ensuring UV coordinates for terrain mesh {mesh_path}")
+            if mesh_prim and any(
+                keyword in mesh_path.lower()
+                for keyword in ["ground", "terrain", "floor", "wall", "ceiling", "table", "scene_"]
+            ):
+                logger.debug(f"Ensuring UV coordinates for scene geometry {mesh_path}")
                 try:
-                    dummy_randomizer._ensure_uv_for_hierarchy(mesh_prim)
-                    logger.info("Successfully ensured UV for terrain mesh")
+                    # Calculate appropriate tile_scale based on geometry size
+                    tile_scale = self._calculate_uv_tile_scale(mesh_prim, mesh_path)
+                    dummy_randomizer._ensure_uv_for_hierarchy(mesh_prim, tile_scale=tile_scale)
+                    logger.debug(f"Successfully ensured UV coordinates with tile_scale={tile_scale}")
                 except Exception as e:
-                    logger.warning(f"Failed to ensure UV for terrain: {e}")
+                    logger.warning(f"Failed to ensure UV coordinates: {e}")
 
             dummy_randomizer._apply_mdl_to_prim(material_path, mesh_path)
             logger.debug(f"Applied material to mesh {mesh_path}")

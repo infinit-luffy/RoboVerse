@@ -52,12 +52,16 @@ from metasim.scenario.robot import RobotCfg
 if TYPE_CHECKING:
     from metasim.scenario.scenario import ScenarioCfg
 
+import glob
+import os
+import sys
+import tempfile
+import threading
+
 from metasim.queries.base import BaseQueryType
 from metasim.sim import BaseSimHandler
 from metasim.types import Action
 from metasim.utils.state import CameraState, ObjectState, RobotState, TensorState, state_tensor_to_nested
-
-import threading, tempfile, os, glob, sys
 
 
 class MujocoHandler(BaseSimHandler):
@@ -98,9 +102,9 @@ class MujocoHandler(BaseSimHandler):
 
         # === Added: GL/physics serialization + native renderer state ===
         self._mj_lock = threading.RLock()
-        self._mj_model = None      # native mujoco.MjModel for offscreen rendering
-        self._mj_data = None       # native mujoco.MjData  for offscreen rendering
-        self.renderer = None       # mujoco.Renderer (offscreen)
+        self._mj_model = None  # native mujoco.MjModel for offscreen rendering
+        self._mj_data = None  # native mujoco.MjData  for offscreen rendering
+        self.renderer = None  # mujoco.Renderer (offscreen)
 
     def launch(self) -> None:
         model = self._init_mujoco()
@@ -117,7 +121,6 @@ class MujocoHandler(BaseSimHandler):
                 # Some older signatures don’t accept keywords; try positional.
                 mjcf.export_with_assets(model, tmpdir)
 
-
             # Find the XML the exporter actually wrote (e.g., 'model.xml' or 'unnamed_model.xml')
             xml_candidates = sorted(glob.glob(os.path.join(tmpdir, "*.xml")))
             if not xml_candidates:
@@ -127,15 +130,12 @@ class MujocoHandler(BaseSimHandler):
                     f.write(model.to_xml_string())
                 xml_candidates = [xml_fallback]
 
-
             xml_path = xml_candidates[0]
-
 
             # Load the model from the XML *in the same directory as the exported assets*
             # so hashed filenames resolve correctly.
             self._mj_model = mujoco.MjModel.from_xml_path(xml_path)
             self._mj_data = mujoco.MjData(self._mj_model)
-
 
         # Create a default-sized renderer (camera sizes can be applied on demand)
         self.renderer = mujoco.Renderer(self._mj_model, width=640, height=480)
@@ -483,7 +483,6 @@ class MujocoHandler(BaseSimHandler):
     def _mirror_state_to_native(self):
         self._mj_data = self.physics._data._data
 
-
     def _get_states(self, env_ids: list[int] | None = None) -> list[dict]:
         """Get states of all objects and robots."""
         object_states = {}
@@ -560,7 +559,10 @@ class MujocoHandler(BaseSimHandler):
                 if sys.platform == "darwin":
                     with self._mj_lock:  # optional but safer
                         # match renderer size to camera if needed
-                        if self.renderer is None or (self.renderer.width, self.renderer.height) != (camera.width, camera.height):
+                        if self.renderer is None or (self.renderer.width, self.renderer.height) != (
+                            camera.width,
+                            camera.height,
+                        ):
                             self.renderer = mujoco.Renderer(self._mj_model, width=camera.width, height=camera.height)
                         # mirror state and render
                         self._mirror_state_to_native()
@@ -568,24 +570,28 @@ class MujocoHandler(BaseSimHandler):
                         rgb_np = self.renderer.render()
                     rgb = torch.from_numpy(rgb_np.copy()).unsqueeze(0)
                 elif sys.platform == "win32":
-                    rgb_np = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=False)
+                    rgb_np = self.physics.render(
+                        width=camera.width, height=camera.height, camera_id=camera_id, depth=False
+                    )
                     # Ensure numpy array -> torch tensor with shape (1, H, W, C)
                     rgb = torch.from_numpy(np.ascontiguousarray(rgb_np)).unsqueeze(0)
                 else:
-                    rgb_np = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=False)
+                    rgb_np = self.physics.render(
+                        width=camera.width, height=camera.height, camera_id=camera_id, depth=False
+                    )
             if "depth" in camera.data_types:
                 if sys.platform == "darwin":
                     with self._mj_lock:
                         # Ensure renderer matches the camera size
-                        if (self.renderer is None or
-                            (self.renderer.width, self.renderer.height) != (camera.width, camera.height)):
+                        if self.renderer is None or (self.renderer.width, self.renderer.height) != (
+                            camera.width,
+                            camera.height,
+                        ):
                             self.renderer = mujoco.Renderer(self._mj_model, width=camera.width, height=camera.height)
-
 
                         # Keep native model/data in sync with dm_control physics
                         self._mirror_state_to_native()
                         self.renderer.update_scene(self._mj_data, camera=camera_id)
-
 
                         # --- Cross-version depth rendering for mujoco.Renderer ---
                         if hasattr(self.renderer, "enable_depth_rendering"):
@@ -603,16 +609,17 @@ class MujocoHandler(BaseSimHandler):
                             if isinstance(maybe, tuple) and len(maybe) == 2:
                                 _, depth_np = maybe
                             else:
-                                raise RuntimeError(
-                                    "Depth rendering not supported by this mujoco.Renderer build."
-                                )
+                                raise RuntimeError("Depth rendering not supported by this mujoco.Renderer build.")
                     depth = torch.from_numpy(depth_np.copy()).unsqueeze(0)
                 elif sys.platform == "win32":
-                    depth_np = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=True)
+                    depth_np = self.physics.render(
+                        width=camera.width, height=camera.height, camera_id=camera_id, depth=True
+                    )
                     depth = torch.from_numpy(np.ascontiguousarray(depth_np)).unsqueeze(0)
                 else:
-                    depth_np = self.physics.render(width=camera.width, height=camera.height, camera_id=camera_id, depth=True)
-
+                    depth_np = self.physics.render(
+                        width=camera.width, height=camera.height, camera_id=camera_id, depth=True
+                    )
 
             # depth = torch.from_numpy(depth_np.copy()).unsqueeze(0)
             state = CameraState(rgb=locals().get("rgb", None), depth=locals().get("depth", None))
@@ -704,7 +711,6 @@ class MujocoHandler(BaseSimHandler):
 
     def _disable_robotgravity(self):
         gravity_vec = np.array(self.scenario.gravity)
-
 
         self.physics.data.xfrc_applied[:] = 0
         for body_name in self.robot_body_names:
@@ -858,7 +864,6 @@ class MujocoHandler(BaseSimHandler):
             except Exception:
                 pass
             self.renderer = None
-
 
     ############################################################
     ## Utils

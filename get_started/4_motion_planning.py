@@ -203,6 +203,7 @@ for step in range(200):
         x_target = 0.3 + 0.1 * (step / 100)
         y_target = 0.5 - 0.5 * (step / 100)
         z_target = 0.6 - 0.2 * (step / 100)
+
         # Randomly assign x/y/z target for each env
         def pick_device():
             if torch.cuda.is_available():

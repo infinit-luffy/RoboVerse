@@ -621,7 +621,7 @@ class MujocoHandler(BaseSimHandler):
                     depth_np = self.physics.render(
                         width=camera.width, height=camera.height, camera_id=camera_id, depth=True
                     )
-
+                    depth = torch.from_numpy(np.ascontiguousarray(depth_np)).unsqueeze(0)
             # depth = torch.from_numpy(depth_np.copy()).unsqueeze(0)
             state = CameraState(rgb=locals().get("rgb", None), depth=locals().get("depth", None))
             camera_states[camera.name] = state

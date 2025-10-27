@@ -579,6 +579,7 @@ class MujocoHandler(BaseSimHandler):
                     rgb_np = self.physics.render(
                         width=camera.width, height=camera.height, camera_id=camera_id, depth=False
                     )
+                    rgb = torch.from_numpy(np.ascontiguousarray(rgb_np)).unsqueeze(0)
             if "depth" in camera.data_types:
                 if sys.platform == "darwin":
                     with self._mj_lock:

@@ -279,7 +279,7 @@ class DreamerV3:
         })
         self.episode_rewards = RollingMeter(learn_cfg.get("window_size", 100))
         self.episode_lengths = RollingMeter(learn_cfg.get("window_size", 100))
-        self.episode_rewards_step = RollingMeter(learn_cfg.get("window_size", 100))
+        self.episode_rewards_step = RollingMeter(learn_cfg.get("window_size", 1000))
         self.model_dir = model_dir
         self.log_dir = log_dir
         self.print_log = print_log
@@ -391,7 +391,7 @@ class DreamerV3:
                         cur_rewards_sum += reward
                         cur_episode_length += 1
                         self.global_step += self.num_envs
-                        self.episode_rewards_step.update(reward.mean().item())
+                        self.episode_rewards_step.update(reward)
 
                         if done.any():
                             self.episode_rewards.update(cur_rewards_sum[done])
@@ -402,7 +402,7 @@ class DreamerV3:
                             deterministic[done] = 0
                             action[done] = 0
 
-                mean_reward = self.episode_rewards_step.mean
+                mean_reward = self.episode_rewards_step.mean if self.episode_rewards_step.len > 0 else 0
                 ## Update the model
                 if iteration > self.prefill:
                     with timer("time/train"):

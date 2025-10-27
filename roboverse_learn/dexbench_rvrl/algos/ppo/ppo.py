@@ -112,6 +112,7 @@ class PPO:
 
         self.episode_rewards = RollingMeter(learn_cfg.get("window_size", 100))
         self.episode_lengths = RollingMeter(learn_cfg.get("window_size", 100))
+        self.episode_rewards_step = RollingMeter(learn_cfg.get("window_size", 2000))
         self.cur_rewards_sum = torch.zeros(self.num_envs, device=device)
         self.cur_episode_length = torch.zeros(self.num_envs, device=device)
 
@@ -179,6 +180,7 @@ class PPO:
                     self.cur_episode_length += 1
                     self.episode_rewards.update(self.cur_rewards_sum[dones])
                     self.episode_lengths.update(self.cur_episode_length[dones])
+                    self.episode_rewards_step.update(reward)
                     self.cur_rewards_sum[dones] = 0
                     self.cur_episode_length[dones] = 0
                     ep_infos.append(infos)
@@ -189,7 +191,7 @@ class PPO:
 
                 mean_episode_length = self.episode_lengths.mean if self.episode_lengths.len > 0 else 0
                 mean_episode_reward = self.episode_rewards.mean if self.episode_rewards.len > 0 else 0
-                mean_reward = self.buffer.mean_reward()
+                mean_reward = self.episode_rewards_step.mean if self.episode_rewards_step.len > 0 else 0
 
                 compute_start_time = time.time()
                 self.buffer.compute_returns(last_values.view(-1), self.gamma, self.lam)

@@ -215,9 +215,6 @@ class TDMPC2:
 
     @property
     def plan(self):
-        _plan_val = getattr(self, "_plan_val", None)
-        if _plan_val is not None:
-            return _plan_val
         return self._plan
 
     def _get_discount(self, episode_length):
@@ -394,11 +391,13 @@ class TDMPC2:
             pi_actions = torch.empty(
                 self.num_envs, self.horizon, self.num_pi_trajs, self.action_dim, device=self.device
             )
-            _z = z.unsqueeze(1).repeat(1, self.num_pi_trajs, 1)
+            _z = z.unsqueeze(1).repeat(1, self.num_pi_trajs, 1).view(self.num_envs * self.num_pi_trajs, -1)
             for t in range(self.horizon - 1):
-                pi_actions[:, t], _ = self.model.pi(_z, task)
-                _z = self.model.next(_z, pi_actions[:, t], task)
-            pi_actions[:, -1], _ = self.model.pi(_z, task)
+                a, _ = self.model.pi(_z, task)
+                pi_actions[:, t] = a.view(self.num_envs, self.num_pi_trajs, self.action_dim)
+                _z = self.model.next(_z, a, task)
+            a, _ = self.model.pi(_z, task)
+            pi_actions[:, -1] = a.view(self.num_envs, self.num_pi_trajs, self.action_dim)
 
         # Initialize state and parameters
         z = z.unsqueeze(1).repeat(1, self.num_samples, 1)
@@ -427,13 +426,11 @@ class TDMPC2:
             # Compute elite actions
             value = self._estimate_value(z, actions, task).nan_to_num(0)
             elite_idxs = torch.topk(value.squeeze(2), self.num_elites, dim=1).indices
-            elite_action_idxs = elite_idxs[:, None, :, None].expand(
-                -1, actions.size(1), -1, actions.size(3)
-            )  # (num_envs, horizon, num_elites, action_dim)
-            elite_value, elite_actions = (
-                torch.gather(value, dim=1, index=elite_idxs.unsqueeze(-1)),
-                torch.gather(actions, dim=2, index=elite_action_idxs),
-            )
+            elite_value = torch.gather(value, 1, elite_idxs.unsqueeze(2))
+            elite_actions = actions.gather(
+				dim=2,
+				index=elite_idxs[:, None, :, None].expand(-1, self.horizon, self.num_elites, self.action_dim)
+			)
 
             # Update parameters
             max_value = elite_value.max(dim=1, keepdim=True).values
@@ -446,12 +443,16 @@ class TDMPC2:
                 mean = mean * self.model._action_masks[task]
                 std = std * self.model._action_masks[task]
 
+        logits = torch.log(score.squeeze(2) + 1e-9)
         batch_idx = torch.arange(self.num_envs, device=elite_actions.device)
-        rand_idx = math.gumbel_softmax_sample(score.squeeze(2))  # (num_envs,)
-        actions = elite_actions[batch_idx, :, rand_idx, :]
-        a, std = actions[:, 0], std[:, 0]
+        rand_idx = math.gumbel_softmax_sample(logits, temperature=self.temperature)  # (num_envs,)
+        selected_actions = elite_actions.gather(
+			dim=2,
+			index=rand_idx[:, None, None, None].expand(-1, self.horizon, 1, self.action_dim)
+		).squeeze(2)
+        a, std = selected_actions[:, 0], std[:, 0]
         if not eval_mode:
-            a = a + std * torch.randn(self.action_dim, device=std.device)
+            a = a + std * torch.randn_like(a)
         self._prev_mean.copy_(mean)
         return a.clamp(-1, 1)
 

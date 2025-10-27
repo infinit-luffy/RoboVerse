@@ -35,6 +35,10 @@ class RollingMeter:
             self.deque.extend(rewards.detach().cpu().flatten().tolist())
         elif isinstance(rewards, float):
             self.deque.append(rewards)
+        elif isinstance(rewards, int):
+            self.deque.append(float(rewards))
+        else:
+            raise ValueError(f"Unsupported type for rewards: {type(rewards)}. Expected torch.Tensor, float, or int.")
 
     @property
     def len(self) -> int:
@@ -152,6 +156,7 @@ class DRQv2:
         ## Logging
         self.episode_rewards = RollingMeter(learn_cfg.get("window_size", 100))
         self.episode_lengths = RollingMeter(learn_cfg.get("window_size", 100))
+        self.episode_rewards_step = RollingMeter(learn_cfg.get("window_size", 1000))
         self.actor_losses = RollingMeter(learn_cfg.get("window_size", 100))
         self.critic_losses = RollingMeter(learn_cfg.get("window_size", 100))
         self.q_values = RollingMeter(learn_cfg.get("window_size", 100))
@@ -261,6 +266,7 @@ class DRQv2:
                                 obs[k].copy_(next_obs[k])
 
                             ep_infos.append(info)
+                            self.episode_rewards_step.update(reward)
                             self.cur_rewards_sum += reward
                             self.cur_episode_length += 1
                             self.global_step += 1
@@ -271,7 +277,7 @@ class DRQv2:
                                 self.cur_rewards_sum = 0
                                 self.cur_episode_length = 0
 
-                    mean_reward = 0 if self.cur_episode_length == 0 else self.cur_rewards_sum / self.cur_episode_length
+                    mean_reward = 0 if self.episode_rewards_step.len == 0 else self.episode_rewards_step.mean
                     # update the model
                     if self.global_step >= self.prefill:
                         with timer("time/sample_data"):

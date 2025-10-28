@@ -70,6 +70,8 @@ if __name__ == "__main__":
         simulator=args.sim,
         decimation=2,
     )
+    if args.sim == "mujoco":
+        scenario.decimation *= 10
 
     # add cameras
     scenario.cameras = [

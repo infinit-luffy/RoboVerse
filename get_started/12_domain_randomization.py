@@ -213,7 +213,7 @@ def initialize_randomizers(handler, args):
     log.info("-" * 70)
 
     scene_cfg = ScenePresets.tabletop_workspace(
-        room_size=5.0,
+        room_size=10.0,
         wall_height=5.0,
         table_size=(1.8, 1.8, 0.1),
         table_height=0.7,

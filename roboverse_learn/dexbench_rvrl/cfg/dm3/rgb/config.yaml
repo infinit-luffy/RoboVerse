@@ -30,7 +30,7 @@ learn:
   batch_size: 16
   batch_length: 64
   horizon: 15
-  prefill: 400
+  prefill: 6400
   buffer_size: 5000
   amp: False
   nstep: 1

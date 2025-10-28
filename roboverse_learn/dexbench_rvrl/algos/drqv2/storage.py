@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import IterableDataset
 import sys
+from torch.multiprocessing import get_context
 
 
 def episode_len(episode):
@@ -39,7 +40,7 @@ def load_episode(fn):
 
 
 class ReplayBufferStorage:
-    def __init__(self, obs_shape: dict, action_size: int, replay_dir: str):
+    def __init__(self, obs_shape: dict, action_size: int, replay_dir: str, num_envs: int, max_length: int):
         self._obs_shape = obs_shape
         self._action_size = action_size
         self._replay_dir = Path(replay_dir)
@@ -47,36 +48,43 @@ class ReplayBufferStorage:
             shutil.rmtree(self._replay_dir)
 
         self._replay_dir.mkdir(parents=True, exist_ok=False)
-        self._current_episode = defaultdict(list)
+        self._current_episode_obs = {
+            key: np.zeros((num_envs, max_length + 1, *obs_shape[key]), dtype=np.uint8 if "rgb" in key else np.float32)
+            for key in obs_shape.keys()
+        }
+        self._current_episode_action = np.zeros((num_envs, max_length, action_size), dtype=np.float32)
+        self._current_episode_reward = np.zeros((num_envs, max_length, 1), dtype=np.float32)
+        self._current_episode_length = np.zeros((num_envs,), dtype=np.int32)
+        self.num_envs = num_envs
         self._preload()
 
     def __len__(self):
         return self._num_transitions
 
     def add(self, observation, action, reward, next_observation, done):
+        i = np.arange(self.num_envs)
+        t = self._current_episode_length
         for key in self._obs_shape.keys():
             if "rgb" in key:
-                self._current_episode[f"observation_{key}"].append((observation[key] * 255.0).detach().cpu().numpy().astype(np.uint8))
-                self._current_episode[f"next_observation_{key}"].append((next_observation[key] * 255.0).detach().cpu().numpy().astype(np.uint8))
+                self._current_episode_obs[key][i, t, ...] = (observation[key] * 255.0).detach().cpu().numpy().astype(np.uint8)
+                self._current_episode_obs[key][i, t + 1, ...] = (next_observation[key] * 255.0).detach().cpu().numpy().astype(np.uint8)
             else:
-                self._current_episode[f"observation_{key}"].append(observation[key].detach().cpu().numpy())
-                self._current_episode[f"next_observation_{key}"].append(next_observation[key].detach().cpu().numpy())
-        self._current_episode['action'].append(action.detach().cpu().numpy())
-        self._current_episode['reward'].append(reward.unsqueeze(-1).detach().cpu().numpy())
+                self._current_episode_obs[key][i, t, ...] = observation[key].detach().cpu().numpy()
+                self._current_episode_obs[key][i, t + 1, ...] = next_observation[key].detach().cpu().numpy()
+        self._current_episode_action[i, t, ...] = action.detach().cpu().numpy()
+        self._current_episode_reward[i, t, ...] = reward.unsqueeze(-1).detach().cpu().numpy()
+        self._current_episode_length += 1
         
-        if done:
-            episode = dict()
-            for key in self._obs_shape.keys():
-                if "rgb" in key:
-                    episode[f"observation_{key}"] = np.array(self._current_episode[f"observation_{key}"], dtype=np.uint8)
-                    episode[f"next_observation_{key}"] = np.array(self._current_episode[f"next_observation_{key}"], dtype=np.uint8)
-                else:
-                    episode[f"observation_{key}"] = np.array(self._current_episode[f"observation_{key}"])
-                    episode[f"next_observation_{key}"] = np.array(self._current_episode[f"next_observation_{key}"])
-            episode['action'] = np.array(self._current_episode['action'])
-            episode['reward'] = np.array(self._current_episode['reward'])
-            self._current_episode = defaultdict(list)
-            self._store_episode(episode)
+        if done.any():
+            for env_idx in done.nonzero(as_tuple=False).squeeze(-1).tolist():
+                L  = self._current_episode_length[env_idx]
+                episode = {}
+                for key in self._obs_shape.keys():
+                    episode[f"observation_{key}"] = self._current_episode_obs[key][env_idx, :L+1, ...]
+                episode['action'] = self._current_episode_action[env_idx, :L, ...]
+                episode['reward'] = self._current_episode_reward[env_idx, :L, ...]
+                self._store_episode(episode)
+                self._current_episode_length[env_idx] = 0
 
     def _preload(self):
         self._num_episodes = 0
@@ -107,7 +115,7 @@ class ReplayBuffer(IterableDataset):
         self._num_workers = max(1, num_workers)
         print(f"Initializing ReplayBuffer with max_size={max_size}, num_workers={num_workers}, nstep={nstep}, discount={discount}, fetch_every={fetch_every}, save_snapshot={save_snapshot}")
         self._episode_fns = []
-        self._episodes = dict()
+        self._episodes = {}
         self._nstep = nstep
         self._discount = discount
         self._fetch_every = fetch_every
@@ -128,10 +136,11 @@ class ReplayBuffer(IterableDataset):
             early_eps_fn = self._episode_fns.pop(0)
             early_eps = self._episodes.pop(early_eps_fn)
             self._size -= episode_len(early_eps)
-            early_eps_fn.unlink(missing_ok=True)
-        self._episode_fns.append(eps_fn)
+            Path(early_eps_fn).unlink(missing_ok=True)
+        str_eps_fn = str(eps_fn)
+        self._episode_fns.append(str_eps_fn)
         self._episode_fns.sort()
-        self._episodes[eps_fn] = episode
+        self._episodes[str_eps_fn] = episode
         self._size += eps_len
 
         if not self._save_snapshot:
@@ -152,7 +161,7 @@ class ReplayBuffer(IterableDataset):
             eps_idx, eps_len = [int(x) for x in eps_fn.stem.split('_')[1:]]
             if eps_idx % self._num_workers != worker_id:
                 continue
-            if eps_fn in self._episodes.keys():
+            if str(eps_fn) in self._episodes.keys():
                 continue
             if fetched_size + eps_len > self._max_size:
                 break
@@ -176,9 +185,9 @@ class ReplayBuffer(IterableDataset):
             for key in self._obs_shape.keys()
         )
         next_obs = (
-            episode[f'next_observation_{key}'][idx + self._nstep - 1] 
+            episode[f'observation_{key}'][idx + self._nstep]
             if "rgb" not in key 
-            else episode[f'next_observation_{key}'][idx + self._nstep - 1].astype(np.float32) / 255.0
+            else episode[f'observation_{key}'][idx + self._nstep].astype(np.float32) / 255.0
             for key in self._obs_shape.keys()
         )
         action = episode['action'][idx]
@@ -220,5 +229,6 @@ def make_replay_loader(obs_shape, action_size, replay_dir, max_size, batch_size,
                                          num_workers=num_workers,
                                          pin_memory=True,
                                          worker_init_fn=_worker_init_fn,
+                                         multiprocessing_context=get_context('spawn')
                                          )
     return loader

@@ -69,7 +69,9 @@ class DRQv2:
         self.sim_device = env.sim_device if hasattr(env, "sim_device") else device
 
         self.obs_type = getattr(env, "obs_type", "state")
+        ori_obs_shape = {k: v.shape for k, v in env.single_observation_space.spaces.items()}
         self.action_dim = np.prod(env.single_action_space.shape)
+        self.max_episode_steps = env.max_episode_steps
         self.img_h = getattr(env, "img_h", None)
         self.img_w = getattr(env, "img_w", None)
 
@@ -80,7 +82,8 @@ class DRQv2:
             enable_deterministic_run()
             
         learn_cfg = self.train_cfg["learn"]
-        self.env = DrqDexEnv(num_frames=learn_cfg.get("num_frames", 3), env=env)
+        self.env = DrqDexEnv(obs_shape=ori_obs_shape, num_frames=learn_cfg.get("num_frames", 3), env=env, device=self.device)
+        self.num_envs = self.env.num_envs
         self.obs_shape = {k: v.shape for k, v in self.env.single_observation_space.spaces.items()}
         print(f"Observation shape: {self.obs_shape}")
         print(f"Action dimension: {self.action_dim}")
@@ -106,7 +109,7 @@ class DRQv2:
         self.model_cfg = self.train_cfg.get("policy", None)
 
         ## Replay buffer
-        self.replay_storage = ReplayBufferStorage(self.obs_shape, self.action_dim, log_dir + '/buffer')
+        self.replay_storage = ReplayBufferStorage(self.obs_shape, self.action_dim, log_dir + '/buffer', self.num_envs, self.max_episode_steps)
 
         self.replay_loader = make_replay_loader(
             obs_shape=self.obs_shape,
@@ -160,8 +163,8 @@ class DRQv2:
         self.actor_losses = RollingMeter(learn_cfg.get("window_size", 100))
         self.critic_losses = RollingMeter(learn_cfg.get("window_size", 100))
         self.q_values = RollingMeter(learn_cfg.get("window_size", 100))
-        self.cur_rewards_sum = 0
-        self.cur_episode_length = 0
+        self.cur_rewards_sum = torch.zeros((self.num_envs,), device=self.device, dtype=torch.float32)
+        self.cur_episode_length = torch.zeros((self.num_envs,), device=self.device, dtype=torch.int32)
         self.batch_reward = 0
 
         self.model_dir = model_dir
@@ -250,12 +253,12 @@ class DRQv2:
                     with torch.inference_mode(), timer("time/roll_out"):
                         for _ in range(self.env_step):
                             if self.global_step < self.prefill:
-                                action = torch.rand((self.action_dim), device=self.sim_device) * 2 - 1
+                                action = torch.rand((self.num_envs, self.action_dim), device=self.sim_device) * 2 - 1
                             else:
                                 feature = self.encoder(obs)
                                 std = schedule(self.std_schedule, iteration)
                                 dist = self.actor(feature, std)
-                                action = dist.sample(clip=None).squeeze(0).to(self.sim_device)
+                                action = dist.sample(clip=None).to(self.sim_device)
 
                             start_time = time.time()
                             next_obs, reward, terminated, truncated, info = self.env.step(action)
@@ -267,15 +270,15 @@ class DRQv2:
 
                             ep_infos.append(info)
                             self.episode_rewards_step.update(reward)
-                            self.cur_rewards_sum += reward
+                            self.cur_rewards_sum += reward.to(self.device)
                             self.cur_episode_length += 1
-                            self.global_step += 1
+                            self.global_step += self.num_envs
 
-                            if done:
-                                self.episode_rewards.update(self.cur_rewards_sum)
-                                self.episode_lengths.update(self.cur_episode_length)
-                                self.cur_rewards_sum = 0
-                                self.cur_episode_length = 0
+                            if done.any():
+                                self.episode_rewards.update(self.cur_rewards_sum[done])
+                                self.episode_lengths.update(self.cur_episode_length[done])
+                                self.cur_rewards_sum[done] = 0
+                                self.cur_episode_length[done] = 0
 
                     mean_reward = 0 if self.episode_rewards_step.len == 0 else self.episode_rewards_step.mean
                     # update the model
@@ -300,6 +303,7 @@ class DRQv2:
                 if (iteration + 1) % self.print_interval == 0 and self.print_log:
                     self.log(locals())
                     ep_infos.clear()
+                torch.cuda.empty_cache()
 
     def update_q(self, data: dict[str, Tensor]) -> TensorDict:
         feature = data["feature"]

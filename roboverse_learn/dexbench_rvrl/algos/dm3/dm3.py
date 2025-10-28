@@ -376,7 +376,7 @@ class DreamerV3:
                             embeded_obs.view(self.num_envs, -1), deterministic
                         )
                         posterior = posterior_dist.sample().view(-1, self.stochastic_size)
-                        if iteration < self.prefill:
+                        if self.global_step < self.prefill:
                             action = torch.rand((self.num_envs, self.action_dim), device=self.device) * 2 - 1
                         else:
                             action = self.actor(posterior, deterministic).sample()
@@ -404,7 +404,7 @@ class DreamerV3:
 
                 mean_reward = self.episode_rewards_step.mean if self.episode_rewards_step.len > 0 else 0
                 ## Update the model
-                if iteration > self.prefill:
+                if self.global_step > self.prefill:
                     with timer("time/train"):
                         # gradient_steps = self.ratio(self.global_step - self.prefill)
 

@@ -19,14 +19,14 @@ learn:
   agent_name: shadow_hand
   test: False
   resume: 0
-  log_interval: 2000
+  log_interval: 5000
   print_log: True
   print_interval: 1
 
   # rollout params
   max_iterations: 500000
   nstep: 3
-  env_step: 2
+  env_step: 1
   num_frames: 3
 
   # training params
@@ -38,9 +38,9 @@ learn:
   std_clip: 0.3
   std_schedule: "linear(1.0,0.1,500000)"
 
-  batch_size: 256
+  batch_size: 128
   prefill: 2000
-  buffer_size: 1000000
+  buffer_size: 500000
   replay_buffer_num_workers: 4
 
   gamma: 0.99

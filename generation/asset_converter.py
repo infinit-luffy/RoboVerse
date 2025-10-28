@@ -216,6 +216,7 @@ class MeshtoMJCFConverter(AssetConverterBase):
                 output_dir,
                 name=str(idx),
             )
+            joint = ET.SubElement(body, "joint", attrib={"type": "free"})
             self.add_geometry(
                 mujoco_asset,
                 link,

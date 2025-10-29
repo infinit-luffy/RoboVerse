@@ -24,7 +24,7 @@ learn:
   print_interval: 1
 
   # rollout params
-  max_iterations: 500000
+  max_iterations: 250000
   nstep: 3
   env_step: 1
   num_frames: 3

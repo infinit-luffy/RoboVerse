@@ -19,7 +19,7 @@ from tensordict import TensorDict
 from torch import Tensor
 
 from roboverse_learn.dexbench_rvrl.algos.drqv2.module import Actor, Critic, Encoder, RandomShiftsAug, schedule, soft_update_params
-from roboverse_learn.dexbench_rvrl.algos.drqv2.storage import ReplayBufferStorage, ReplayBuffer, make_replay_loader
+from roboverse_learn.dexbench_rvrl.algos.drqv2.storage import ReplayBufferStorage, IterableReplayBuffer, make_replay_loader, Buffer
 from roboverse_learn.dexbench_rvrl.algos.drqv2.env_wrapper import DrqDexEnv
 from roboverse_learn.dexbench_rvrl.utils.reproducibility import enable_deterministic_run
 from roboverse_learn.dexbench_rvrl.utils.timer import timer
@@ -98,6 +98,7 @@ class DRQv2:
         
         self.batch_size = learn_cfg["batch_size"]
         self.buffer_size = learn_cfg.get("buffer_size", 1000000)
+        self.nstep = learn_cfg.get("nstep", 3)
         self.max_iterations = learn_cfg.get("max_iterations", 100000)
         self.env_step = learn_cfg.get("env_step", 1)
         self.log_interval = learn_cfg.get("log_interval", 1)
@@ -109,20 +110,31 @@ class DRQv2:
         self.model_cfg = self.train_cfg.get("policy", None)
 
         ## Replay buffer
-        self.replay_storage = ReplayBufferStorage(self.obs_shape, self.action_dim, log_dir + '/buffer', self.num_envs, self.max_episode_steps)
+        # self.replay_storage = ReplayBufferStorage(self.obs_shape, self.action_dim, log_dir + '/buffer', self.num_envs, self.max_episode_steps)
 
-        self.replay_loader = make_replay_loader(
+        # self.replay_loader = make_replay_loader(
+        #     obs_shape=self.obs_shape,
+        #     action_size=self.action_dim,
+        #     replay_dir=log_dir + '/buffer', 
+        #     max_size=self.buffer_size,
+        #     batch_size=self.batch_size, 
+        #     num_workers=learn_cfg.get("replay_buffer_num_workers", 4),
+        #     save_snapshot=learn_cfg.get("save_snapshot", False), 
+        #     nstep=learn_cfg.get("nstep", 3), 
+        #     discount=self.gamma,
+        # )
+        # self._replay_iter = None    
+        self.buffer = Buffer(
             obs_shape=self.obs_shape,
             action_size=self.action_dim,
-            replay_dir=log_dir + '/buffer', 
-            max_size=self.buffer_size,
-            batch_size=self.batch_size, 
-            num_workers=learn_cfg.get("replay_buffer_num_workers", 4),
-            save_snapshot=learn_cfg.get("save_snapshot", False), 
-            nstep=learn_cfg.get("nstep", 3), 
+            device=self.device,
+            num_envs=self.num_envs,
+            capacity=self.buffer_size,
+            batch_size=self.batch_size,
+            nstep=self.nstep,
             discount=self.gamma,
+            max_length=self.max_episode_steps,
         )
-        self._replay_iter = None    
 
         ## Drqv2 components
         self.encoder = Encoder(self.obs_type, self.obs_shape, self.model_cfg, self.img_h, self.img_w).to(device)
@@ -263,7 +275,8 @@ class DRQv2:
                             start_time = time.time()
                             next_obs, reward, terminated, truncated, info = self.env.step(action)
                             done = torch.logical_or(terminated, truncated)
-                            self.replay_storage.add(obs, action, reward, next_obs, done)
+                            # self.replay_storage.add(obs, action, reward, next_obs, done)
+                            self.buffer.add(obs, action, reward, next_obs, done)
 
                             for k in obs:
                                 obs[k].copy_(next_obs[k])
@@ -284,7 +297,8 @@ class DRQv2:
                     # update the model
                     if self.global_step >= self.prefill:
                         with timer("time/sample_data"):
-                            data = self.to_device(next(self.replay_iter))
+                            # data = self.to_device(next(self.replay_iter))
+                            data = self.buffer.sample(self.nstep)
                             data = self.aug(data)
                             data["feature"] = self.encoder(data["observation"])
                             with torch.no_grad():

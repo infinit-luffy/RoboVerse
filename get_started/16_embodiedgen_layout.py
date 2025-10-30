@@ -55,6 +55,7 @@ if __name__ == "__main__":
     args = tyro.cli(LayoutInitCfg)
 
     # Download EmbodiedGen layout scene from huggingface dataset
+    # You can download more scenes from example_layouts folder under https://huggingface.co/datasets/HorizonRobotics/EmbodiedGenData
     data_dir = "roboverse_data/assets/EmbodiedGenData"
     snapshot_download(
         repo_id="HorizonRobotics/EmbodiedGenData",

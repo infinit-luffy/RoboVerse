@@ -2,6 +2,8 @@
 
 In this tutorial, we will show you how to use real asset generated from [EmbodiedGen](https://github.com/HorizonRobotics/EmbodiedGen) in MetaSim.
 
+You can visited more all-simulator-ready assets in https://huggingface.co/spaces/HorizonRobotics/EmbodiedGen-Gallery-Explorer
+
 
 ## Common Usage
 ```bash

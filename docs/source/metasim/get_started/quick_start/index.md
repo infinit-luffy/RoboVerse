@@ -19,4 +19,5 @@ guide
 12_domain_randomization
 13_teleoperate
 14_real_asset
+16_embodiedgen_layout
 ```

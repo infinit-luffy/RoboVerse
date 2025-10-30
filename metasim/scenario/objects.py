@@ -38,6 +38,9 @@ class _FileBasedMixin:
     isaacgym_read_mjcf: bool = False
     """By default, Isaac Gym will read from URDF files. If this is set to True, Isaac Gym will read from MJCF files."""
 
+    genesis_read_mjcf: bool = False
+    """By default, Genesis will read from URDF files. If this is set to True, Genesis will read from MJCF files."""
+
     def __post_init__(self):
         super().__post_init__()
 

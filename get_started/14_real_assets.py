@@ -94,6 +94,7 @@ if __name__ == "__main__":
             usd_path=f"{data_dir}/demo_assets/table/usd/table.usd",
             urdf_path=f"{data_dir}/demo_assets/table/result/table.urdf",
             mjcf_path=f"{data_dir}/demo_assets/table/mjcf/table.xml",
+            genesis_read_mjcf=True,
         ),
         RigidObjCfg(
             name="banana",
@@ -102,6 +103,7 @@ if __name__ == "__main__":
             usd_path=f"{data_dir}/demo_assets/banana/usd/banana.usd",
             urdf_path=f"{data_dir}/demo_assets/banana/result/banana.urdf",
             mjcf_path=f"{data_dir}/demo_assets/banana/mjcf/banana.xml",
+            genesis_read_mjcf=True,
         ),
         RigidObjCfg(
             name="book",
@@ -110,6 +112,7 @@ if __name__ == "__main__":
             usd_path=f"{data_dir}/demo_assets/book/usd/book.usd",
             urdf_path=f"{data_dir}/demo_assets/book/result/book.urdf",
             mjcf_path=f"{data_dir}/demo_assets/book/mjcf/book.xml",
+            genesis_read_mjcf=True,
         ),
         RigidObjCfg(
             name="lamp",
@@ -118,6 +121,7 @@ if __name__ == "__main__":
             usd_path=f"{data_dir}/demo_assets/lamp/usd/lamp.usd",
             urdf_path=f"{data_dir}/demo_assets/lamp/result/lamp.urdf",
             mjcf_path=f"{data_dir}/demo_assets/lamp/mjcf/lamp.xml",
+            genesis_read_mjcf=True,
         ),
         RigidObjCfg(
             name="mug",
@@ -126,6 +130,7 @@ if __name__ == "__main__":
             usd_path=f"{data_dir}/demo_assets/mug/usd/mug.usd",
             urdf_path=f"{data_dir}/demo_assets/mug/result/mug.urdf",
             mjcf_path=f"{data_dir}/demo_assets/mug/mjcf/mug.xml",
+            genesis_read_mjcf=True,
         ),
         RigidObjCfg(
             name="remote_control",
@@ -134,6 +139,7 @@ if __name__ == "__main__":
             usd_path=f"{data_dir}/demo_assets/remote_control/usd/remote_control.usd",
             urdf_path=f"{data_dir}/demo_assets/remote_control/result/remote_control.urdf",
             mjcf_path=f"{data_dir}/demo_assets/remote_control/mjcf/remote_control.xml",
+            genesis_read_mjcf=True,
         ),
         RigidObjCfg(
             name="rubiks_cube",
@@ -142,6 +148,7 @@ if __name__ == "__main__":
             usd_path=f"{data_dir}/demo_assets/rubik's_cube/usd/rubik's_cube.usd",
             urdf_path=f"{data_dir}/demo_assets/rubik's_cube/result/rubik's_cube.urdf",
             mjcf_path=f"{data_dir}/demo_assets/rubik's_cube/mjcf/rubik's_cube.xml",
+            genesis_read_mjcf=True,
         ),
         RigidObjCfg(
             name="vase",
@@ -150,6 +157,7 @@ if __name__ == "__main__":
             usd_path=f"{data_dir}/demo_assets/vase/usd/vase.usd",
             urdf_path=f"{data_dir}/demo_assets/vase/result/vase.urdf",
             mjcf_path=f"{data_dir}/demo_assets/vase/mjcf/vase.xml",
+            genesis_read_mjcf=True,
         ),
     ]
 
@@ -250,3 +258,6 @@ if __name__ == "__main__":
         obs_saver.add(obs)
 
     obs_saver.save()
+    if hasattr(handler, "simulation_app"):
+        handler.close()
+        handler.simulation_app.close()

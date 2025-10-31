@@ -58,13 +58,13 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
         ),
         "table": PrimitiveCubeCfg(
             name="table",
-            size=(0.3, 0.3, 0.75),
+            size=(0.6, 0.6, 0.75),
             disable_gravity=True,
             fix_base_link=True,
             flip_visual_attachments=True,
             friction=3,
             physics=PhysicStateType.RIGIDBODY,
-            color=[0.8, 0.8, 0.8],
+            color=[0.3, 0.3, 0.3],
         ),
     }
     objects = []
@@ -93,7 +93,7 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
     action_penalty_scale = 0
     reach_goal_bonus = 250.0
     fall_penalty = 0.0
-    reset_position_noise = 0.0
+    reset_position_noise = 0.1
     reset_dof_pos_noise = 0.0
 
     def set_sim_params(self, sim_type=None) -> None:
@@ -110,7 +110,7 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
             self.sim_params.substeps = 2
             self.sim_params.num_threads = 4
             self.decimation = 1
-            self.env_spacing = 2.5
+            self.env_spacing = 10
         else:
             raise ValueError(f"Unknown simulator type: {self.sim}")
         self.dt = self.sim_params.dt
@@ -326,8 +326,8 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
                     name="camera_0",
                     width=self.img_w,
                     height=self.img_h,
-                    pos=(-1.35, -1.0, 1.05),
-                    look_at=(0.0, -0.75, 0.5),
+                    pos=(-1.0, -1.4, 1.5),
+                    look_at=(0.0, -0.6, 0.7),
                 )
             ]  # TODO
             self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
@@ -601,8 +601,8 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
             for i, env_id in enumerate(env_ids):
                 # reset object
                 for obj_name in reset_state[env_id]["objects"].keys():
-                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
-                        self.reset_position_noise * rand_floats[i, :3]
+                    reset_state[env_id]["objects"][obj_name]["pos"][:2] += (
+                        self.reset_position_noise * rand_floats[i, :2]
                     )
 
                 # reset shadow hand
@@ -633,7 +633,8 @@ class LiftUnderarmCfg(BaseRLTaskCfg):
             new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
             for obj_id, obj in enumerate(self.objects):
                 root_state = reset_state.objects[obj.name].root_state
-                root_state[env_ids, :3] += self.reset_position_noise * rand_floats[:, :3]
+                if obj.name == self.current_object_type:
+                    root_state[env_ids, :2] += self.reset_position_noise * rand_floats[:, :2]
                 obj_state = ObjectState(
                     root_state=root_state,
                 )
@@ -769,8 +770,8 @@ def compute_task_reward(
 
     # Check env termination conditions, including maximum success number
     resets = torch.where(object_pos[:, 2] <= 0.3, torch.ones_like(reset_buf), reset_buf)
-    resets = torch.where(right_hand_dist >= 0.2, torch.ones_like(resets), resets)
-    resets = torch.where(left_hand_dist >= 0.2, torch.ones_like(resets), resets)
+    resets = torch.where(right_hand_dist >= 0.4, torch.ones_like(resets), resets)
+    resets = torch.where(left_hand_dist >= 0.4, torch.ones_like(resets), resets)
 
     # Reset because of terminate or fall or success
     resets = torch.where(episode_length_buf >= max_episode_length, torch.ones_like(resets), resets)

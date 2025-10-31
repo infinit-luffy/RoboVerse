@@ -110,7 +110,7 @@ class StackBlockCfg(BaseRLTaskCfg):
             self.sim_params.substeps = 2
             self.sim_params.num_threads = 4
             self.decimation = 2
-            self.env_spacing = 2.5
+            self.env_spacing = 10.0
         else:
             raise ValueError(f"Unknown simulator type: {self.sim}")
         self.dt = self.sim_params.dt
@@ -327,8 +327,8 @@ class StackBlockCfg(BaseRLTaskCfg):
                     name="camera_0",
                     width=self.img_w,
                     height=self.img_h,
-                    pos=(-0.8, -0.35, 1.1),
-                    look_at=(0.0, 0.0, 0.5),
+                    pos=(-1.0, -0.45, 1.4),
+                    look_at=(0.0, 0.0, 0.725),
                 )
             ]  # TODO
             self.obs_shape["rgb"] = (3, self.img_h, self.img_w)

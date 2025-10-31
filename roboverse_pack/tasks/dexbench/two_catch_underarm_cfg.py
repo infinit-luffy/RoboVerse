@@ -65,6 +65,7 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
             isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
             use_vhacd=True,
             default_density=400.0,
+            randomize_color=True,
         ),
     }
     objects = []
@@ -118,7 +119,7 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
             self.sim_params.substeps = 2
             self.sim_params.num_threads = 4
             self.decimation = 1
-            self.env_spacing = 2.5
+            self.env_spacing = 10
         else:
             raise ValueError(f"Unknown simulator type: {self.sim}")
         self.dt = self.sim_params.dt
@@ -134,6 +135,7 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
                     hand_controller="dof_pos",
                     isaacgym_read_mjcf=True,
                     name="right_hand",
+                    arm_orientation_scale=0.05,
                     hand_translation_scale=0.02,
                     hand_orientation_scale=0.25 * torch.pi,
                     arm_controller="ik",
@@ -143,6 +145,7 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
                     hand_controller="dof_pos",
                     isaacgym_read_mjcf=True,
                     name="left_hand",
+                    arm_orientation_scale=0.05,
                     hand_translation_scale=0.02,
                     hand_orientation_scale=0.25 * torch.pi,
                     arm_controller="ik",
@@ -187,7 +190,7 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.446, 0.0]),
+                    "pos": torch.tensor([0.0, -1.396, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "FFJ1": 0.0,
@@ -260,7 +263,7 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.226, 0.0]),
+                    "pos": torch.tensor([0.0, -1.176, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -331,7 +334,7 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
             assert hasattr(self, "img_h") and hasattr(self, "img_w"), "Image height and width must be set."
             self.cameras = [
                 PinholeCameraCfg(
-                    name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)
+                    name="camera_0", width=self.img_w, height=self.img_h, pos=(0.8, -0.24, 1.4), look_at=(0.0, -0.54, 0.6)
                 )
             ]
             self.obs_shape["rgb"] = (
@@ -340,12 +343,12 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
                 self.img_w,
             )
         self.init_goal_pos = torch.tensor(
-            [0.0, -0.79, 0.86], dtype=torch.float32, device=self.device
+            [0.0, -0.74, 0.86], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
         self.init_goal_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
         )  # Initial right goal rotation, shape (4,)
-        self.init_goal_another_pos = torch.tensor([0.0, -0.38, 0.86], dtype=torch.float, device=self.device)
+        self.init_goal_another_pos = torch.tensor([0.0, -0.35, 0.86], dtype=torch.float, device=self.device)
         self.init_goal_another_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device)
         self.init_states = {
             "objects": {
@@ -354,7 +357,7 @@ class TwoCatchUnderarmCfg(BaseRLTaskCfg):
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
                 f"{self.current_object_type}_2": {
-                    "pos": torch.tensor([0.0, -0.78, 0.86]),
+                    "pos": torch.tensor([0.0, -0.7, 0.86]),
                     "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
                 },
             },
@@ -842,9 +845,9 @@ def compute_task_reward(
         success_buf,
     )
 
-    right_thrown = (diff_xy[:, 1] >= -0.25) & (diff_xy[:, 1] <= -0.13) & (right_object_pos[:, 2] >= 0.75)
+    right_thrown = (diff_xy[:, 1] >= -0.2) & (diff_xy[:, 1] <= -0.13) & (right_object_pos[:, 2] >= 0.75)
     reward = torch.where(right_thrown, reward + throw_bonus, reward)
-    left_thrown = (diff_another_xy[:, 1] <= 0.25) & (diff_another_xy[:, 1] >= 0.13) & (left_object_pos[:, 2] >= 0.75)
+    left_thrown = (diff_another_xy[:, 1] <= 0.2) & (diff_another_xy[:, 1] >= 0.13) & (left_object_pos[:, 2] >= 0.75)
     reward = torch.where(left_thrown, reward + throw_bonus, reward)
 
     reward = torch.where(right_success == 1, reward + reach_goal_bonus // 2, reward)

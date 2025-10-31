@@ -65,6 +65,7 @@ class CatchAbreastCfg(BaseRLTaskCfg):
             isaacgym_read_mjcf=True,  # Use MJCF for IsaacGym
             use_vhacd=True,
             default_density=400.0,
+            randomize_color=True,
         ),
     }
     objects = []
@@ -114,7 +115,7 @@ class CatchAbreastCfg(BaseRLTaskCfg):
             self.sim_params.substeps = 2
             self.sim_params.num_threads = 4
             self.decimation = 1
-            self.env_spacing = 2.0
+            self.env_spacing = 10.0
         else:
             raise ValueError(f"Unknown simulator type: {self.sim}")
         self.dt = self.sim_params.dt
@@ -329,7 +330,7 @@ class CatchAbreastCfg(BaseRLTaskCfg):
             assert hasattr(self, "img_h") and hasattr(self, "img_w"), "Image height and width must be set."
             self.cameras = [
                 PinholeCameraCfg(
-                    name="camera_0", width=self.img_w, height=self.img_h, pos=(0.9, -1.0, 1.3), look_at=(0.0, -0.5, 0.6)
+                    name="camera_0", width=self.img_w, height=self.img_h, pos=(-1.0, -0.5, 1.4), look_at=(-0.365, -0.77, 0.9)
                 )
             ]
             self.obs_shape["rgb"] = (

@@ -121,7 +121,7 @@ class GraspPlaceCfg(BaseRLTaskCfg):
             self.sim_params.substeps = 2
             self.sim_params.num_threads = 4
             self.decimation = 1
-            self.env_spacing = 2.5
+            self.env_spacing = 10.0
         else:
             raise ValueError(f"Unknown simulator type: {self.sim}")
         self.dt = self.sim_params.dt
@@ -338,8 +338,8 @@ class GraspPlaceCfg(BaseRLTaskCfg):
                     name="camera_0",
                     width=self.img_w,
                     height=self.img_h,
-                    pos=(-1.35, -1.0, 1.05),
-                    look_at=(0.0, -0.75, 0.5),
+                    pos=(-1.0, -0.2, 1.05),
+                    look_at=(0.0, 0.0, 0.625),
                 )
             ]  # TODO
             self.obs_shape["rgb"] = (3, self.img_h, self.img_w)

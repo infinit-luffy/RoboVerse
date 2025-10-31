@@ -130,6 +130,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                     hand_controller="dof_pos",
                     isaacgym_read_mjcf=True,
                     name="right_hand",
+                    arm_orientation_scale=0.05,
                     hand_translation_scale=0.02,
                     hand_orientation_scale=0.25 * torch.pi,
                     arm_controller="ik",
@@ -139,6 +140,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                     hand_controller="dof_pos",
                     isaacgym_read_mjcf=True,
                     name="left_hand",
+                    arm_orientation_scale=0.05,
                     hand_translation_scale=0.02,
                     hand_orientation_scale=0.25 * torch.pi,
                     arm_controller="ik",
@@ -183,7 +185,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.446, 0.0]),
+                    "pos": torch.tensor([0.0, -1.396, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "FFJ1": 0.0,
@@ -256,7 +258,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                     },
                 },
                 "left_hand": {
-                    "pos": torch.tensor([0.0, -1.226, 0.0]),
+                    "pos": torch.tensor([0.0, -1.176, 0.0]),
                     "rot": torch.tensor([0.7071, 0, 0, 0.7071]),
                     "dof_pos": {
                         "joint_0": 0.0,
@@ -327,7 +329,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
             assert hasattr(self, "img_h") and hasattr(self, "img_w"), "Image height and width must be set."
             self.cameras = [
                 PinholeCameraCfg(
-                    name="camera_0", width=self.img_w, height=self.img_h, pos=(0.8, -0.15, 1.4), look_at=(0.0, -0.5, 0.6)
+                    name="camera_0", width=self.img_w, height=self.img_h, pos=(0.8, -0.24, 1.4), look_at=(0.0, -0.54, 0.6)
                 )
             ]
             self.obs_shape["rgb"] = (
@@ -336,7 +338,7 @@ class CatchUnderarmCfg(BaseRLTaskCfg):
                 self.img_w,
             )
         self.init_goal_pos = torch.tensor(
-            [0.0, -0.79, 0.86], dtype=torch.float32, device=self.device
+            [0.0, -0.74, 0.86], dtype=torch.float32, device=self.device
         )  # Initial goal position, shape (3,)
         self.init_goal_rot = torch.tensor(
             [1.0, 0.0, 0.0, 0.0], dtype=torch.float32, device=self.device
@@ -775,7 +777,7 @@ def compute_task_reward(
     )
 
     # Reward for throwing the object
-    thrown = (diff_xy[:, 1] >= -0.25) & (diff_xy[:, 1] <= -0.13) & (object_pos[:, 2] >= 0.75) & env_throw_bonus
+    thrown = (diff_xy[:, 1] >= -0.2) & (diff_xy[:, 1] <= -0.13) & (object_pos[:, 2] >= 0.75) & env_throw_bonus
     reward = torch.where(thrown, reward + throw_bonus, reward)
     false_tensor = torch.tensor([False] * reward.shape[0], dtype=torch.bool, device=object_pos.device)
     env_throw_bonus = torch.where((diff_xy[:, 1] >= -0.13), false_tensor, env_throw_bonus)

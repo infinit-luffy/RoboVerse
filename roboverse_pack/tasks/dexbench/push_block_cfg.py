@@ -66,7 +66,7 @@ class PushBlockCfg(BaseRLTaskCfg):
             fix_base_link=True,
             flip_visual_attachments=True,
             friction=0.2,
-            color=[0.8, 0.8, 0.8],
+            color=[0.0, 0.0, 0.0],
             physics=PhysicStateType.RIGIDBODY,
         ),
     }
@@ -113,6 +113,7 @@ class PushBlockCfg(BaseRLTaskCfg):
             self.sim_params.substeps = 2
             self.sim_params.num_threads = 4
             self.decimation = 1
+            self.env_spacing = 10.0
         else:
             raise ValueError(f"Unknown simulator type: {self.sim}")
         self.dt = self.sim_params.dt
@@ -329,8 +330,8 @@ class PushBlockCfg(BaseRLTaskCfg):
                     name="camera_0",
                     width=self.img_w,
                     height=self.img_h,
-                    pos=(-1.35, -1.0, 1.05),
-                    look_at=(0.0, -0.75, 0.5),
+                    pos=(0.8, -0.5, 1.2),
+                    look_at=(0.0, -0.05, 0.6),
                 )
             ]  # TODO
             self.obs_shape["rgb"] = (3, self.img_h, self.img_w)
@@ -598,8 +599,8 @@ class PushBlockCfg(BaseRLTaskCfg):
             for i, env_id in enumerate(env_ids):
                 # reset object
                 for obj_name in reset_state[env_id]["objects"].keys():
-                    reset_state[env_id]["objects"][obj_name]["pos"][:3] += (
-                        self.reset_position_noise * rand_floats[i, :3]
+                    reset_state[env_id]["objects"][obj_name]["pos"][:2] += (
+                        self.reset_position_noise * rand_floats[i, :2]
                     )
 
                 # reset shadow hand
@@ -621,10 +622,10 @@ class PushBlockCfg(BaseRLTaskCfg):
             # generate random values
             rand_floats = math.torch_rand_float(-1.0, 1.0, (len(env_ids), num_shadow_hand_dofs + 5), device=self.device)
 
-            new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
+            new_object_rot = randomize_rotation(rand_floats[:, ], rand_floats[:, 4], x_unit_tensor, y_unit_tensor)
             for obj_id, obj in enumerate(self.objects):
                 root_state = reset_state.objects[obj.name].root_state
-                root_state[env_ids, :3] += self.reset_position_noise * rand_floats[:, :3]
+                root_state[env_ids, :2] += self.reset_position_noise * rand_floats[:, :2]
                 obj_state = ObjectState(
                     root_state=root_state,
                 )

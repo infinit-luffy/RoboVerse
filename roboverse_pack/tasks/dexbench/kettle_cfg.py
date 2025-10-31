@@ -61,6 +61,7 @@ class KettleCfg(BaseRLTaskCfg):
             vhacd_resolution=400000,  # Use a higher resolution for better collision detection
             friction=1.0,
             fix_base_link=False,
+            randomize_color=True,
         ),
         "bucket": RigidObjCfg(
             name="bucket",
@@ -81,7 +82,7 @@ class KettleCfg(BaseRLTaskCfg):
             disable_gravity=True,
             fix_base_link=True,
             flip_visual_attachments=True,
-            color=[0.8, 0.8, 0.8],
+            color=[0.2, 0.2, 0.2],
             physics=PhysicStateType.RIGIDBODY,
         ),
     }
@@ -128,6 +129,7 @@ class KettleCfg(BaseRLTaskCfg):
             self.sim_params.substeps = 2
             self.sim_params.num_threads = 4
             self.decimation = 1
+            self.env_spacing = 10.0
         else:
             raise ValueError(f"Unknown simulator type: {self.sim}")
         self.dt = self.sim_params.dt
@@ -344,8 +346,8 @@ class KettleCfg(BaseRLTaskCfg):
                     name="camera_0",
                     width=self.img_w,
                     height=self.img_h,
-                    pos=(-1.35, -1.0, 1.05),
-                    look_at=(0.0, -0.75, 0.5),
+                    pos=(-1.0, 0.2, 1.05),
+                    look_at=(0.0, 0.0, 0.68),
                 )
             ]  # TODO
             self.obs_shape["rgb"] = (3, self.img_h, self.img_w)

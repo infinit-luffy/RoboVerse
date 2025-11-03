@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pickle
 import xml.etree.ElementTree as ET
 
 import gymnasium as gym
@@ -30,8 +31,8 @@ all_joint_names = {
 }
 
 
-@register_task("calvin.base_table")
-class BaseCalvinTableTask(BaseTaskEnv):
+@register_task("calvin.base_table_C")
+class BaseCalvinTableTask_C(BaseTaskEnv):
     scenario = ScenarioCfg(
         robots=[
             FrankaWithGripperExtensionCfg(
@@ -79,7 +80,7 @@ class BaseCalvinTableTask(BaseTaskEnv):
                 default_position=[0, 0, 0],
                 default_orientation=[1, 0, 0, 0],
                 fix_base_link=True,
-                urdf_path="/home/dyz/RoboVerse/calvin/calvin_env/calvin_env/data/calvin_table_D/urdf/calvin_table_D.urdf",
+                urdf_path="/home/dyz/RoboVerse/calvin/calvin_env/calvin_env/data/calvin_table_C/urdf/calvin_table_C.urdf",
             ),
             RigidObjCfg(
                 name="pink_cube",
@@ -87,7 +88,7 @@ class BaseCalvinTableTask(BaseTaskEnv):
                 default_position=[1.28661989e-01, -3.77756105e-02, 4.59989266e-01 + 0.01],
                 default_orientation=quat_from_euler_np(1.10200730e-04, 3.19760378e-05, -3.94522179e-01),
                 fix_base_link=False,
-                urdf_path="/home/dyz/RoboVerse/calvin/calvin_env/calvin_env/data/blocks/block_pink_big.urdf",
+                urdf_path="/home/dyz/RoboVerse/calvin/calvin_env/calvin_env/data/blocks/block_pink_middle.urdf",
             ),
             RigidObjCfg(
                 name="blue_cube",
@@ -103,16 +104,16 @@ class BaseCalvinTableTask(BaseTaskEnv):
                 default_position=[2.32403619e-01, -4.04295856e-02, 4.59990009e-01 + 0.01],
                 default_orientation=quat_from_euler_np(4.12287744e-08, -8.05700103e-09, -2.17741510e00),
                 fix_base_link=False,
-                urdf_path="/home/dyz/RoboVerse/calvin/calvin_env/calvin_env/data/blocks/block_red_middle.urdf",
+                urdf_path="/home/dyz/RoboVerse/calvin/calvin_env/calvin_env/data/blocks/block_red_big.urdf",
             ),
         ],
         decimation=8,
     )
 
     def __init__(self, *args, **kwargs):
-        self.traj_filepath = "/home/dyz/RoboVerse/roboverse_pack/tasks/calvin/data_preparation/env_D_out/episode_chunk_14_349364_358481/trajectory_env_D_1840_v2.pkl"
+        self.traj_filepath = "/home/dyz/RoboVerse/roboverse_pack/tasks/calvin/data_preparation/env_C_out/episode_chunk_123_1621143_1647277/trajectory_env_C_1926_v2.pkl"
         super().__init__(*args, **kwargs)
-        # self._is_initialized=False
+
         self.ik_solver = setup_ik_solver(self.scenario.robots[0], solver="pyroki", use_seed=False)
         self._articulated_object_joints = {}
         for obj_cfg in self.scenario.objects:
@@ -120,15 +121,15 @@ class BaseCalvinTableTask(BaseTaskEnv):
                 joint_names = self._get_joint_names_from_urdf(obj_cfg.urdf_path)
                 self._articulated_object_joints[obj_cfg.name] = joint_names
 
-    # def _get_initial_states(self):
-    #     path = self.traj_filepath
-    #     if path.endswith(".pkl"):
-    #         with open(path, "rb") as f:
-    #             data = pickle.load(f)
-    #     init_state = data['franka'][0]['reset_state']
+    def _get_initial_states(self):
+        path = self.traj_filepath
+        if path.endswith(".pkl"):
+            with open(path, "rb") as f:
+                data = pickle.load(f)
+        init_state = data["franka"][0]["reset_state"]
 
-    #     """Return per-env initial states (override in subclasses)."""
-    #     return init_state
+        """Return per-env initial states (override in subclasses)."""
+        return init_state
 
     def _action_space(self):
         if self.scenario.robots[0].control_type == "joint_position":

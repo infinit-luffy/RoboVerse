@@ -110,5 +110,5 @@ class BaseCalvinTableTask_A(BaseTaskEnv):
         ],
         decimation=8,
     )
-    
+
     traj_filepath = "roboverse_data/"

@@ -111,7 +111,7 @@ class BaseCalvinTableTask_C(BaseCalvinTableTask):
     #     ],
     #     decimation=8,
     # )
-    
+
     def __init__(self, *args, **kwargs):
         self.scenario.objects = [
             ArticulationObjCfg(

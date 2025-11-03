@@ -147,5 +147,5 @@ class BaseCalvinTableTask_A(BaseCalvinTableTask):
             ),
         ]
         super().__init__(*args, **kwargs)
-    
+
     traj_filepath = "roboverse_data/trajs/calvin/env_A_out/episode_chunk_132_1802438_1809815/trajectory_env_A_1237_v2.pkl"

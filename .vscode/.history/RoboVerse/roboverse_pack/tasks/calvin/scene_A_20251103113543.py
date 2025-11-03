@@ -110,7 +110,7 @@ class BaseCalvinTableTask_A(BaseTaskEnv):
         ],
         decimation=8,
     )
-    
+
     traj_filepath = "/home/dyz/RoboVerse/roboverse_pack/tasks/calvin/data_preparation/env_A_out/episode_chunk_157_2053103_2066408/trajectory_env_A_1252_v2.pkl"
 
     def _get_initial_states(self):

@@ -165,8 +165,8 @@ class FileDownloader:
             self._add(obj.mjx_mjcf_path)
 
     def _add(self, filepath: str):
-        import ipdb
-        ipdb.set_trace()
+        # import ipdb
+        # ipdb.set_trace()
         self.files_to_download.append(filepath)
 
     def do_it(self):

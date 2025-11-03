@@ -196,5 +196,3 @@ class BaseCalvinTableTask(BaseTaskEnv):
             return gym.spaces.Box(low=-1.0, high=1.0, shape=(8,), dtype=float)
         else:
             raise NotImplementedError
-
-   

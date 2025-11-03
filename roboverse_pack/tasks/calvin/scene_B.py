@@ -138,7 +138,7 @@ class BaseCalvinTableTask_B(BaseCalvinTableTask):
                     "roboverse_data/assets/calvin/calvin_table_B/meshes/plank_link.mtl",
                     "roboverse_data/assets/calvin/calvin_table_B/meshes/switch_link.mtl",
                     "roboverse_data/assets/calvin/calvin_table_B/meshes/slide_link.mtl",
-                ]
+                ],
             ),
             RigidObjCfg(
                 name="pink_cube",

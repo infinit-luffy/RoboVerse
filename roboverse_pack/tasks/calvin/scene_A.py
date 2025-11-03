@@ -139,7 +139,7 @@ class BaseCalvinTableTask_A(BaseCalvinTableTask):
                     "roboverse_data/assets/calvin/calvin_table_A/meshes/plank_link.mtl",
                     "roboverse_data/assets/calvin/calvin_table_A/meshes/switch_link.mtl",
                     "roboverse_data/assets/calvin/calvin_table_A/meshes/slide_link.mtl",
-                ]
+                ],
             ),
             RigidObjCfg(
                 name="pink_cube",
@@ -149,9 +149,7 @@ class BaseCalvinTableTask_A(BaseCalvinTableTask):
                     -3.77756105e-02,
                     4.59989266e-01 + 0.01,
                 ],
-                default_orientation=quat_from_euler_np(
-                    1.10200730e-04, 3.19760378e-05, -3.94522179e-01
-                ),
+                default_orientation=quat_from_euler_np(1.10200730e-04, 3.19760378e-05, -3.94522179e-01),
                 fix_base_link=False,
                 urdf_path="roboverse_data/assets/calvin/blocks/block_pink_small.urdf",
             ),
@@ -163,9 +161,7 @@ class BaseCalvinTableTask_A(BaseCalvinTableTask):
                     8.05351014e-02,
                     4.60989238e-01 + 0.01,
                 ],
-                default_orientation=quat_from_euler_np(
-                    -1.10251078e-05, -5.25663348e-05, -9.06438129e-01
-                ),
+                default_orientation=quat_from_euler_np(-1.10251078e-05, -5.25663348e-05, -9.06438129e-01),
                 fix_base_link=False,
                 urdf_path="roboverse_data/assets/calvin/blocks/block_blue_big.urdf",
             ),
@@ -177,9 +173,7 @@ class BaseCalvinTableTask_A(BaseCalvinTableTask):
                     -4.04295856e-02,
                     4.59990009e-01 + 0.01,
                 ],
-                default_orientation=quat_from_euler_np(
-                    4.12287744e-08, -8.05700103e-09, -2.17741510e00
-                ),
+                default_orientation=quat_from_euler_np(4.12287744e-08, -8.05700103e-09, -2.17741510e00),
                 fix_base_link=False,
                 urdf_path="roboverse_data/assets/calvin/blocks/block_red_middle.urdf",
             ),

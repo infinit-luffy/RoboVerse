@@ -1,19 +1,8 @@
 from __future__ import annotations
 
-import pickle
-import xml.etree.ElementTree as ET
-
-import gymnasium as gym
-
 from metasim.scenario.objects import ArticulationObjCfg, RigidObjCfg
-from metasim.scenario.robot import BaseActuatorCfg
-from metasim.scenario.scenario import ScenarioCfg
-from metasim.task.base import BaseTaskEnv
 from metasim.task.registry import register_task
-from metasim.utils.ik_solver import setup_ik_solver
 from metasim.utils.math import quat_from_euler_np
-from metasim.utils.tensor_util import array_to_tensor
-from roboverse_pack.robots.franka_with_gripper_extension_cfg import FrankaWithGripperExtensionCfg
 
 from .base_table import BaseCalvinTableTask
 
@@ -111,7 +100,7 @@ class BaseCalvinTableTask_C(BaseCalvinTableTask):
     #     ],
     #     decimation=8,
     # )
-    
+
     def __init__(self, *args, **kwargs):
         self.scenario.objects = [
             ArticulationObjCfg(
@@ -149,4 +138,6 @@ class BaseCalvinTableTask_C(BaseCalvinTableTask):
         ]
         super().__init__(*args, **kwargs)
 
-    traj_filepath = "roboverse_data/trajs/calvin/env_C_out/episode_chunk_123_1621143_1647277/trajectory_env_C_1926_v2.pkl"
+    traj_filepath = (
+        "roboverse_data/trajs/calvin/env_C_out/episode_chunk_123_1621143_1647277/trajectory_env_C_1926_v2.pkl"
+    )

@@ -13,8 +13,8 @@ from metasim.queries.base import BaseQueryType
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.sim.base import BaseSimHandler
 from metasim.types import Action, Info, Obs, Reward, Success, Termination, TimeOut
-from metasim.utils.setup_util import get_sim_handler_class
 from metasim.utils.hf_util import check_and_download_single
+from metasim.utils.setup_util import get_sim_handler_class
 
 
 class BaseTaskEnv:
@@ -67,7 +67,7 @@ class BaseTaskEnv:
             self.handler = self.scenario
         else:
             self._instantiate_env(self.scenario)
-        if self.traj_filepath is not None :
+        if self.traj_filepath is not None:
             check_and_download_single(self.traj_filepath)
 
         self._initial_states = self._get_initial_states()

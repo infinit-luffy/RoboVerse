@@ -197,41 +197,4 @@ class BaseCalvinTableTask(BaseTaskEnv):
         else:
             raise NotImplementedError
 
-    def step(self, action):
-        try:
-            if isinstance(action, list) and action and isinstance(action[0], dict):
-                robot_name = self.scenario.robots[0].name
-
-            # Check if the robot's name is a key in the dictionary.
-            if robot_name in action[0]:
-                action = action[0][robot_name]
-        except:
-            pass
-
-        if self.scenario.robots[0].control_type == "joint_position":
-            assert action.shape[-1] == 9, f"Expected action shape (9,), got {action.shape}"
-            return super().step(action)
-
-        elif self.scenario.robots[0].control_type == "ee_pose":
-            action = array_to_tensor(action, device=self.device).float()
-
-            curr_state = self.handler.get_states(mode="tensor")
-            curr_robot_q = curr_state.robots["franka"].joint_pos
-
-            eff_pos = action[:, :3]
-            eff_orn = action[:, 3:7]
-            gripper_width = action[:, 7]
-
-            q_solution, ik_succ = self.ik_solver.solve_ik_batch(eff_pos, eff_orn, curr_robot_q)
-
-            actions = self.ik_solver.compose_joint_action(
-                q_solution=q_solution,
-                gripper_widths=gripper_width,
-                current_q=curr_robot_q,
-                return_dict=False,
-            )
-
-            return super().step(actions)
-
-        else:
-            raise NotImplementedError
+   

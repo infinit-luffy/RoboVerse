@@ -109,6 +109,36 @@ class BaseCalvinTableTask_B(BaseCalvinTableTask):
                 default_orientation=[1, 0, 0, 0],
                 fix_base_link=True,
                 urdf_path="roboverse_data/assets/calvin/calvin_table_B/urdf/calvin_table_B.urdf",
+                extra_resources=[
+                    # dark_wood__black_handle.png
+                    # dark_wood__gray_handle.png
+                    # dark_wood.png
+                    # light_wood__black_handle.png
+                    # light_wood__gray_handle.png
+                    # light_wood.png
+                    # wood__black_handle.png
+                    # wood__gray_handle.png
+                    # wood.png
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/dark_wood__black_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/dark_wood__gray_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/dark_wood.png",
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/light_wood__black_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/light_wood__gray_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/light_wood.png",
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/wood__black_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/wood__gray_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_B/textures/wood.png",
+                    # base_link.mtl
+                    # drawer_link.mtl
+                    # plank_link.mtl
+                    # switch_link.mtl
+                    # slide_link.mtl
+                    "roboverse_data/assets/calvin/calvin_table_B/meshes/base_link.mtl",
+                    "roboverse_data/assets/calvin/calvin_table_B/meshes/drawer_link.mtl",
+                    "roboverse_data/assets/calvin/calvin_table_B/meshes/plank_link.mtl",
+                    "roboverse_data/assets/calvin/calvin_table_B/meshes/switch_link.mtl",
+                    "roboverse_data/assets/calvin/calvin_table_B/meshes/slide_link.mtl",
+                ]
             ),
             RigidObjCfg(
                 name="pink_cube",

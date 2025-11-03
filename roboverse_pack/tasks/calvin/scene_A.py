@@ -110,28 +110,76 @@ class BaseCalvinTableTask_A(BaseCalvinTableTask):
                 default_orientation=[1, 0, 0, 0],
                 fix_base_link=True,
                 urdf_path="roboverse_data/assets/calvin/calvin_table_A/urdf/calvin_table_A.urdf",
+                extra_resources=[
+                    # dark_wood__black_handle.png
+                    # dark_wood__gray_handle.png
+                    # dark_wood.png
+                    # light_wood__black_handle.png
+                    # light_wood__gray_handle.png
+                    # light_wood.png
+                    # wood__black_handle.png
+                    # wood__gray_handle.png
+                    # wood.png
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/dark_wood__black_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/dark_wood__gray_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/dark_wood.png",
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/light_wood__black_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/light_wood__gray_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/light_wood.png",
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/wood__black_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/wood__gray_handle.png",
+                    "roboverse_data/assets/calvin/calvin_table_A/textures/wood.png",
+                    # base_link.mtl
+                    # drawer_link.mtl
+                    # plank_link.mtl
+                    # switch_link.mtl
+                    # slide_link.mtl
+                    "roboverse_data/assets/calvin/calvin_table_A/meshes/base_link.mtl",
+                    "roboverse_data/assets/calvin/calvin_table_A/meshes/drawer_link.mtl",
+                    "roboverse_data/assets/calvin/calvin_table_A/meshes/plank_link.mtl",
+                    "roboverse_data/assets/calvin/calvin_table_A/meshes/switch_link.mtl",
+                    "roboverse_data/assets/calvin/calvin_table_A/meshes/slide_link.mtl",
+                ]
             ),
             RigidObjCfg(
                 name="pink_cube",
                 scale=0.8,
-                default_position=[1.28661989e-01, -3.77756105e-02, 4.59989266e-01 + 0.01],
-                default_orientation=quat_from_euler_np(1.10200730e-04, 3.19760378e-05, -3.94522179e-01),
+                default_position=[
+                    1.28661989e-01,
+                    -3.77756105e-02,
+                    4.59989266e-01 + 0.01,
+                ],
+                default_orientation=quat_from_euler_np(
+                    1.10200730e-04, 3.19760378e-05, -3.94522179e-01
+                ),
                 fix_base_link=False,
                 urdf_path="roboverse_data/assets/calvin/blocks/block_pink_small.urdf",
             ),
             RigidObjCfg(
                 name="blue_cube",
                 scale=0.8,
-                default_position=[-2.83642665e-01, 8.05351014e-02, 4.60989238e-01 + 0.01],
-                default_orientation=quat_from_euler_np(-1.10251078e-05, -5.25663348e-05, -9.06438129e-01),
+                default_position=[
+                    -2.83642665e-01,
+                    8.05351014e-02,
+                    4.60989238e-01 + 0.01,
+                ],
+                default_orientation=quat_from_euler_np(
+                    -1.10251078e-05, -5.25663348e-05, -9.06438129e-01
+                ),
                 fix_base_link=False,
                 urdf_path="roboverse_data/assets/calvin/blocks/block_blue_big.urdf",
             ),
             RigidObjCfg(
                 name="red_cube",
                 scale=0.8,
-                default_position=[2.32403619e-01, -4.04295856e-02, 4.59990009e-01 + 0.01],
-                default_orientation=quat_from_euler_np(4.12287744e-08, -8.05700103e-09, -2.17741510e00),
+                default_position=[
+                    2.32403619e-01,
+                    -4.04295856e-02,
+                    4.59990009e-01 + 0.01,
+                ],
+                default_orientation=quat_from_euler_np(
+                    4.12287744e-08, -8.05700103e-09, -2.17741510e00
+                ),
                 fix_base_link=False,
                 urdf_path="roboverse_data/assets/calvin/blocks/block_red_middle.urdf",
             ),

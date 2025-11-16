@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Literal
@@ -28,8 +27,10 @@ class Args:
     """Simulator backend"""
     demo_start_idx: int | None = None
     """The index of the first demo to collect, None for all demos"""
-    max_demo_idx: int | None = None
-    """Maximum number of demos to collect, None for all demos"""
+    # max_demo_idx: int | None = None
+    # """Maximum number of demos to collect, None for all demos"""
+    num_demo_success: int | None = None
+    """Target number of successful demos to collect"""
     retry_num: int = 0
     """Number of retries for a failed demo"""
     headless: bool = True
@@ -42,6 +43,8 @@ class Args:
     """Split to collect"""
     cust_name: str | None = None
     """Custom name for the dataset"""
+    custom_save_dir: str | None = None
+    """Custom base path for saving demos. If None, use default structure."""
     scene: str | None = None
     """Scene name"""
     run_all: bool = True
@@ -72,9 +75,10 @@ class Args:
         assert self.run_all or self.run_unfinished or self.run_failed, (
             "At least one of run_all, run_unfinished, or run_failed must be True"
         )
-        if self.max_demo_idx is None:
-            self.max_demo_idx = math.inf
-
+        # if self.max_demo_idx is None:
+        #     self.max_demo_idx = math.inf
+        if self.num_demo_success is None:
+            self.num_demo_success = 100
         if self.demo_start_idx is None:
             self.demo_start_idx = 0
 
@@ -294,11 +298,11 @@ class DomainRandomizationManager:
         """Get appropriate material configuration based on object type."""
         obj_lower = obj_name.lower()
         if "cube" in obj_lower:
-            return MaterialPresets.metal_object(obj_name, use_mdl=True, randomization_mode="combined")
+            return MaterialPresets.mdl_family_object(obj_name, family="metal", randomization_mode="combined")
         elif "sphere" in obj_lower:
             return MaterialPresets.rubber_object(obj_name, randomization_mode="combined")
         else:
-            return MaterialPresets.wood_object(obj_name, use_mdl=True, randomization_mode="combined")
+            return MaterialPresets.mdl_family_object(obj_name, family="wood", randomization_mode="combined")
 
     def _setup_physics_randomizers(self, seed: int | None):
         """Setup unified ObjectRandomizers for robots and objects."""
@@ -562,11 +566,11 @@ class DemoCollector:
         self.save_proc.start()
 
         TaskName = args.task
-        if args.cust_name is not None:
-            additional_str = "-" + str(args.cust_name)
+        if args.custom_save_dir:
+            self.base_save_dir = args.custom_save_dir
         else:
-            additional_str = ""
-        self.base_save_dir = f"roboverse_demo/demo_{args.sim}/{TaskName}-{additional_str}/robot-{args.robot}"
+            additional_str = f"-{args.cust_name}" if args.cust_name else ""
+            self.base_save_dir = f"roboverse_demo/demo_{args.sim}/{TaskName}{additional_str}/robot-{args.robot}"
 
     def create(self, demo_idx: int, data_dict: dict):
         assert demo_idx not in self.cache
@@ -579,10 +583,11 @@ class DemoCollector:
         assert demo_idx in self.cache
         self.cache[demo_idx].append(deepcopy(tensor_to_cpu(data_dict)))
 
-    def save(self, demo_idx: int):
+    def save(self, demo_idx: int, status: str):
         assert demo_idx in self.cache
+        assert status in ["success", "failed"], f"Invalid status: {status}"
 
-        save_dir = os.path.join(self.base_save_dir, f"demo_{demo_idx:04d}")
+        save_dir = os.path.join(self.base_save_dir, status, f"demo_{demo_idx:04d}")
         if os.path.exists(os.path.join(save_dir, "status.txt")):
             os.remove(os.path.join(save_dir, "status.txt"))
 
@@ -595,44 +600,82 @@ class DemoCollector:
 
         save_demo(save_dir, self.cache[demo_idx], self.robot_cfg, self.task_desc)
 
+        if status == "failed":
+            with open(os.path.join(save_dir, "status.txt"), "w") as f:
+                f.write(status)
+
         ## Option 2: Save in a separate process, non-blocking, not friendly to KeyboardInterrupt
         # self.save_request_queue.put({"demo": self.cache[demo_idx], "save_dir": save_dir})
-
-    def mark_fail(self, demo_idx: int):
-        assert demo_idx in self.cache
-        save_dir = os.path.join(self.base_save_dir, f"demo_{demo_idx:04d}")
-        os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, "status.txt"), "w+") as f:
-            f.write("failed")
 
     def delete(self, demo_idx: int):
         assert demo_idx in self.cache
         del self.cache[demo_idx]
 
     def final(self):
-        self.save_request_queue.put(None)  # signal to save_demo_mp to exit
-        self.save_proc.join()
-        assert self.cache == {}
+        """
+        Finalize collector:
+        - Save any remaining cached demos (mark them as 'failed' so they are persisted)
+        - Clear the cache
+        - Signal the save process to exit and join it
+        """
+        # If there are any remaining demos in cache, save them as 'failed' to persist data
+        if self.cache:
+            log.warning(f"Finalizing: {len(self.cache)} unfinished demo(s) found in cache. Saving them as 'failed'.")
+        for demo_idx in list(self.cache.keys()):
+            try:
+                log.info(f"Finalizing: saving unfinished demo {demo_idx} as failed")
+                # save will create directories and write status.txt for failed demos
+                self.save(demo_idx, status="failed")
+            except Exception as e:
+                log.error(f"Failed to save unfinished demo {demo_idx} during finalization: {e}")
+            try:
+                # ensure we remove it from cache even if save failed
+                self.delete(demo_idx)
+            except Exception as e:
+                log.error(f"Failed to delete demo {demo_idx} from cache during finalization: {e}")
+
+        # signal the background save process to exit and join
+        try:
+            self.save_request_queue.put(None)  # signal to save_demo_mp to exit
+            self.save_proc.join()
+        except Exception as e:
+            log.error(f"Error while shutting down save process: {e}")
+
+        # ensure cache is empty (no assert, just log if something remains)
+        if self.cache:
+            log.error("Collector finalization completed but cache is not empty.")
+        else:
+            log.info("Collector finalization completed and cache is empty.")
 
 
-def should_skip(log_dir):
+def should_skip(log_dir: str, demo_idx: int):
+    demo_name = f"demo_{demo_idx:04d}"
+    success_path = os.path.join(log_dir, "success", demo_name, "status.txt")
+    failed_path = os.path.join(log_dir, "failed", demo_name, "status.txt")
+
     if args.run_all:
         return False
-    if args.run_unfinished and not os.path.exists(os.path.join(log_dir, "status.txt")):
+
+    if args.run_unfinished:
+        if not os.path.exists(success_path) and not os.path.exists(failed_path):
+            return False
+        return True
+
+    if args.run_failed:
+        if os.path.exists(success_path):
+            return is_status_success(log_dir, demo_idx)
         return False
-    if args.run_failed and (
-        not os.path.exists(os.path.join(log_dir, "status.txt"))
-        or open(os.path.join(log_dir, "status.txt")).read() != "success"
-    ):
-        return False
+
     return True
 
 
-def is_status_success(log_dir: str) -> bool:
-    return (
-        os.path.exists(os.path.join(log_dir, "status.txt"))
-        and open(os.path.join(log_dir, "status.txt")).read() == "success"
-    )
+def is_status_success(log_dir: str, demo_idx: int) -> bool:
+    demo_name = f"demo_{demo_idx:04d}"
+    status_path = os.path.join(log_dir, "success", demo_name, "status.txt")
+
+    if os.path.exists(status_path):
+        return open(status_path).read().strip() == "success"
+    return False
 
 
 class DemoIndexer:
@@ -648,9 +691,9 @@ class DemoIndexer:
         return self._next_idx
 
     def _skip_if_should(self):
-        while should_skip(f"{self.save_root_dir}/demo_{self._next_idx:04d}"):
+        while should_skip(self.save_root_dir, self._next_idx):
             global global_step, tot_success, tot_give_up
-            if is_status_success(f"{self.save_root_dir}/demo_{self._next_idx:04d}"):
+            if is_status_success(self.save_root_dir, self._next_idx):
                 tot_success += 1
             else:
                 tot_give_up += 1
@@ -704,11 +747,12 @@ def main():
     ########################################################
     ## Main
     ########################################################
-    if args.max_demo_idx > n_demo:
-        log.warning(
-            f"Max demo {args.max_demo_idx} is greater than the number of demos in the dataset {n_demo}, using {n_demo}"
-        )
-    max_demo = min(args.max_demo_idx, n_demo)
+    # if args.max_demo_idx > n_demo:
+    #     log.warning(
+    #         f"Max demo {args.max_demo_idx} is greater than the number of demos in the dataset {n_demo}, using {n_demo}"
+    #     )
+    # max_demo = min(args.max_demo_idx, n_demo)
+    max_demo = n_demo
     try_num = args.retry_num + 1
 
     ## Demo collection state machine:
@@ -719,7 +763,8 @@ def main():
     # Get task description from environment
     task_desc = getattr(env, "task_desc", "")
     collector = DemoCollector(env.handler, robot, task_desc)
-    pbar = tqdm(total=max_demo - args.demo_start_idx, desc="Collecting demos")
+    # pbar = tqdm(total=max_demo - args.demo_start_idx, desc="Collecting demos")
+    pbar = tqdm(total=args.num_demo_success, desc="Collecting successful demos")
 
     ## State variables
     failure_count = [0] * env.handler.num_envs
@@ -728,12 +773,18 @@ def main():
     TaskName = args.task
 
     if args.cust_name is not None:
-        additional_str = "-" + str(args.cust_name)
+        additional_str = f"-{args.cust_name}"
     else:
         additional_str = ""
+
+    if args.custom_save_dir:
+        save_root_dir = args.custom_save_dir
+    else:
+        save_root_dir = f"roboverse_demo/demo_{args.sim}/{TaskName}{additional_str}/robot-{args.robot}"
+
     demo_indexer = DemoIndexer(
-        save_root_dir=f"roboverse_demo/demo_{args.sim}/{TaskName}{additional_str}/robot-{args.robot}",
-        start_idx=0,
+        save_root_dir=save_root_dir,
+        start_idx=args.demo_start_idx,
         end_idx=max_demo,
         pbar=pbar,
     )
@@ -768,6 +819,14 @@ def main():
 
     ## Main Loop
     while not all(finished):
+        if tot_success >= args.num_demo_success:
+            log.info(f"Reached target number of successful demos ({args.num_demo_success}). Stopping collection.")
+            break
+
+        if demo_indexer.next_idx >= max_demo:
+            log.warning(f"Reached maximum demo index ({max_demo}). Stopping collection.")
+            break
+
         pbar.set_description(f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}")
         actions = get_actions(all_actions, env, demo_idxs, robot)
         obs, reward, success, time_out, extras = env.step(actions)
@@ -796,7 +855,7 @@ def main():
                 steps_after_success[env_id] += 1
             else:
                 steps_after_success[env_id] = 0
-                collector.save(demo_idx)
+                collector.save(demo_idx, status="success")
                 collector.delete(demo_idx)
 
                 if demo_indexer.next_idx < max_demo:
@@ -821,7 +880,7 @@ def main():
 
             demo_idx = demo_idxs[env_id]
             log.info(f"Demo {demo_idx} in Env {env_id} timed out!")
-            collector.mark_fail(demo_idx)
+            collector.save(demo_idx, status="failed")
             collector.delete(demo_idx)
             failure_count[env_id] += 1
 
@@ -837,7 +896,7 @@ def main():
                 log.error(f"Demo {demo_idx} failed too many times, giving up")
                 failure_count[env_id] = 0
                 tot_give_up += 1
-                pbar.update(1)
+                # pbar.update(1)
                 pbar.set_description(f"Frame {global_step} Success {tot_success} Giveup {tot_give_up}")
 
                 if demo_indexer.next_idx < max_demo:

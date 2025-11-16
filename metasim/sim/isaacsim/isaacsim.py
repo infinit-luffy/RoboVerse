@@ -60,29 +60,34 @@ class IsaacsimHandler(BaseSimHandler):
         self._episode_length_buf = [0 for _ in range(self.num_envs)]
 
         self.scenario_cfg = scenario_cfg
-        self.dt = self.scenario.sim_params.dt if self.scenario.sim_params.dt is not None else 0.01
-        self._step_counter = 0
+        self.physics_dt = self.scenario.sim_params.dt if self.scenario.sim_params.dt is not None else 0.01
+        self._physics_step_counter = 0
         self._is_closed = False
-        self.render_interval = 4  # TODO: fix hardcode
+        self.render_interval = self.scenario.decimation  # TODO: fix hardcode
+        self._manual_pd_on = []
 
         if self.headless:
             self._render_viewport = False
         else:
             self._render_viewport = True
 
-    def _init_scene(self) -> None:
+    def _init_scene(self, simulation_app=None, args=None) -> None:
         """
         Initializes the isaacsim simulation environment.
         """
-        from isaaclab.app import AppLauncher
+        if simulation_app is None:
+            from isaaclab.app import AppLauncher
 
-        parser = argparse.ArgumentParser()
-        AppLauncher.add_app_launcher_args(parser)
-        args = parser.parse_args([])
-        args.enable_cameras = True
-        args.headless = self.headless
-        app_launcher = AppLauncher(args)
-        self.simulation_app = app_launcher.app
+            parser = argparse.ArgumentParser()
+            AppLauncher.add_app_launcher_args(parser)
+            args = parser.parse_args([])
+            args.enable_cameras = True
+            args.headless = self.headless
+            app_launcher = AppLauncher(args)
+            self.simulation_app = app_launcher.app
+        else:
+            assert args is not None, "args must be provided when simulation_app is given."
+            self.simulation_app = simulation_app
 
         # physics context
         from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
@@ -97,10 +102,10 @@ class IsaacsimHandler(BaseSimHandler):
                 max_position_iteration_count=self.scenario.sim_params.num_position_iterations,
                 max_velocity_iteration_count=self.scenario.sim_params.num_velocity_iterations,
                 friction_correlation_distance=self.scenario.sim_params.friction_correlation_distance,
+                friction_offset_threshold=self.scenario.sim_params.friction_offset_threshold,
             ),
+            dt=self.physics_dt,
         )
-        if self.scenario.sim_params.dt is not None:
-            sim_config.dt = self.scenario.sim_params.dt
 
         self.sim: SimulationContext = SimulationContext(sim_config)
         scene_config: InteractiveSceneCfg = InteractiveSceneCfg(
@@ -156,12 +161,13 @@ class IsaacsimHandler(BaseSimHandler):
             else:
                 raise ValueError(f"Unsupported camera type: {type(camera)}")
 
-    def launch(self) -> None:
-        self._init_scene()
+    def launch(self, simulation_app=None, simulation_args=None) -> None:
+        self._init_scene(simulation_app, simulation_args)
         self._load_robots()
         self._load_sensors()
         self._load_cameras()
         self._load_terrain()
+        self._load_scene()
         self._load_objects()
         self._load_lights()
         self._load_render_settings()
@@ -176,7 +182,7 @@ class IsaacsimHandler(BaseSimHandler):
 
         # Force another simulation step and camera update to ensure proper initialization
         self.sim.step(render=False)
-        self.scene.update(dt=self.dt)
+        self.scene.update(dt=self.physics_dt)
         self._update_camera_pose()
 
         # Force a render to update camera data after position is set
@@ -188,22 +194,23 @@ class IsaacsimHandler(BaseSimHandler):
         # Initialize GS background if enabled
         self._build_gs_background()
 
+        return super().launch()
+
     def close(self) -> None:
         log.info("close Isaacsim Handler")
         if not self._is_closed:
-            del self.scene
-            self.sim.clear_all_callbacks()
-            self.sim.clear_instance()
-            self.sim.stop()
-            self.sim.clear()
+            self.simulation_app.close()
+            if self.scene is not None:
+                del self.scene
+            if self.sim is not None:
+                del self.sim
+            if self.simulation_app is not None:
+                del self.simulation_app
             self._is_closed = True
 
     def __del__(self):
         """Cleanup for the environment."""
         self.close()
-        self.simulation_app.close()
-        self._input.unsubscribe_from_keyboard_events(self._keyboard, self._keyboard_sub)
-        self._keyboard_sub = None
 
     def _set_states(self, states: list[DictEnvState] | TensorState, env_ids: list[int] | None = None) -> None:
         # if states is list[DictEnvState], iterate over it and set state
@@ -307,7 +314,7 @@ class IsaacsimHandler(BaseSimHandler):
             env_ids = list(range(self.num_envs))
 
         # Special handling for the first frame to ensure camera is properly positioned
-        if self._step_counter == 0:
+        if self._physics_step_counter == 0:
             self._update_camera_pose()
             # Force render and sensor update for first frame
             if self.sim.has_gui() or self.sim.has_rtx_sensors():
@@ -439,8 +446,8 @@ class IsaacsimHandler(BaseSimHandler):
                 quat_world=camera_inst.data.quat_w_world,
                 intrinsics=torch.tensor(camera.intrinsics, device=self.device)[None, ...].repeat(self.num_envs, 1, 1),
             )
-
-        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states)
+        extras = self.get_extra()
+        return TensorState(objects=object_states, robots=robot_states, cameras=camera_states, extras=extras)
 
     def _on_keyboard_event(self, event, *args, **kwargs):
         import carb
@@ -461,34 +468,46 @@ class IsaacsimHandler(BaseSimHandler):
     def set_dof_targets(self, actions: torch.Tensor) -> None:
         # TODO: support set torque
         if isinstance(actions, torch.Tensor):
-            reverse_reindex = self.get_joint_reindex(self.robots[0].name, inverse=True)
-            action_tensor_all = actions[:, reverse_reindex]
+            actions_tensor = actions
         else:
-            # Process dictionary-based actions
-            action_tensors = []
+            per_robot_tensors = []
             for robot in self.robots:
-                actuator_names = [k for k, v in robot.actuators.items() if v.fully_actuated]
-                action_tensor = torch.zeros((self.num_envs, len(actuator_names)), device=self.device)
+                sorted_joint_names = self.get_joint_names(robot.name, sort=True)
+                robot_tensor = torch.zeros((self.num_envs, len(sorted_joint_names)), device=self.device)
                 for env_id in range(self.num_envs):
-                    for i, actuator_name in enumerate(actuator_names):
-                        action_tensor[env_id, i] = torch.tensor(
-                            actions[env_id][robot.name]["dof_pos_target"][actuator_name], device=self.device
-                        )
-                action_tensors.append(action_tensor)
-            action_tensor_all = torch.cat(action_tensors, dim=-1)
+                    joint_targets = actions[env_id][robot.name]["dof_pos_target"]
+                    for j, joint_name in enumerate(sorted_joint_names):
+                        robot_tensor[env_id, j] = torch.tensor(joint_targets[joint_name], device=self.device)
+                per_robot_tensors.append(robot_tensor)
+            actions_tensor = torch.cat(per_robot_tensors, dim=-1)
 
-        # Apply actions to all robots
-        start_idx = 0
+        offset = 0
         for robot in self.robots:
             robot_inst = self.scene.articulations[robot.name]
-            actionable_joint_ids = [
-                robot_inst.joint_names.index(jn) for jn in robot.actuators if robot.actuators[jn].fully_actuated
-            ]
-            robot_inst.set_joint_position_target(
-                action_tensor_all[:, start_idx : start_idx + len(actionable_joint_ids)],
-                joint_ids=actionable_joint_ids,
-            )
-            start_idx += len(actionable_joint_ids)
+            sorted_joint_names = self.get_joint_names(robot.name, sort=True)
+            joint_count = len(sorted_joint_names)
+
+            if offset + joint_count > actions_tensor.shape[1]:
+                raise ValueError("Mismatch between provided actions and expected joint count.")
+
+            robot_actions_sorted = actions_tensor[:, offset : offset + joint_count]
+            offset += joint_count
+
+            name_to_sorted_idx = {name: idx for idx, name in enumerate(sorted_joint_names)}
+
+            joint_ids = []
+            action_indices = []
+            for joint_id, joint_name in enumerate(robot_inst.joint_names):
+                if joint_name in name_to_sorted_idx:
+                    joint_ids.append(joint_id)
+                    action_indices.append(name_to_sorted_idx[joint_name])
+
+            if not joint_ids:
+                continue
+
+            joint_targets = robot_actions_sorted[:, action_indices]
+            robot_inst.set_joint_position_target(joint_targets, joint_ids=joint_ids)
+            robot_inst.write_data_to_sim()
 
     def _simulate(self):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
@@ -496,11 +515,11 @@ class IsaacsimHandler(BaseSimHandler):
 
         # Decimation: run physics multiple times per control step for better stability
         for _ in range(self.decimation):
+            self._physics_step_counter += 1
             self.sim.step(render=False)
-
-        if self._step_counter % self.render_interval == 0 and is_rendering:
-            self.sim.render()
-        self.scene.update(dt=self.dt)
+            self.scene.update(dt=self.physics_dt)
+            if self._physics_step_counter % self.render_interval == 0 and is_rendering:
+                self.sim.render()
 
         # Force update kinematic objects to ensure visual mesh stays in sync
         for obj in self.objects:
@@ -512,28 +531,39 @@ class IsaacsimHandler(BaseSimHandler):
                 obj_inst.update(dt=0.0)
 
         # Ensure camera pose is correct, especially for the first few frames
-        if self._step_counter < 5:
+        if self._physics_step_counter < 5:
             self._update_camera_pose()
 
-        self._step_counter += 1
+        self._physics_step_counter += 1
 
     def _add_robot(self, robot: ArticulationObjCfg) -> None:
         import isaaclab.sim as sim_utils
         from isaaclab.actuators import ImplicitActuatorCfg
         from isaaclab.assets import Articulation, ArticulationCfg
 
+        manual_pd = any(mode == "effort" for mode in robot.control_type.values())
+        self._manual_pd_on.append(manual_pd)
         cfg = ArticulationCfg(
             spawn=sim_utils.UsdFileCfg(
                 usd_path=robot.usd_path,
                 activate_contact_sensors=True,
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                    max_depenetration_velocity=getattr(
+                        robot, "max_depenetration_velocity", self.scenario.sim_params.max_depenetration_velocity
+                    )
+                ),
                 articulation_props=sim_utils.ArticulationRootPropertiesCfg(fix_root_link=robot.fix_base_link),
+                collision_props=sim_utils.CollisionPropertiesCfg(
+                    contact_offset=getattr(robot, "contact_offset", self.scenario.sim_params.contact_offset),
+                    rest_offset=getattr(robot, "rest_offset", self.scenario.sim_params.rest_offset),
+                ),
             ),
             actuators={
                 jn: ImplicitActuatorCfg(
                     joint_names_expr=[jn],
-                    stiffness=actuator.stiffness,
-                    damping=actuator.damping,
+                    stiffness=actuator.stiffness if not manual_pd else 0.0,
+                    damping=actuator.damping if not manual_pd else 0.0,
+                    armature=getattr(robot, "armature", 0.01),
                 )
                 for jn, actuator in robot.actuators.items()
             },
@@ -577,11 +607,21 @@ class IsaacsimHandler(BaseSimHandler):
             return
 
         if obj.fix_base_link:
-            rigid_props = sim_utils.RigidBodyPropertiesCfg(disable_gravity=True, kinematic_enabled=True)
+            rigid_props = sim_utils.RigidBodyPropertiesCfg(
+                disable_gravity=True,
+                kinematic_enabled=True,
+                max_depenetration_velocity=getattr(
+                    obj, "max_depenetration_velocity", self.scenario.sim_params.max_depenetration_velocity
+                ),
+            )
         else:
             rigid_props = sim_utils.RigidBodyPropertiesCfg(disable_gravity=not obj.enabled_gravity)
         if obj.collision_enabled:
-            collision_props = sim_utils.CollisionPropertiesCfg(collision_enabled=True)
+            collision_props = sim_utils.CollisionPropertiesCfg(
+                collision_enabled=True,
+                contact_offset=getattr(obj, "contact_offset", self.scenario.sim_params.contact_offset),
+                rest_offset=getattr(obj, "rest_offset", self.scenario.sim_params.rest_offset),
+            )
         else:
             collision_props = None
 
@@ -662,7 +702,13 @@ class IsaacsimHandler(BaseSimHandler):
             )
             if isinstance(obj, RigidObjCfg):
                 self.scene.rigid_objects[obj.name] = RigidObject(
-                    RigidObjectCfg(prim_path=prim_path, spawn=usd_file_cfg)
+                    RigidObjectCfg(
+                        prim_path=prim_path,
+                        spawn=usd_file_cfg,
+                        init_state=RigidObjectCfg.InitialStateCfg(
+                            pos=obj.default_position, rot=obj.default_orientation
+                        ),
+                    )
                 )
                 return
 
@@ -691,6 +737,95 @@ class IsaacsimHandler(BaseSimHandler):
 
         self.terrain = terrain_config.class_type(terrain_config)
         self.terrain.env_origins = self.terrain.terrain_origins
+
+    def _load_scene(self) -> None:
+        """Load scene from SceneCfg configuration.
+
+        Loads USD scene files into each environment if scene configuration is provided.
+        Supports position, rotation, and scale transformations.
+        """
+        if self.scenario.scene is None:
+            return
+
+        scene_cfg = self.scenario.scene
+
+        # Only support USD path for now
+        if scene_cfg.usd_path is None:
+            log.warning("Scene USD path is None, skipping scene loading")
+            return
+
+        try:
+            import omni.isaac.core.utils.prims as prim_utils
+        except ModuleNotFoundError:
+            import isaacsim.core.utils.prims as prim_utils
+
+        from pxr import Gf, UsdGeom
+
+        # Get current stage
+        stage = prim_utils.get_current_stage()
+        if not stage:
+            log.error("Failed to get current stage")
+            return
+
+        # Get scene name, default to "scene"
+        scene_name = scene_cfg.name if scene_cfg.name else "scene"
+
+        # Determine scene path pattern for all environments
+        scene_prim_path = f"/World/envs/env_.*/{scene_name}"
+
+        # Get absolute path
+        usd_path = os.path.abspath(scene_cfg.usd_path)
+        if not os.path.exists(usd_path):
+            log.error(f"Scene USD file not found: {usd_path}")
+            return
+
+        # Load scene for source environment (env_0)
+        source_scene_path = f"/World/envs/env_0/{scene_name}"
+
+        # Add USD reference to stage
+        try:
+            from omni.isaac.core.utils.stage import add_reference_to_stage
+
+            add_reference_to_stage(usd_path, source_scene_path)
+        except ImportError:
+            # Fallback: use USD API directly
+            ref_prim = stage.DefinePrim(source_scene_path, "Xform")
+            if not ref_prim:
+                log.error(f"Failed to create prim at {source_scene_path}")
+                return
+            ref_prim.GetReferences().AddReference(usd_path)
+
+        # Apply transformations if specified
+        scene_prim = stage.GetPrimAtPath(source_scene_path)
+        if scene_prim.IsValid():
+            xformable = UsdGeom.Xformable(scene_prim)
+
+            # Clear existing transform operations
+            xformable.ClearXformOpOrder()
+
+            # Apply scale if specified
+            if scene_cfg.scale is not None:
+                scale_op = xformable.AddScaleOp()
+                scale_op.Set(Gf.Vec3d(*scene_cfg.scale))
+
+            # Apply rotation if specified (using quaternion directly)
+            if scene_cfg.quat is not None:
+                # SceneCfg quat format is (w, x, y, z)
+                qw, qx, qy, qz = scene_cfg.quat
+                # USD quaternion format is (real, imag_i, imag_j, imag_k) = (w, x, y, z)
+                # Use Quatf (float) instead of Quatd (double) as USD expects float precision
+                quat_gf = Gf.Quatf(float(qw), float(qx), float(qy), float(qz))
+                # Use orient op to set quaternion rotation directly
+                orient_op = xformable.AddOrientOp()
+                orient_op.Set(quat_gf)
+
+            # Apply fixed position offset if specified
+            if scene_cfg.default_position is not None:
+                translate_op = xformable.AddTranslateOp()
+                translate_op.Set(Gf.Vec3d(*scene_cfg.default_position))
+                log.debug(f"Set scene position offset: {scene_cfg.default_position}")
+
+            log.info(f"Loaded scene from {usd_path} at {source_scene_path}")
 
     def _load_render_settings(self) -> None:
         import carb
@@ -1003,47 +1138,7 @@ class IsaacsimHandler(BaseSimHandler):
         )  # ! critical
         obj_inst.write_data_to_sim()
 
-        # For fix_base_link objects, force sync visual pose to match collision pose
-        # This is necessary because kinematic objects (fix_base_link=True) only update
-        # their physics/collision layer with write_root_pose_to_sim, but not the visual layer
         if object.fix_base_link:
-            try:
-                import omni.isaac.core.utils.prims as prim_utils
-            except ModuleNotFoundError:
-                import isaacsim.core.utils.prims as prim_utils
-
-            from pxr import Gf, UsdGeom
-
-            # Get USD stage
-            stage = prim_utils.get_current_stage()
-
-            # Update visual pose for each environment
-            for i, env_id in enumerate(env_ids):
-                prim_path = f"/World/envs/env_{env_id}/{object.name}"
-                prim = stage.GetPrimAtPath(prim_path)
-
-                if prim.IsValid():
-                    xformable = UsdGeom.Xformable(prim)
-
-                    # Convert torch tensors to numpy
-                    pos_np = pose[i, :3].cpu().numpy()
-                    quat_np = pose[i, 3:7].cpu().numpy()  # w, x, y, z
-
-                    # Create transform matrix from position and quaternion
-                    # Note: pxr quaternion is (real, i, j, k) = (w, x, y, z)
-                    quat_gf = Gf.Quatd(float(quat_np[0]), float(quat_np[1]), float(quat_np[2]), float(quat_np[3]))
-                    rotation_matrix = Gf.Matrix3d(quat_gf)
-                    translation = Gf.Vec3d(float(pos_np[0]), float(pos_np[1]), float(pos_np[2]))
-
-                    # Set transform
-                    transform_matrix = Gf.Matrix4d().SetTranslate(translation) * Gf.Matrix4d().SetRotate(
-                        rotation_matrix
-                    )
-                    xformable.ClearXformOpOrder()
-                    xform_op = xformable.AddTransformOp()
-                    xform_op.Set(transform_matrix)
-
-            # Update object data from simulation to refresh internal state
             obj_inst.update(dt=0.0)
 
     def _get_joint_names(self, obj_name: str, sort: bool = True) -> list[str]:
@@ -1118,9 +1213,102 @@ class IsaacsimHandler(BaseSimHandler):
         log.debug(f"Added camera {camera.name} to scene with prim_path: {prim_path}")
 
     def refresh_render(self) -> None:
-        for sensor in self.scene.sensors.values():
-            sensor.update(dt=0)
-        self.sim.render()
+        self.flush_visual_updates(settle_passes=1)
+
+    def flush_visual_updates(self, *, wait_for_materials: bool = False, settle_passes: int = 2) -> None:
+        """Drive SimulationApp/scene/sensors for a few frames to settle visual state."""
+        passes = max(1, settle_passes)
+        sim_app = getattr(self, "simulation_app", None)
+        reason = "material refresh" if wait_for_materials else "visual flush"
+
+        for _ in range(passes):
+            if sim_app is not None:
+                try:
+                    sim_app.update()
+                except Exception as err:
+                    log.debug(f"SimulationApp update failed during {reason}: {err}")
+
+            if self.scene is not None:
+                try:
+                    self.scene.update(dt=0)
+                except Exception as err:
+                    log.debug(f"Scene update failed during {reason}: {err}")
+
+            if self.sim is not None:
+                try:
+                    if self.sim.has_gui() or self.sim.has_rtx_sensors():
+                        self.sim.render()
+                except Exception as err:
+                    log.debug(f"Sim render failed during {reason}: {err}")
+
+            sensors = getattr(self.scene, "sensors", {}) if self.scene is not None else {}
+            for name, sensor in sensors.items():
+                try:
+                    sensor.update(dt=0)
+                except Exception as err:
+                    log.debug(f"Sensor {name} update failed during {reason}: {err}")
+
+        if wait_for_materials:
+            self._refresh_raytracing_acceleration()
+
+    def _refresh_raytracing_acceleration(self) -> None:
+        """Work around Isaac Sim 4.5 RTX BVH getting stale after material edits."""
+        render_cfg = getattr(self.scenario, "render", None)
+        if render_cfg is None or getattr(render_cfg, "mode", None) != "raytracing":
+            return
+
+        try:
+            import carb
+            import omni.kit.app
+        except ImportError:
+            return
+
+        settings = carb.settings.get_settings()
+        app = omni.kit.app.get_app()
+        if settings is None or app is None:
+            return
+
+        enabled_path = "/rtx/raytracing/enabled"
+        try:
+            current_state = settings.get(enabled_path)
+        except Exception as err:
+            log.debug(f"Unable to read RTX setting {enabled_path}: {err}")
+            current_state = None
+
+        if current_state is None:
+            current_state = True
+            try:
+                settings.set(enabled_path, current_state)
+                app.update()
+            except Exception as err:
+                log.debug(f"Failed to initialize RTX setting {enabled_path}: {err}")
+                return
+
+        log.debug("Refreshing RTX acceleration structure after material update")
+        try:
+            settings.set(enabled_path, False)
+            app.update()
+            settings.set(enabled_path, current_state)
+            app.update()
+
+            gc_path = "/rtx/hydra/triggerGarbageCollection"
+            settings.set(gc_path, True)
+            app.update()
+            settings.set(gc_path, False)
+            app.update()
+
+            if self.sim is not None:
+                try:
+                    self.sim.render()
+                except Exception as err:
+                    log.debug(f"Sim render during RTX refresh failed: {err}")
+            if self.scene is not None:
+                try:
+                    self.scene.update(dt=0)
+                except Exception as err:
+                    log.debug(f"Scene update during RTX refresh failed: {err}")
+        except Exception as err:
+            log.debug(f"Failed to refresh RTX acceleration structure: {err}")
 
     def _get_camera_params(self, camera, camera_inst):
         """Get camera intrinsics and extrinsics for GS rendering.

@@ -265,12 +265,12 @@ class DomainRandomizationManager:
             light_name = getattr(light, "name", f"light_{len(self.randomizers)}")
 
             if isinstance(light, DomeLightCfg):
-                config = LightPresets.dome_ambient(light_name, randomization_mode="combined")
+                config = LightPresets.dome_ambient(light_name)
             elif isinstance(light, (SphereLightCfg, DiskLightCfg)):
-                config = LightPresets.sphere_ceiling_light(light_name, randomization_mode="combined")
+                config = LightPresets.sphere_ceiling_light(light_name)
             else:
                 log.warning(f"Unknown light type for {light_name}, using sphere_ceiling_light preset")
-                config = LightPresets.sphere_ceiling_light(light_name, randomization_mode="combined")
+                config = LightPresets.sphere_ceiling_light(light_name)
 
             randomizer = LightRandomizer(config, seed=seed)
             randomizer.bind_handler(self.handler)
@@ -287,7 +287,7 @@ class DomainRandomizationManager:
         log.info(f"  Setting up camera randomizers for {len(cameras)} cameras")
         for camera in cameras:
             camera_name = getattr(camera, "name", f"camera_{len(self.randomizers)}")
-            config = CameraPresets.surveillance_camera(camera_name, randomization_mode="combined")
+            config = CameraPresets.surveillance_camera(camera_name)
 
             randomizer = CameraRandomizer(config, seed=seed)
             randomizer.bind_handler(self.handler)
@@ -298,11 +298,11 @@ class DomainRandomizationManager:
         """Get appropriate material configuration based on object type."""
         obj_lower = obj_name.lower()
         if "cube" in obj_lower:
-            return MaterialPresets.mdl_family_object(obj_name, family="metal", randomization_mode="combined")
+            return MaterialPresets.mdl_family_object(obj_name, family="metal")
         elif "sphere" in obj_lower:
-            return MaterialPresets.rubber_object(obj_name, randomization_mode="combined")
+            return MaterialPresets.rubber_object(obj_name)
         else:
-            return MaterialPresets.mdl_family_object(obj_name, family="wood", randomization_mode="combined")
+            return MaterialPresets.mdl_family_object(obj_name, family="wood")
 
     def _setup_physics_randomizers(self, seed: int | None):
         """Setup unified ObjectRandomizers for robots and objects."""
@@ -555,7 +555,7 @@ global_step = 0
 
 
 class DemoCollector:
-    def __init__(self, handler, robot_cfg, task_desc=""):
+    def __init__(self, handler, robot_cfg, task_desc="", demo_start_idx=0):
         assert isinstance(handler, BaseSimHandler)
         self.handler = handler
         self.robot_cfg = robot_cfg
@@ -572,6 +572,22 @@ class DemoCollector:
             additional_str = f"-{args.cust_name}" if args.cust_name else ""
             self.base_save_dir = f"roboverse_demo/demo_{args.sim}/{TaskName}{additional_str}/robot-{args.robot}"
 
+    def _get_max_demo_index(self, status: str) -> int:
+        status_dir = os.path.join(self.base_save_dir, status)
+        if not os.path.exists(status_dir):
+            return 0
+
+        max_idx = -1
+        for item in os.listdir(status_dir):
+            if item.startswith("demo_") and os.path.isdir(os.path.join(status_dir, item)):
+                try:
+                    idx = int(item.split("_")[1])
+                    max_idx = max(max_idx, idx)
+                except (ValueError, IndexError):
+                    continue
+
+        return max_idx + 1
+
     def create(self, demo_idx: int, data_dict: dict):
         assert demo_idx not in self.cache
         assert isinstance(demo_idx, int)
@@ -587,12 +603,15 @@ class DemoCollector:
         assert demo_idx in self.cache
         assert status in ["success", "failed"], f"Invalid status: {status}"
 
-        save_dir = os.path.join(self.base_save_dir, status, f"demo_{demo_idx:04d}")
+        # Use demo_idx directly as continuous_idx to maintain consistency
+        continuous_idx = demo_idx
+
+        save_dir = os.path.join(self.base_save_dir, status, f"demo_{continuous_idx:04d}")
         if os.path.exists(os.path.join(save_dir, "status.txt")):
             os.remove(os.path.join(save_dir, "status.txt"))
 
         os.makedirs(save_dir, exist_ok=True)
-        log.info(f"Saving demo {demo_idx} to {save_dir}")
+        log.info(f"Saving demo {demo_idx} (original) as {continuous_idx:04d} (continuous) to {save_dir}")
 
         ## Option 1: Save immediately, blocking and slower
 
@@ -612,40 +631,9 @@ class DemoCollector:
         del self.cache[demo_idx]
 
     def final(self):
-        """
-        Finalize collector:
-        - Save any remaining cached demos (mark them as 'failed' so they are persisted)
-        - Clear the cache
-        - Signal the save process to exit and join it
-        """
-        # If there are any remaining demos in cache, save them as 'failed' to persist data
-        if self.cache:
-            log.warning(f"Finalizing: {len(self.cache)} unfinished demo(s) found in cache. Saving them as 'failed'.")
-        for demo_idx in list(self.cache.keys()):
-            try:
-                log.info(f"Finalizing: saving unfinished demo {demo_idx} as failed")
-                # save will create directories and write status.txt for failed demos
-                self.save(demo_idx, status="failed")
-            except Exception as e:
-                log.error(f"Failed to save unfinished demo {demo_idx} during finalization: {e}")
-            try:
-                # ensure we remove it from cache even if save failed
-                self.delete(demo_idx)
-            except Exception as e:
-                log.error(f"Failed to delete demo {demo_idx} from cache during finalization: {e}")
-
-        # signal the background save process to exit and join
-        try:
-            self.save_request_queue.put(None)  # signal to save_demo_mp to exit
-            self.save_proc.join()
-        except Exception as e:
-            log.error(f"Error while shutting down save process: {e}")
-
-        # ensure cache is empty (no assert, just log if something remains)
-        if self.cache:
-            log.error("Collector finalization completed but cache is not empty.")
-        else:
-            log.info("Collector finalization completed and cache is empty.")
+        self.save_request_queue.put(None)  # signal to save_demo_mp to exit
+        self.save_proc.join()
+        assert self.cache == {}
 
 
 def should_skip(log_dir: str, demo_idx: int):
@@ -653,13 +641,13 @@ def should_skip(log_dir: str, demo_idx: int):
     success_path = os.path.join(log_dir, "success", demo_name, "status.txt")
     failed_path = os.path.join(log_dir, "failed", demo_name, "status.txt")
 
-    if args.run_all:
-        return False
-
     if args.run_unfinished:
         if not os.path.exists(success_path) and not os.path.exists(failed_path):
             return False
         return True
+
+    if args.run_all:
+        return False
 
     if args.run_failed:
         if os.path.exists(success_path):
@@ -710,7 +698,28 @@ class DemoIndexer:
 def main():
     global global_step, tot_success, tot_give_up
     task_cls = get_task_class(args.task)
-    camera = PinholeCameraCfg(data_types=["rgb", "depth"], pos=(1.5, 0.0, 1.5), look_at=(0.0, 0.0, 0.0))
+
+    if args.task in {"stack_cube", "pick_cube", "pick_butter"}:
+        dp_camera = True
+    else:
+        dp_camera = args.task != "close_box"
+
+    is_libero_dataset = "libero_90" in args.task
+
+    if is_libero_dataset:
+        dp_pos = (2.0, 0.0, 2)
+    elif dp_camera:
+        # import warnings
+        # warnings.warn("Using dp camera position!")
+        dp_pos = (1.0, 0.0, 0.75)
+    else:
+        dp_pos = (1.5, 0.0, 1.5)
+
+    # libero specific camera position
+    # dp_pos = (0.8, -0, 1.6)
+    # look_at = (-2.5, 0.0, 0.0)
+
+    camera = PinholeCameraCfg(data_types=["rgb", "depth"], pos=dp_pos, look_at=(0.0, 0.0, 0.0))
     scenario = task_cls.scenario.update(
         robots=[args.robot],
         scene=args.scene,
@@ -818,6 +827,8 @@ def main():
         collector.create(demo_idx, obs[env_id])
 
     ## Main Loop
+    stop_flag = False
+
     while not all(finished):
         if tot_success >= args.num_demo_success:
             log.info(f"Reached target number of successful demos ({args.num_demo_success}). Stopping collection.")
@@ -858,7 +869,7 @@ def main():
                 collector.save(demo_idx, status="success")
                 collector.delete(demo_idx)
 
-                if demo_indexer.next_idx < max_demo:
+                if (not stop_flag) and (demo_indexer.next_idx < max_demo):
                     new_demo_idx = demo_indexer.next_idx
                     demo_idxs[env_id] = new_demo_idx
                     log.info(f"Transitioning Env {env_id}: Demo {demo_idx} to Demo {new_demo_idx}")

@@ -21,7 +21,9 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 import torch
 from gymnasium import make_vec
 
-import metasim  # noqa: F401
+import metasim
+
+metasim.register_gym_envs()
 from metasim.scenario.cameras import PinholeCameraCfg
 from metasim.utils import configclass
 from metasim.utils.obs_utils import ObsSaver
@@ -118,7 +120,7 @@ def main():
         # Save observations for video
         if obs_saver is not None:
             try:
-                raw_states = env.task_env.handler.get_states()  # Access the underlying simulator
+                raw_states = env.task_env.handler.get_states(mode="tensor")  # Access the underlying simulator
                 obs_saver.add(raw_states)
             except Exception as e:
                 log.debug(f"Could not get camera data: {e}")

@@ -1,4 +1,4 @@
-"""This script is used to test the static scene."""
+"""Control a robot with random joint targets and record a video across simulators."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ if __name__ == "__main__":
 
     @configclass
     class Args:
-        """Arguments for the static scene."""
+        """Arguments for the control-robot demo."""
 
         robot: str = "franka"
 
@@ -51,6 +51,7 @@ if __name__ == "__main__":
             "sapien2",
             "sapien3",
             "mujoco",
+            "newton",
         ] = "mujoco"
 
         ## Others

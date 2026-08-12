@@ -5,7 +5,7 @@ import re
 import shutil
 
 CUR_DIR = os.path.dirname(os.path.abspath(__file__))
-TASK_CFG_ROOT = os.path.abspath(os.path.join(CUR_DIR, "../../../../metasim/cfg/tasks"))
+TASK_CFG_ROOT = os.path.abspath(os.path.join(CUR_DIR, "../../../../roboverse_pack/tasks"))
 OUTPUT_DIR = os.path.join(CUR_DIR, "tasks_md")
 VIDEO_BASE = "https://videos.example.com"
 DEFAULT_DESC = "No description provided."
@@ -24,7 +24,7 @@ GROUPS = [
     "Metaworld",
     "Rlafford",
 ]
-PLATFORMS = ["isaaclab", "mujoco", "isaacgym", "sapien3", "genesis"]
+PLATFORMS = ["isaacsim", "mujoco", "isaacgym", "sapien3", "genesis", "newton"]
 
 
 def parse_docstring_metadata(docstring: str):
@@ -66,11 +66,11 @@ def parse_docstring_metadata(docstring: str):
 
     # video_url
     if "video_url" not in meta and "title" in meta and "group" in meta:
-        meta["video_url"] = f"https://roboverse.wiki/_static/standard_output/tasks/{meta['group']}/{meta['title']}.mp4"
+        meta["video_url"] = f"/roboverse/_static/standard_output/tasks/{meta['group']}/{meta['title']}.mp4"
 
     elif "video_url" in meta and not meta["video_url"].startswith("http"):
         meta["video_url"] = (
-            f"https://roboverse.wiki/_static/standard_output/tasks/{meta.get('group', 'Unknown')}/{meta['video_url']}"
+            f"/roboverse/_static/standard_output/tasks/{meta.get('group', 'Unknown')}/{meta['video_url']}"
         )
 
     return meta
@@ -147,20 +147,25 @@ def generate_md(tid: str, meta: dict) -> str:
 def discover_all_tasks():
     task_meta = {}
     for py_path in glob.glob(os.path.join(TASK_CFG_ROOT, "*", "*.py")):
-        if os.path.basename(py_path).startswith("__"):
-            continue  # pass __init__.py
+        if os.path.basename(py_path).startswith("_"):
+            continue  # skip __init__.py and private helper modules (_osc, _native_util, ...)
 
         try:
             with open(py_path) as f:
                 doc = f.read()
             tree = ast.parse(doc)
 
-            # docstring
+            # docstring: prefer the task ``...Cfg`` class, else fall back to the
+            # module docstring (modules that register tasks programmatically — e.g.
+            # the native robosuite/LIBERO ports — carry their ``### Title`` /
+            # ``### Platforms`` metadata at module level).
             docstring = ""
             for node in tree.body:
                 if isinstance(node, ast.ClassDef) and node.name.endswith("Cfg"):
                     docstring = ast.get_docstring(node)
                     break
+            if not docstring:
+                docstring = ast.get_docstring(tree)
 
             meta = parse_docstring_metadata(docstring or "")
 

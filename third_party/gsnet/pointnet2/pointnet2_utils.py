@@ -19,7 +19,7 @@ import sys
 
 try:
     import builtins
-except:
+except ImportError:
     import __builtin__ as builtins
 
 try:

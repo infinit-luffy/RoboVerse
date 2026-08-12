@@ -9,7 +9,7 @@ from metasim.task.registry import register_task
 from .libero_base import LiberoBaseTask
 
 
-@register_task("libero.pick_alphabet_soup", "pick_alphnabet_soup")
+@register_task("libero.pick_alphabet_soup", "pick_alphabet_soup")
 class LiberoPickAlphabetSoupTask(LiberoBaseTask):
     """Configuration for the Libero pick alphabet soup task.
 
@@ -67,11 +67,12 @@ class LiberoPickAlphabetSoupTask(LiberoBaseTask):
                 urdf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/butter/urdf/butter.urdf",
                 mjcf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/butter/mjcf/butter.xml",
             ),
-        ]
+        ],
+        robots=["franka"],
     )
 
     # task horizon
-    max_max_episode_steps = 250
+    max_episode_steps = 250
     task_desc = "Pick the alphabet soup and place it in the basket"
     checker = DetectedChecker(
         obj_name="alphabet_soup",

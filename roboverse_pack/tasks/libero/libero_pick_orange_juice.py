@@ -9,7 +9,7 @@ from metasim.task.registry import register_task
 from .libero_base import LiberoBaseTask
 
 
-@register_task("libero.orange_juice", "pick_orange_juice")
+@register_task("libero.pick_orange_juice", "pick_orange_juice")
 class LiberoPickOrangeJuiceCfg(LiberoBaseTask):
     """Configuration for the Libero pick orange juice task.
 
@@ -67,7 +67,8 @@ class LiberoPickOrangeJuiceCfg(LiberoBaseTask):
                 urdf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/salad_dressing/urdf/salad_dressing.urdf",
                 mjcf_path="roboverse_data/assets/libero/COMMON/stable_hope_objects/salad_dressing/mjcf/salad_dressing.xml",
             ),
-        ]
+        ],
+        robots=["franka"],
     )
 
     # task horizon

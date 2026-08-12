@@ -3,11 +3,13 @@
 # This file is based on CleanRL's TD3 implementation and has been adapted for RoboVerse.
 # Original CleanRL code is licensed under MIT License.
 
-import os
 import random
 import time
-from dataclasses import dataclass
-from typing import Literal
+
+try:
+    import isaacgym  # noqa: F401
+except ImportError:
+    pass
 
 import gymnasium as gym
 import numpy as np
@@ -20,82 +22,16 @@ import tyro
 from torch.utils.tensorboard import SummaryWriter
 
 # RoboVerse imports
-try:
-    import isaacgym  # noqa: F401
-except ImportError:
-    pass
 
 rootutils.setup_root(__file__, pythonpath=True)
 from gymnasium import make_vec
-import metasim  # noqa: F401
+import metasim
+
+metasim.register_gym_envs()
 
 from roboverse_learn.rl.clean_rl.buffer import ReplayBuffer
 from roboverse_learn.rl.episode_tracker import EpisodeTracker
-
-
-@dataclass
-class Args:
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
-    """the name of this experiment"""
-    seed: int = 1
-    """seed of the experiment"""
-    torch_deterministic: bool = True
-    """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
-    """if toggled, cuda will be enabled by default"""
-    track: bool = False
-    """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
-    """the wandb's project name"""
-    wandb_entity: str = None
-    """the entity (team) of wandb's project"""
-    capture_video: bool = False
-    """whether to capture videos of the agent performances (check out `videos` folder)"""
-    save_model: bool = False
-    """whether to save model into the `runs/{run_name}` folder"""
-    upload_model: bool = False
-    """whether to upload the saved model to huggingface"""
-    hf_entity: str = ""
-    """the user or org name of the model repository from the Hugging Face Hub"""
-
-    # RoboVerse specific arguments
-    task: str = "reach_origin"
-    """the RoboVerse task name"""
-    robot: str = "franka"
-    """the robot type"""
-    sim: Literal["isaaclab", "isaacgym", "mujoco", "genesis", "mjx"] = "mjx"
-    """the simulator backend"""
-    headless: bool = False
-    """whether to run in headless mode"""
-    device: str = "cuda"
-    """device to run on"""
-
-    # Algorithm specific arguments
-    """the id of the environment"""
-    total_timesteps: int = 10000
-    """total timesteps of the experiments"""
-    learning_rate: float = 3e-4
-    """the learning rate of the optimizer"""
-    num_envs: int = 128
-    """the number of parallel game environments"""
-    buffer_size: int = int(1e6)
-    """the replay memory buffer size"""
-    gamma: float = 0.99
-    """the discount factor gamma"""
-    tau: float = 0.005
-    """target smoothing coefficient (default: 0.005)"""
-    batch_size: int = 256
-    """the batch size of sample from the reply memory"""
-    policy_noise: float = 0.2
-    """the scale of policy noise"""
-    exploration_noise: float = 0.1
-    """the scale of exploration noise"""
-    learning_starts: int = 10
-    """timestep to start learning"""
-    policy_frequency: int = 2
-    """the frequency of training policy (delayed)"""
-    noise_clip: float = 0.5
-    """noise clip parameter of the Target Policy Smoothing Regularization"""
+from roboverse_learn.rl.configs.clean_rl.td3 import CleanRLTD3Config
 
 
 
@@ -164,13 +100,13 @@ class Actor(nn.Module):
 
 if __name__ == "__main__":
 
-    args = tyro.cli(Args)
+    args = tyro.cli(CleanRLTD3Config)
     run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
 
         wandb.init(
-            project=args.wandb_project_name,
+            project=args.wandb_project,
             entity=args.wandb_entity,
             sync_tensorboard=True,
             config=vars(args),
@@ -223,6 +159,17 @@ if __name__ == "__main__":
     obs, _ = envs.reset(seed=args.seed)
     obs = obs.to(device)
     global_step = 0
+    # Counts gradient-update iterations (one per training step past learning_starts).
+    # The delayed policy/target update must be gated on this, NOT on global_step:
+    # global_step advances by num_envs each loop, so `global_step % policy_frequency`
+    # is constant (always 0 when policy_frequency divides num_envs) and the TD3
+    # delayed-update mechanism never actually delays.
+    update_count = 0
+    # actor_loss is only assigned when the (now correctly delayed) policy gate
+    # fires; the %100 logging below runs on a different cadence, so seed it to
+    # None and guard the log to avoid an UnboundLocalError before the first
+    # actor update (e.g. when num_envs is a multiple of 100).
+    actor_loss = None
 
     # Initialize episode tracker
     episode_tracker = EpisodeTracker(args.num_envs, device)
@@ -253,6 +200,7 @@ if __name__ == "__main__":
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
+            update_count += 1
             data = rb.sample(args.batch_size)
             with torch.no_grad():
                 clipped_noise = (torch.randn_like(data.actions, device=device) * args.policy_noise).clamp(
@@ -278,7 +226,7 @@ if __name__ == "__main__":
             qf_loss.backward()
             q_optimizer.step()
 
-            if global_step % args.policy_frequency == 0:
+            if update_count % args.policy_frequency == 0:
                 actor_loss = -qf1(data.observations, actor(data.observations)).mean()
                 actor_optimizer.zero_grad()
                 actor_loss.backward()
@@ -298,7 +246,8 @@ if __name__ == "__main__":
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
-                writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+                if actor_loss is not None:
+                    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
 
                 # Log episode statistics
                 avg_return, avg_length = episode_tracker.get_stats()

@@ -82,7 +82,7 @@ def extract_states_from_obs(obs, handler, key):
     """Extract states from observation tensor."""
     env_states = state_tensor_to_nested(handler, obs)
     result = {}
-    if env_states and len(env_states) > 0:
+    if env_states:
         state = env_states[0]
         if key in state:
             for name, item in state[key].items():

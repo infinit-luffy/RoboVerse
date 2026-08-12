@@ -24,6 +24,11 @@ class Libero90BaseTask(BaseTaskEnv):
     checker = None
     traj_filepath = None
     decimation = 30
+    # Most libero_90 leaves intentionally skip the per-reset checker reset. Setting
+    # this True on a leaf reproduces the old ``reset`` override (which jumped to
+    # ``BaseTaskEnv.reset`` to bypass the checker reset) without overriding ``reset``
+    # — so the seed-aware base ``reset`` signature is inherited unchanged.
+    skip_checker_reset = False
 
     def __init__(self, scenario: ScenarioCfg, device: str | torch.device | None = None) -> None:
         check_and_download_single(self.traj_filepath)
@@ -34,18 +39,42 @@ class Libero90BaseTask(BaseTaskEnv):
         """Success when task conditions are met."""
         return self.checker.check(self.handler, states)
 
-    def reset(self, states=None, env_ids=None):
-        """Reset the checker."""
-        states = super().reset(states, env_ids)
-        self.checker.reset(self.handler, env_ids=env_ids)
+    def reset(self, states=None, env_ids=None, seed=None):
+        """Reset the env; reset the checker unless ``skip_checker_reset`` is set.
+
+        ``seed`` is forwarded to ``super().reset``. Leaves that set
+        ``skip_checker_reset = True`` get the old "skip checker reset" behaviour
+        without overriding ``reset`` (so the seed contract is preserved).
+        """
+        states = super().reset(states, env_ids, seed)
+        if self.checker is not None and not self.skip_checker_reset:
+            self.checker.reset(self.handler, env_ids=env_ids)
         return states
 
     def _get_initial_states(self) -> list[dict] | None:
-        """Give the initial states from traj file."""
-        # Keep it simple and leave robot states to defaults; just seed object poses.
-        # If the handler handles None gracefully, this can be set to None.
-        initial_states, _, _ = get_traj(self.traj_filepath, self.scenario.robots[0], self.handler)
-        # Duplicate / trim list so that its length matches num_envs
+        """Return per-env initial states sampled from the demo trajectory.
+
+        Returns None when the trajectory is missing or empty, letting the
+        handler fall back to its own defaults. Mirrors the hardened
+        ``LiberoBaseTask._get_initial_states``: the previous version indexed
+        ``self.scenario.robots[0]`` unconditionally and called ``get_traj``
+        with no guard, so a robotless scenario or a missing/empty traj file
+        raised (``IndexError``/``FileNotFoundError``/``KeyError``) instead of
+        degrading gracefully like its libero sibling.
+        """
+        if not self.traj_filepath:
+            return None
+        # scenario.robots may legitimately be empty (perception-only tasks).
+        robot_ref = self.scenario.robots[0] if self.scenario.robots else None
+        try:
+            initial_states, _, _ = get_traj(self.traj_filepath, robot_ref, self.handler)
+        except (FileNotFoundError, KeyError, ValueError):
+            return None
+
+        if not initial_states:
+            return None
+
+        # Duplicate / trim list so that its length matches num_envs (n > 0 here).
         if len(initial_states) < self.num_envs:
             k = self.num_envs // len(initial_states)
             initial_states = initial_states * k + initial_states[: self.num_envs % len(initial_states)]

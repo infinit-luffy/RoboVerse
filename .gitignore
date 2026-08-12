@@ -34,6 +34,7 @@ checkpoints
 slurm.sh
 data_policy/
 outputs/
+il_outputs/
 eval_outputs/
 tmp/
 results/
@@ -106,3 +107,39 @@ id_rsa*
 
 # for test cache
 .pytest_cache/
+
+docs/superpowers/
+
+*.pkl
+*.pt
+output
+public/
+
+.cursor/
+artifacts/
+nohup/
+.omx/
+
+# local-only: exp52 scratch (scripts + rollout outputs) and replay scratch
+.tmp_replay_render/
+get_started/exp52_*.py
+get_started/exp52_*/
+
+# local-only: kujiale interior scene USDs (not part of upstream assets)
+roboverse_pack/asset/*.usda
+training_logs/
+
+# local-only: report-hub publish wrappers (reports live in the external report repo)
+tools/publish_report*.sh
+
+# local-only: personal agent rules (commit identity, push habits, private infra) and env override
+CLAUDE.local.md
+ENVIRONMENTS.local.md
+datasets/
+.robosuite_bundle/
+
+# --- LIBERO / LIBERO-plus 1:1 isolated integration ---
+third_party/
+INTEGRATION_LOG.md
+*.hdf5
+libero_datasets/

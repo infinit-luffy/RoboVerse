@@ -109,10 +109,14 @@ class BaseLocomotionEnv(RLTaskEnv):
         )
         super().__init__(scenario, device)
 
-    def step(self, actions):
-        """Step with unnomormalization."""
-        actions = self.unnormalise_action(actions)
-        return super().step(actions)
+    def _process_action(self, actions):
+        """Unnormalise actions from [-1, 1] to joint limits (sanctioned action hook).
+
+        Replaces the old ``step`` override: ``RLTaskEnv.step`` calls
+        ``_process_action`` before clamping/applying, so behaviour is identical
+        (unnormalise, then the shared clamp + simulate) without overriding step.
+        """
+        return self.unnormalise_action(actions)
 
     def _observation(self, states: TensorState) -> torch.Tensor:
         results_state = []
@@ -167,37 +171,8 @@ class BaseLocomotionEnv(RLTaskEnv):
         return terminated
 
 
-# @register_task("humanoid.walk", "walk", "h1.walk")
-class WalkEnv(BaseLocomotionEnv):
-    """Walking task for humanoid robots."""
-
-    max_episode_steps = 1000
-
-    def __init__(self, scenario: ScenarioCfg, device: str | torch.device | None = None) -> None:
-        super().__init__(scenario, device)
-        self.reward_functions = [BaseLocomotionReward(self.robot_name, move_speed=1.0)]
-        self.reward_weights = [1.0]
-
-
-# @register_task("humanoid.run", "run", "h1.run")
-class RunEnv(BaseLocomotionEnv):
-    """Run task for humanoid robots."""
-
-    max_episode_steps = 1000
-
-    def __init__(self, scenario: ScenarioCfg, device: str | torch.device | None = None) -> None:
-        super().__init__(scenario, device)
-        self.reward_functions = BaseLocomotionReward(self.robot_name, move_speed=5.0)
-        self.reward_weights = [1.0]
-
-
-# @register_task("humanoid.stand", "stand", "h1.stand")
-class StandEnv(BaseLocomotionEnv):
-    """Stand task for humanoid robots."""
-
-    max_episode_steps = 1000
-
-    def __init__(self, scenario: ScenarioCfg, device: str | torch.device | None = None) -> None:
-        super().__init__(scenario, device)
-        self.reward_functions = [BaseLocomotionReward(self.robot_name, move_speed=0.0)]
-        self.reward_weights = [1.0]
+# ``WalkEnv`` / ``RunEnv`` / ``StandEnv`` are the registered, canonical
+# implementations in metasim — re-exported here so ``humanoid_bench``
+# remains a single import point without keeping a second copy that can
+# drift from the registered one.
+from metasim.example.example_pack.tasks.humanoid_env import RunEnv, StandEnv, WalkEnv  # noqa: F401

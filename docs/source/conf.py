@@ -55,8 +55,6 @@ html_theme = "pydata_sphinx_theme"
 html_logo = "_static/RoboVerse86.22.svg"
 html_favicon = "_static/logo.png"
 
-json_url = "_static/version_switcher.json"
-version_match = os.environ.get("READTHEDOCS_VERSION")
 html_theme_options = {
     "show_nav_level": 1,
     "use_edit_page_button": True,
@@ -75,12 +73,18 @@ html_theme_options = {
     "logo": {
         "image_dark": "_static/RoboVerse86.22.svg",
     },
-    "navbar_center": ["version-switcher", "navbar-nav"],
+    # Top navbar shows only the cross-subsite links (MetaSim / RoboVerse /
+    # FAQ) via ``external_links`` (rendered through our overridden
+    # navbar-nav template). All in-site navigation lives in the left
+    # sidebar. ``version-switcher`` is intentionally NOT in
+    # ``navbar_center`` — the project does not ship versioned docs.
+    "navbar_center": ["navbar-nav"],
+    "external_links": [
+        {"name": "MetaSim", "url": "/metasim/"},
+        {"name": "RoboVerse", "url": "/roboverse/"},
+        {"name": "FAQ", "url": "/FAQ/"},
+    ],
     "show_version_warning_banner": False,
-    "switcher": {
-        "json_url": json_url,
-        "version_match": version_match,
-    },
     "sidebarwidth": "150px",
 }
 
@@ -98,6 +102,15 @@ html_css_files = [
 html_show_copyright = True
 html_show_sphinx = False
 html_static_path = ["_static"]
+
+# Homepage shows only the body content (hero-style intro, no left rail);
+# every other page renders our custom sidebar-section-nav template, which
+# shows the captioned global toctree with ``startdepth=0 + includehidden=True``
+# so even root-of-section pages get a populated sidebar.
+html_sidebars = {
+    "index": [],
+    "**": ["sidebar-section-nav.html"],
+}
 
 ### Autodoc configurations ###
 autoclass_content = "class"

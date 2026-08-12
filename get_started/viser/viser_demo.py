@@ -12,6 +12,7 @@ All features can be enabled/disabled via command line arguments.
 
 from __future__ import annotations
 
+import time
 from typing import Literal
 
 try:
@@ -115,7 +116,7 @@ def extract_states_from_obs(obs, handler, key):
     """
     env_states = state_tensor_to_nested(handler, obs)
     result = {}
-    if env_states and len(env_states) > 0:
+    if env_states:
         state = env_states[0]
         if key in state:
             for name, item in state[key].items():
@@ -476,7 +477,7 @@ def main():
     # Keep running
     try:
         while True:
-            pass
+            time.sleep(0.1)
     except KeyboardInterrupt:
         log.info("\nShutting down...")
 

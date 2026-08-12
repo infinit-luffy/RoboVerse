@@ -156,7 +156,7 @@ class MeshtoMJCFConverter(AssetConverterBase):
                 for keep_key in self.kwargs["keep_materials"]:
                     if keep_key in file_name.lower():
                         find_flag = True
-                if find_flag is False:
+                if not find_flag:
                     continue
 
             self._copy_asset_file(

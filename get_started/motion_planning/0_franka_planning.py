@@ -19,17 +19,10 @@ import torch
 import tyro
 from loguru import logger as log
 from rich.logging import RichHandler
-
-rootutils.setup_root(__file__, pythonpath=True)
-log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
-
-import rootutils
-from loguru import logger as log
-from rich.logging import RichHandler
-
-rootutils.setup_root(__file__, pythonpath=True)
-log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 from scipy.spatial.transform import Rotation as R
+
+rootutils.setup_root(__file__, pythonpath=True)
+log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
 from metasim.scenario.cameras import PinholeCameraCfg
 from metasim.scenario.scenario import ScenarioCfg
@@ -165,7 +158,7 @@ step = 0
 robot_joint_limits = scenario.robots[0].joint_limits
 for step in range(4):
     log.debug(f"Step {step}")
-    states = handler.get_states()
+    states = handler.get_states(mode="tensor")
     rotation_transform_for_franka = torch.tensor(
         [
             [0.0, 0.0, 1.0],

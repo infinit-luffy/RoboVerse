@@ -1,4 +1,4 @@
-"""This script is used to test the static scene."""
+"""Run multiple environments in parallel and record a video across simulators."""
 
 from __future__ import annotations
 
@@ -28,20 +28,27 @@ from metasim.utils import configclass
 from metasim.utils.obs_utils import ObsSaver
 from metasim.utils.setup_util import get_handler
 
+# Please do not remove `if __name__ == "__main__":`.
+# This is required for the parallel sim wrapper to work.
 if __name__ == "__main__":
-    """
-    Please do not remove __name__ == "__main__"
-    This is required for the parallel sim wrapper to work.
-    """
 
     @configclass
     class Args:
-        """Arguments for the static scene."""
+        """Arguments for the parallel-envs demo."""
 
         robot: str = "franka"
 
         ## Handlers
-        sim: Literal["isaacsim", "isaacgym", "genesis", "pybullet", "mujoco", "sapien", "sapien2", "sapien3"] = "mujoco"
+        sim: Literal[
+            "isaacsim",
+            "isaacgym",
+            "genesis",
+            "pybullet",
+            "mujoco",
+            "sapien2",
+            "sapien3",
+            "newton",
+        ] = "mujoco"
 
         ## Others
         num_envs: int = 4
@@ -59,6 +66,7 @@ if __name__ == "__main__":
         simulator=args.sim,
         headless=args.headless,
         num_envs=args.num_envs,
+        env_spacing=5.0,
     )
 
     # add cameras
@@ -173,3 +181,6 @@ if __name__ == "__main__":
         step += 1
 
     obs_saver.save()
+
+    # close handler for stability
+    handler.close()

@@ -52,6 +52,7 @@ if __name__ == "__main__":
             "sapien3",
             "mujoco",
             "mjx",
+            "newton",
         ] = "mujoco"
 
         ## Others
@@ -118,6 +119,11 @@ if __name__ == "__main__":
     ]
 
     log.info(f"Using simulator: {args.sim}")
+    if args.sim == "isaacsim":
+        # Enable timeout-guarded close in IsaacSim handler for one-shot script usage.
+        # GUI mode can also hang on SimulationApp.close() on some systems.
+        os.environ["METASIM_FORCE_EXIT_ON_CLOSE"] = "1"
+        os.environ.setdefault("METASIM_CLOSE_TIMEOUT_SEC", "8")
     handler = get_handler(scenario)
     init_states = [
         {
@@ -159,13 +165,22 @@ if __name__ == "__main__":
             },
         }
     ]
-    handler.set_states(init_states)
+    handler.set_states(init_states * scenario.num_envs)
     if args.sim in ["isaacgym", "sapien2", "sapien3"]:
         handler.simulate()  # need step once to update the kinematics in sapien and isaacgym
     obs_tensor = handler.get_states(mode="tensor")  # get states as a tensor
 
     os.makedirs("get_started/output", exist_ok=True)
     save_path = f"get_started/output/0_static_scene_{args.sim}.png"
-    log.info(f"Saving image to {save_path}")
-    imageio.imwrite(save_path, next(iter(obs_tensor.cameras.values())).rgb[0].cpu().numpy())
+    if not obs_tensor.cameras:
+        # Newton's SensorTiledCamera init can fail in environments without
+        # the required GL/Warp context (logs a "Cameras disabled" warning
+        # at handler launch). Don't StopIteration on the user — explain.
+        log.warning(
+            f"No camera frames available from {args.sim}; skipping image save. "
+            f"Check earlier logs for backend-side camera-init warnings."
+        )
+    else:
+        log.info(f"Saving image to {save_path}")
+        imageio.imwrite(save_path, next(iter(obs_tensor.cameras.values())).rgb[0].cpu().numpy())
     handler.close()

@@ -114,28 +114,33 @@ class MinimalTask(BaseTaskEnv):
         return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
     # ========================================
-    # 4. (Optional) Override step and reset
+    # 4. (Optional) Transform actions, and reset custom state
     # ========================================
-    def step(self, actions: torch.Tensor):
-        """Execute one simulation step.
+    def _process_action(self, actions: torch.Tensor):
+        """Transform actions before they are applied (the sanctioned action hook).
 
-        Optional customizations:
-        - Action normalization/unnormalization
-        - End-effector control mapping
-        - Custom control logic
-        - Other logic
+        Prefer this over overriding ``step``: ``step`` calls ``_process_action``
+        first, then runs the rest of the shared pipeline (for ``RLTaskEnv`` that
+        includes auto-clamping to joint limits). Example patterns to adapt:
+        - unnormalisation:  ``return self.unnormalise_action(actions)``
+          (``unnormalise_action`` is provided by ``RLTaskEnv``; subclass that if
+          you need it — ``BaseTaskEnv`` does not define it)
+        - delta control:    ``return self._last_action + actions * self._action_scale``
+          (define ``self._last_action`` / ``self._action_scale`` on your task)
+        - end-effector / custom control mapping.
+
+        Default is identity (no transform).
         """
-        # Example: unnormalize actions from [-1,1] to joint limits
-        # actions = (actions + 1.0) / 2.0 * (action_high - action_low) + action_low
+        return actions
 
-        return super().step(actions)
-
-    def reset(self, states=None, env_ids=None):
+    def reset(self, states=None, env_ids=None, seed=None):
         """Reset environment.
 
-        Use this to reset custom member variables.
+        Use this to reset custom member variables. Always keep ``seed`` in the
+        signature and forward it to ``super().reset`` so the
+        ``env.reset(seed=)`` reproducibility contract reaches the handler.
         """
-        states = super().reset(states, env_ids)
+        states = super().reset(states, env_ids, seed)
 
         # Reset custom variables， e.g.
         # if env_ids is None:

@@ -3,11 +3,14 @@
 # This file is based on CleanRL's SAC implementation and has been adapted for RoboVerse.
 # Original CleanRL code is licensed under MIT License.
 
-import os
 import random
 import time
-from dataclasses import dataclass
 from typing import Literal
+
+try:
+    import isaacgym  # noqa: F401
+except ImportError:
+    pass
 
 import gymnasium as gym
 import numpy as np
@@ -20,77 +23,16 @@ import tyro
 from torch.utils.tensorboard import SummaryWriter
 
 # RoboVerse imports
-try:
-    import isaacgym  # noqa: F401
-except ImportError:
-    pass
 
 rootutils.setup_root(__file__, pythonpath=True)
 from gymnasium import make_vec
-import metasim  # noqa: F401
+import metasim
+
+metasim.register_gym_envs()
 
 from roboverse_learn.rl.clean_rl.buffer import ReplayBuffer
 from roboverse_learn.rl.episode_tracker import EpisodeTracker
-
-
-@dataclass
-class Args:
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
-    """the name of this experiment"""
-    seed: int = 1
-    """seed of the experiment"""
-    torch_deterministic: bool = True
-    """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
-    """if toggled, cuda will be enabled by default"""
-    track: bool = False
-    """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
-    """the wandb's project name"""
-    wandb_entity: str = None
-    """the entity (team) of wandb's project"""
-    capture_video: bool = False
-    """whether to capture videos of the agent performances (check out `videos` folder)"""
-
-    # RoboVerse specific arguments
-    task: str = "reach_origin"
-    """the RoboVerse task name"""
-    robot: str = "franka"
-    """the robot type"""
-    sim: Literal["isaaclab", "isaacgym", "mujoco", "genesis", "mjx"] = "mjx"
-    """the simulator backend"""
-    headless: bool = False
-    """whether to run in headless mode"""
-    device: str = "cuda"
-    """device to run on"""
-
-    """the environment id of the task (for non-RoboVerse environments)"""
-    total_timesteps: int = 1000000
-    """total timesteps of the experiments"""
-    num_envs: int = 128
-    """the number of parallel game environments"""
-    buffer_size: int = int(1e6)
-    """the replay memory buffer size"""
-    gamma: float = 0.99
-    """the discount factor gamma"""
-    tau: float = 0.005
-    """target smoothing coefficient (default: 0.005)"""
-    batch_size: int = 256
-    """the batch size of sample from the reply memory"""
-    learning_starts: int = 10
-    """timestep to start learning"""
-    policy_lr: float = 3e-4
-    """the learning rate of the policy network optimizer"""
-    q_lr: float = 1e-3
-    """the learning rate of the Q network network optimizer"""
-    policy_frequency: int = 2
-    """the frequency of training policy (delayed)"""
-    target_network_frequency: int = 1  # Denis Yarats' implementation delays this by 2.
-    """the frequency of updates for the target nerworks"""
-    alpha: float = 0.2
-    """Entropy regularization coefficient."""
-    autotune: bool = True
-    """automatic tuning of the entropy coefficient"""
+from roboverse_learn.rl.configs.clean_rl.sac import CleanRLSACConfig
 
 
 def make_roboverse_env(args):
@@ -181,13 +123,13 @@ class Actor(nn.Module):
 
 if __name__ == "__main__":
 
-    args = tyro.cli(Args)
+    args = tyro.cli(CleanRLSACConfig)
     run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
         import wandb
 
         wandb.init(
-            project=args.wandb_project_name,
+            project=args.wandb_project,
             entity=args.wandb_entity,
             sync_tensorboard=True,
             config=vars(args),
@@ -249,6 +191,19 @@ if __name__ == "__main__":
     obs, _ = envs.reset(seed=args.seed)
     obs = obs.to(device)
     global_step = 0
+    # Counts gradient-update iterations. The delayed actor update and the target
+    # update must be gated on this, NOT on global_step: global_step advances by
+    # num_envs each loop, so `global_step % policy_frequency` is constant and the
+    # gate is always open — and because the actor block then runs its inner
+    # `for _ in range(policy_frequency)` loop every iteration, the actor was
+    # over-trained by a factor of policy_frequency relative to the critic.
+    update_count = 0
+    # actor_loss / alpha_loss are only assigned when the (now correctly delayed)
+    # policy gate fires; the %100 logging runs on a different cadence, so seed
+    # them to None and guard the logs to avoid an UnboundLocalError before the
+    # first actor update (e.g. when num_envs is a multiple of 100).
+    actor_loss = None
+    alpha_loss = None
 
     # Initialize episode tracker
     episode_tracker = EpisodeTracker(args.num_envs, device)
@@ -279,6 +234,7 @@ if __name__ == "__main__":
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
+            update_count += 1
             data = rb.sample(args.batch_size)
             with torch.no_grad():
                 next_state_actions, next_state_log_pi, _ = actor.get_action(data.next_observations)
@@ -298,7 +254,7 @@ if __name__ == "__main__":
             qf_loss.backward()
             q_optimizer.step()
 
-            if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
+            if update_count % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(
                     args.policy_frequency
                 ):  # compensate for the delay by doing 'actor_update_interval' instead of 1
@@ -323,7 +279,7 @@ if __name__ == "__main__":
                         alpha = log_alpha.exp().item()
 
             # update the target networks
-            if global_step % args.target_network_frequency == 0:
+            if update_count % args.target_network_frequency == 0:
                 for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
                 for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
@@ -335,7 +291,8 @@ if __name__ == "__main__":
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
                 writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
-                writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+                if actor_loss is not None:
+                    writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 writer.add_scalar("losses/alpha", alpha, global_step)
 
                 # Log episode statistics
@@ -351,7 +308,7 @@ if __name__ == "__main__":
                     int(global_step / (time.time() - start_time)),
                     global_step,
                 )
-                if args.autotune:
+                if args.autotune and alpha_loss is not None:
                     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
     envs.close()

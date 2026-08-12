@@ -26,7 +26,9 @@ log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 # from metasim.task.gym_registration import make_vec
 from gymnasium import make_vec
 
-import metasim  # noqa: F401
+import metasim
+
+metasim.register_gym_envs()
 from metasim.scenario.cameras import PinholeCameraCfg
 from metasim.utils.obs_utils import ObsSaver
 
@@ -225,7 +227,7 @@ def train_ppo():
 
     # inference
     obs = env_inference.reset()
-    obs_orin = env_inference.gym_vec.task_env.handler.get_states()
+    obs_orin = env_inference.gym_vec.task_env.handler.get_states(mode="tensor")
     obs_saver.add(obs_orin)
 
     for _ in range(250):
@@ -233,7 +235,7 @@ def train_ppo():
         env_inference.step_async(actions)
         obs, _, _, _ = env_inference.step_wait()
 
-        obs_orin = env_inference.gym_vec.task_env.handler.get_states()
+        obs_orin = env_inference.gym_vec.task_env.handler.get_states(mode="tensor")
         obs_saver.add(obs_orin)
 
     obs_saver.save()
